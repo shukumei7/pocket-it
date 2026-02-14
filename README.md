@@ -143,6 +143,85 @@ dotnet run
 4. Start the client — it will auto-enroll on first connection
 5. Token is single-use and expires in 24 hours
 
+## Remote Deployment
+
+Push-install Pocket IT to multiple Windows machines using PowerShell Remoting (WinRM) with pre-seeded enrollment tokens for zero-touch deployment.
+
+### Prerequisites
+
+- **WinRM enabled on target machines** — Default on domain-joined Windows systems. See "Enabling WinRM" below.
+- **.NET 8 runtime** installed on target machines
+- **Client must be built first:**
+  ```bash
+  cd client/PocketIT
+  dotnet publish -c Release
+  ```
+
+### Usage Examples
+
+**Deploy to a single machine:**
+```powershell
+.\deploy\Deploy-PocketIT.ps1 -ComputerName WS-042 -ServerUrl http://10.0.0.5:9100
+```
+
+**Deploy to multiple machines from a text file:**
+```powershell
+Get-Content .\deploy\targets.txt | .\deploy\Deploy-PocketIT.ps1 -ServerUrl http://10.0.0.5:9100 -AutoLaunch
+```
+
+**Deploy with explicit AD credentials:**
+```powershell
+$cred = Get-Credential DOMAIN\Admin
+.\deploy\Deploy-PocketIT.ps1 -ComputerName WS-042,WS-043 -ServerUrl http://10.0.0.5:9100 -Credential $cred
+```
+
+**Force reinstall on machine with existing installation:**
+```powershell
+.\deploy\Deploy-PocketIT.ps1 -ComputerName WS-042 -ServerUrl http://10.0.0.5:9100 -Force
+```
+
+### What It Does
+
+The deployment script performs these steps automatically:
+
+1. **Tests WinRM connectivity** to target machine
+2. **Generates enrollment token** from server API (or uses provided token)
+3. **Copies client files** to `C:\Program Files\PocketIT` (or custom install path)
+4. **Pre-seeds `appsettings.json`** with server URL and enrollment token
+5. **Creates startup shortcut** in All Users startup folder
+6. **Adds Windows Firewall rule** for outbound connections
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `-ComputerName` | `string[]` | Target machine names or IPs (accepts pipeline input) |
+| `-ServerUrl` | `string` | Pocket IT server URL (e.g., `http://10.0.0.5:9100`) |
+| `-BuildPath` | `string` | Path to published client folder (auto-detected if omitted) |
+| `-Token` | `string` | Enrollment token (auto-generated from server if omitted) |
+| `-InstallPath` | `string` | Remote install path (default: `C:\Program Files\PocketIT`) |
+| `-Credential` | `PSCredential` | Credentials for remote access (uses current user if omitted) |
+| `-AutoLaunch` | `switch` | Launch Pocket IT on target after installation |
+| `-Force` | `switch` | Overwrite existing installation without prompting |
+
+### Enabling WinRM on Target Machines
+
+**On individual machines:**
+```powershell
+Enable-PSRemoting -Force
+```
+
+**Via Group Policy:**
+```
+Computer Configuration → Administrative Templates → Windows Components → Windows Remote Management (WinRM) → WinRM Service
+→ Enable "Allow remote server management through WinRM"
+```
+
+**Verify WinRM is enabled:**
+```powershell
+Test-WSMan -ComputerName WS-042
+```
+
 ## LLM Provider Options
 
 Pocket IT supports four LLM providers. Choose based on your requirements:
@@ -334,6 +413,9 @@ The client can run four types of diagnostic checks:
 
 ```
 pocket-it/
+├── deploy/
+│   ├── Deploy-PocketIT.ps1      # Remote deployment via PS Remoting
+│   └── targets.example.txt      # Example target machines list
 ├── server/
 │   ├── server.js                 # Main entry point
 │   ├── package.json              # Dependencies

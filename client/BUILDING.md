@@ -157,6 +157,11 @@ Located at `client/PocketIT/appsettings.json`, copied to output directory on bui
   },
   "Database": {
     "Path": "pocket-it.db"
+  },
+  "OfflineContacts": {
+    "Phone": "",
+    "Email": "",
+    "Portal": ""
   }
 }
 ```
@@ -168,6 +173,49 @@ Located at `client/PocketIT/appsettings.json`, copied to output directory on bui
 **Enrollment.Token:** One-time enrollment token (get from server API)
 
 **Database.Path:** SQLite database filename (created in app directory)
+
+**OfflineContacts:** IT support contact information displayed when server is unreachable
+
+### Configuring Offline Contacts
+
+When the server is unreachable, the chat UI displays friendly offline responses with alternative IT support contact information. This information is configured in `appsettings.json` under the `OfflineContacts` section.
+
+**Configuration fields:**
+
+- **Phone:** IT helpdesk phone number (e.g., "+1-555-IT-HELP" or "ext. 1234")
+- **Email:** IT support email address (e.g., "support@example.com")
+- **Portal:** IT support portal URL (e.g., "https://helpdesk.example.com")
+
+**Example configuration:**
+
+```json
+{
+  "OfflineContacts": {
+    "Phone": "+1-555-867-5309",
+    "Email": "itsupport@acmecorp.com",
+    "Portal": "https://help.acmecorp.com"
+  }
+}
+```
+
+**How it flows:**
+
+1. **appsettings.json** is loaded by the C# application on startup
+2. The `OfflineContacts` configuration is read from the settings
+3. C# sends an `offline_config` message to the WebView2 chat UI via the WebView2 bridge:
+   ```csharp
+   _webView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+   {
+       type = "offline_config",
+       phone = settings.OfflineContacts.Phone,
+       email = settings.OfflineContacts.Email,
+       portal = settings.OfflineContacts.Portal
+   }));
+   ```
+4. The JavaScript code in `chat.js` receives the message and updates the `offlineContacts` object
+5. When displaying offline responses, the contact block is appended to the message
+
+**Fallback behavior:** If all three fields are left empty, the offline responses display a generic fallback message: "Please contact your IT department directly for urgent issues."
 
 ### Getting an Enrollment Token
 

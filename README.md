@@ -308,6 +308,16 @@ The client can run four types of diagnostic checks:
 
 **Usage:** AI can request checks using action tag `[ACTION:DIAGNOSE:checkType]`. Results are sent back to AI for interpretation.
 
+## Offline Behavior
+
+**Message queueing:** When the server is unreachable, user messages are queued locally in the SQLite database and automatically synced when the connection is restored.
+
+**Offline responses:** The chat UI displays friendly rotating offline responses to let users know their message was saved. Each response includes contact information for alternative IT support channels (phone, email, support portal).
+
+**Configurable contacts:** Offline contact information is configured per deployment in `appsettings.json` under the `OfflineContacts` section. This allows IT administrators to customize phone numbers, email addresses, and portal URLs for their organization.
+
+**Connection state tracking:** The UI displays connection status (Connected/Disconnected) and adapts behavior automatically. When offline, AI responses are replaced with helpful offline messages directing users to alternative support options.
+
 ## Security Model
 
 **MVP scope (localhost bypass):**

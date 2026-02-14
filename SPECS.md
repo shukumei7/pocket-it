@@ -1015,6 +1015,39 @@ _socket.OnConnect += async (sender, e) =>
 };
 ```
 
+### Client UI Offline Responses
+
+**Connection state tracking:** The chat UI tracks connection status via `isConnected` boolean. When the server is unreachable, friendly offline responses are displayed to the user.
+
+**Rotating responses:** Eight distinct offline response messages rotate to provide variety while maintaining consistency. Each response acknowledges the offline state and assures the user their message was saved.
+
+**Contact information block:** Each offline response appends IT contact information (phone, email, support portal) to direct users to alternative support channels. If no contacts are configured, a fallback message is shown instead.
+
+**Offline configuration:** The C# bridge sends an `offline_config` message to the WebView2 chat UI with contact information from `appsettings.json`:
+
+```json
+{
+  "type": "offline_config",
+  "phone": "+1-555-IT-HELP",
+  "email": "support@example.com",
+  "portal": "https://helpdesk.example.com"
+}
+```
+
+The JavaScript chat UI stores these values in the `offlineContacts` object and includes them in the `contactBlock()` function appended to each offline response.
+
+**Example offline response:**
+
+```
+Hi! Unfortunately the server is offline at the moment. Your message is queued
+and I'll get right on it once the connection is restored.
+
+For immediate help:
+Phone: **+1-555-IT-HELP**
+Email: **support@example.com**
+Portal: **https://helpdesk.example.com**
+```
+
 ### Server-Side Behavior
 
 **Device offline:**

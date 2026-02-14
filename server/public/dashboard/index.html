@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pocket IT — Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0f1923;
+            color: #c7d5e0;
+            min-height: 100vh;
+        }
+
+        /* Nav */
+        nav {
+            background: #1b2838;
+            border-bottom: 1px solid #2a475e;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            height: 56px;
+        }
+        nav .logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: #66c0f4;
+            margin-right: 32px;
+        }
+        nav a {
+            color: #8f98a0;
+            text-decoration: none;
+            padding: 16px 16px;
+            font-size: 14px;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        nav a:hover, nav a.active {
+            color: #c7d5e0;
+            border-bottom-color: #66c0f4;
+        }
+        nav .spacer { flex: 1; }
+        nav .status-badge {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: #1b5e20;
+            color: #a5d6a7;
+        }
+
+        /* Layout */
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+        /* Stats cards */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: #1b2838;
+            border: 1px solid #2a475e;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #66c0f4;
+        }
+        .stat-card .label {
+            font-size: 13px;
+            color: #8f98a0;
+            margin-top: 4px;
+        }
+
+        /* Device grid */
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #c7d5e0;
+        }
+        .device-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        .device-card {
+            background: #1b2838;
+            border: 1px solid #2a475e;
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .device-card:hover { border-color: #66c0f4; }
+        .device-card .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .device-card .hostname {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .device-card .device-id {
+            font-size: 11px;
+            color: #8f98a0;
+            font-family: monospace;
+        }
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.online { background: #66bb6a; }
+        .status-dot.offline { background: #ef5350; }
+        .device-card .last-seen {
+            font-size: 12px;
+            color: #8f98a0;
+            margin-top: 8px;
+        }
+
+        /* Ticket list */
+        .ticket-list { list-style: none; }
+        .ticket-item {
+            background: #1b2838;
+            border: 1px solid #2a475e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .ticket-item .priority {
+            width: 4px;
+            height: 40px;
+            border-radius: 2px;
+        }
+        .priority.low { background: #66bb6a; }
+        .priority.medium { background: #ffa726; }
+        .priority.high { background: #ef5350; }
+        .priority.critical { background: #d50000; }
+        .ticket-item .ticket-info { flex: 1; }
+        .ticket-item .ticket-title { font-weight: 600; }
+        .ticket-item .ticket-meta { font-size: 12px; color: #8f98a0; margin-top: 4px; }
+        .ticket-status {
+            font-size: 12px;
+            padding: 3px 10px;
+            border-radius: 10px;
+        }
+        .ticket-status.open { background: #1b3a5c; color: #66c0f4; }
+        .ticket-status.in_progress { background: #4a3f00; color: #ffd54f; }
+        .ticket-status.resolved { background: #1b5e20; color: #a5d6a7; }
+
+        /* Device detail panel */
+        .detail-panel {
+            display: none;
+            background: #1b2838;
+            border: 1px solid #2a475e;
+            border-radius: 8px;
+            padding: 24px;
+            margin-top: 16px;
+        }
+        .detail-panel.active { display: block; }
+        .detail-panel .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .detail-panel .close-btn {
+            background: none;
+            border: 1px solid #2a475e;
+            color: #8f98a0;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Chat in dashboard */
+        .chat-area {
+            background: #0f1923;
+            border: 1px solid #2a475e;
+            border-radius: 8px;
+            height: 300px;
+            overflow-y: auto;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .chat-area .msg {
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .chat-area .msg .sender-tag {
+            font-weight: 600;
+            margin-right: 6px;
+        }
+        .chat-area .msg .sender-tag.user { color: #66c0f4; }
+        .chat-area .msg .sender-tag.ai { color: #ab47bc; }
+        .chat-area .msg .sender-tag.it_tech { color: #66bb6a; }
+        .chat-input-row {
+            display: flex;
+            gap: 8px;
+        }
+        .chat-input-row input {
+            flex: 1;
+            background: #0f1923;
+            border: 1px solid #2a475e;
+            color: #c7d5e0;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .chat-input-row button {
+            background: #66c0f4;
+            color: #0f1923;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        /* Diag buttons */
+        .diag-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .diag-btn {
+            background: #2a475e;
+            color: #c7d5e0;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .diag-btn:hover { background: #3d6080; }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 48px;
+            color: #8f98a0;
+        }
+
+        /* Pages */
+        .page { display: none; }
+        .page.active { display: block; }
+    </style>
+</head>
+<body>
+    <nav>
+        <span class="logo">Pocket IT</span>
+        <a href="#" class="nav-link active" data-page="fleet">Fleet</a>
+        <a href="#" class="nav-link" data-page="tickets">Tickets</a>
+        <a href="#" class="nav-link" data-page="enrollment">Enrollment</a>
+        <span class="spacer"></span>
+        <span class="status-badge" id="server-status">Connected</span>
+    </nav>
+
+    <div class="container">
+        <!-- Fleet page -->
+        <div class="page active" id="page-fleet">
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="value" id="stat-online">0</div>
+                    <div class="label">Devices Online</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="stat-total">0</div>
+                    <div class="label">Total Devices</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="stat-tickets-open">0</div>
+                    <div class="label">Open Tickets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="stat-tickets-total">0</div>
+                    <div class="label">Total Tickets</div>
+                </div>
+            </div>
+
+            <h2 class="section-title">Devices</h2>
+            <div class="device-grid" id="device-grid">
+                <div class="empty-state">No devices enrolled yet. Generate an enrollment token to get started.</div>
+            </div>
+
+            <!-- Device detail panel -->
+            <div class="detail-panel" id="device-detail">
+                <div class="panel-header">
+                    <h3 id="detail-hostname">Device</h3>
+                    <button class="close-btn" onclick="closeDetail()">Close</button>
+                </div>
+                <div id="detail-info"></div>
+                <h4 style="margin: 16px 0 8px;">Live Chat</h4>
+                <div class="chat-area" id="detail-chat"></div>
+                <div class="chat-input-row">
+                    <input type="text" id="detail-chat-input" placeholder="Send message to user..." />
+                    <button onclick="sendChatToDevice()">Send</button>
+                </div>
+                <h4 style="margin: 16px 0 8px;">Diagnostics</h4>
+                <div class="diag-actions">
+                    <button class="diag-btn" onclick="requestDiag('all')">Run All</button>
+                    <button class="diag-btn" onclick="requestDiag('cpu')">CPU</button>
+                    <button class="diag-btn" onclick="requestDiag('memory')">Memory</button>
+                    <button class="diag-btn" onclick="requestDiag('disk')">Disk</button>
+                    <button class="diag-btn" onclick="requestDiag('network')">Network</button>
+                </div>
+                <div id="detail-diagnostics" style="margin-top: 12px;"></div>
+            </div>
+        </div>
+
+        <!-- Tickets page -->
+        <div class="page" id="page-tickets">
+            <h2 class="section-title">Support Tickets</h2>
+            <ul class="ticket-list" id="ticket-list">
+                <div class="empty-state">No tickets yet.</div>
+            </ul>
+        </div>
+
+        <!-- Enrollment page -->
+        <div class="page" id="page-enrollment">
+            <h2 class="section-title">Enrollment Tokens</h2>
+            <p style="margin-bottom: 16px; color: #8f98a0;">Generate tokens for devices to enroll with Pocket IT.</p>
+            <button class="diag-btn" onclick="generateToken()" style="margin-bottom: 16px;">Generate Token</button>
+            <div id="token-display" style="display:none; background: #1b2838; border: 1px solid #2a475e; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <div style="font-size: 13px; color: #8f98a0;">Enrollment Token (one-time use):</div>
+                <div id="token-value" style="font-family: monospace; font-size: 18px; color: #66c0f4; margin-top: 8px; user-select: all;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Dashboard JS
+        const API = '';
+        let socket = null;
+        let currentDeviceId = null;
+
+        // Navigation
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = link.dataset.page;
+                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                link.classList.add('active');
+                document.getElementById(`page-${page}`).classList.add('active');
+                if (page === 'fleet') loadFleet();
+                if (page === 'tickets') loadTickets();
+            });
+        });
+
+        // Socket.IO
+        function initSocket() {
+            socket = io('/it');
+
+            socket.on('connect', () => {
+                document.getElementById('server-status').textContent = 'Connected';
+                document.getElementById('server-status').style.background = '#1b5e20';
+                loadFleet();
+            });
+
+            socket.on('disconnect', () => {
+                document.getElementById('server-status').textContent = 'Disconnected';
+                document.getElementById('server-status').style.background = '#4a1919';
+            });
+
+            socket.on('device_status_changed', (data) => {
+                loadFleet();
+            });
+
+            socket.on('device_chat_update', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    appendChatMessage(data.message.sender, data.message.content);
+                    if (data.response) {
+                        appendChatMessage(data.response.sender, data.response.text);
+                    }
+                }
+            });
+
+            socket.on('device_chat_history', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    const chatEl = document.getElementById('detail-chat');
+                    chatEl.innerHTML = '';
+                    data.messages.forEach(m => appendChatMessage(m.sender, m.content));
+                }
+            });
+
+            socket.on('device_diagnostic_update', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    showDiagnosticResults(data);
+                }
+            });
+
+            socket.on('ticket_created', (data) => {
+                loadFleet(); // refresh stats
+            });
+        }
+
+        // API calls
+        async function loadFleet() {
+            try {
+                const [statsRes, devicesRes] = await Promise.all([
+                    fetch(`${API}/api/admin/stats`),
+                    fetch(`${API}/api/devices`)
+                ]);
+                const stats = await statsRes.json();
+                const devices = await devicesRes.json();
+
+                document.getElementById('stat-online').textContent = stats.onlineDevices || 0;
+                document.getElementById('stat-total').textContent = stats.totalDevices || 0;
+                document.getElementById('stat-tickets-open').textContent = stats.openTickets || 0;
+                document.getElementById('stat-tickets-total').textContent = stats.totalTickets || 0;
+
+                const grid = document.getElementById('device-grid');
+                if (devices.length === 0) {
+                    grid.innerHTML = '<div class="empty-state">No devices enrolled yet.</div>';
+                    return;
+                }
+                grid.innerHTML = devices.map(d => `
+                    <div class="device-card" onclick="openDevice('${d.device_id}')">
+                        <div class="device-header">
+                            <span class="hostname">${d.hostname || 'Unknown'}</span>
+                            <span class="status-dot ${d.status || 'offline'}"></span>
+                        </div>
+                        <div class="device-id">${d.device_id.substring(0, 8)}...</div>
+                        <div class="last-seen">Last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Never'}</div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load fleet:', err);
+            }
+        }
+
+        async function loadTickets() {
+            try {
+                const res = await fetch(`${API}/api/tickets`);
+                const tickets = await res.json();
+                const list = document.getElementById('ticket-list');
+                if (tickets.length === 0) {
+                    list.innerHTML = '<div class="empty-state">No tickets yet.</div>';
+                    return;
+                }
+                list.innerHTML = tickets.map(t => `
+                    <li class="ticket-item">
+                        <div class="priority ${t.priority}"></div>
+                        <div class="ticket-info">
+                            <div class="ticket-title">${t.title}</div>
+                            <div class="ticket-meta">
+                                Device: ${(t.device_id || '').substring(0, 8)}... |
+                                Created: ${new Date(t.created_at).toLocaleString()}
+                            </div>
+                        </div>
+                        <span class="ticket-status ${t.status}">${t.status}</span>
+                    </li>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load tickets:', err);
+            }
+        }
+
+        function openDevice(deviceId) {
+            currentDeviceId = deviceId;
+            const panel = document.getElementById('device-detail');
+            panel.classList.add('active');
+            document.getElementById('detail-hostname').textContent = 'Loading...';
+            document.getElementById('detail-chat').innerHTML = '';
+            document.getElementById('detail-diagnostics').innerHTML = '';
+
+            // Fetch device info
+            fetch(`${API}/api/devices/${deviceId}`).then(r => r.json()).then(d => {
+                document.getElementById('detail-hostname').textContent = d.hostname || deviceId;
+                document.getElementById('detail-info').innerHTML = `
+                    <div style="font-size: 13px; color: #8f98a0;">
+                        ID: <code>${d.device_id}</code> |
+                        OS: ${d.os_version || 'Unknown'} |
+                        Status: <span class="status-dot ${d.status}"></span> ${d.status}
+                    </div>
+                `;
+            });
+
+            // Subscribe to device events
+            if (socket) {
+                socket.emit('watch_device', { deviceId });
+            }
+        }
+
+        function closeDetail() {
+            const panel = document.getElementById('device-detail');
+            panel.classList.remove('active');
+            if (socket && currentDeviceId) {
+                socket.emit('unwatch_device', { deviceId: currentDeviceId });
+            }
+            currentDeviceId = null;
+        }
+
+        function appendChatMessage(sender, content) {
+            const chatEl = document.getElementById('detail-chat');
+            const msg = document.createElement('div');
+            msg.className = 'msg';
+            msg.innerHTML = `<span class="sender-tag ${sender}">${sender}:</span> ${content}`;
+            chatEl.appendChild(msg);
+            chatEl.scrollTop = chatEl.scrollHeight;
+        }
+
+        function sendChatToDevice() {
+            const input = document.getElementById('detail-chat-input');
+            const content = input.value.trim();
+            if (!content || !currentDeviceId || !socket) return;
+            socket.emit('chat_to_device', { deviceId: currentDeviceId, content });
+            appendChatMessage('it_tech', content);
+            input.value = '';
+        }
+
+        document.getElementById('detail-chat-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendChatToDevice();
+        });
+
+        function requestDiag(checkType) {
+            if (!currentDeviceId || !socket) return;
+            socket.emit('request_diagnostic', { deviceId: currentDeviceId, checkType });
+        }
+
+        function showDiagnosticResults(data) {
+            const el = document.getElementById('detail-diagnostics');
+            el.innerHTML = `<div style="font-size: 13px; color: #8f98a0;">
+                Results for ${data.checkType} (${new Date().toLocaleTimeString()}):</div>
+                <pre style="background: #0f1923; padding: 12px; border-radius: 6px; margin-top: 8px; font-size: 12px; overflow: auto;">${JSON.stringify(data.results, null, 2)}</pre>`;
+        }
+
+        async function generateToken() {
+            try {
+                const res = await fetch(`${API}/api/enrollment/token`, { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('token-display').style.display = 'block';
+                document.getElementById('token-value').textContent = data.token;
+            } catch (err) {
+                alert('Failed to generate token: ' + err.message);
+            }
+        }
+
+        // Init
+        initSocket();
+    </script>
+</body>
+</html>

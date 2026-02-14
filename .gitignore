@@ -1,0 +1,19 @@
+# Node
+node_modules/
+.env
+db/*.db
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp

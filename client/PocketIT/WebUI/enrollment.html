@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pocket IT — Setup</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .wizard {
+            width: 340px;
+            text-align: center;
+        }
+        .wizard h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #7c4dff;
+        }
+        .wizard p {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+        .wizard input {
+            width: 100%;
+            padding: 12px 16px;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            color: #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            text-align: center;
+            letter-spacing: 2px;
+            font-family: monospace;
+            margin-bottom: 16px;
+        }
+        .wizard input:focus {
+            outline: none;
+            border-color: #7c4dff;
+        }
+        .wizard button {
+            width: 100%;
+            padding: 12px;
+            background: #7c4dff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .wizard button:hover { background: #651fff; }
+        .wizard button:disabled {
+            background: #333;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 16px;
+            font-size: 13px;
+            min-height: 20px;
+        }
+        .status.error { color: #ef5350; }
+        .status.success { color: #66bb6a; }
+        .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="wizard">
+        <div class="icon">&#128187;</div>
+        <h1>Pocket IT Setup</h1>
+        <p>Enter the enrollment token provided by your IT department to connect this device.</p>
+        <input type="text" id="token-input" placeholder="Paste enrollment token" maxlength="36" />
+        <button id="enroll-btn" onclick="enroll()">Connect Device</button>
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const tokenInput = document.getElementById('token-input');
+        const enrollBtn = document.getElementById('enroll-btn');
+
+        async function enroll() {
+            const token = tokenInput.value.trim();
+            if (!token) {
+                statusEl.textContent = 'Please enter an enrollment token.';
+                statusEl.className = 'status error';
+                return;
+            }
+
+            enrollBtn.disabled = true;
+            statusEl.textContent = 'Connecting...';
+            statusEl.className = 'status';
+
+            // Send to C# bridge
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage(JSON.stringify({
+                    type: 'enroll',
+                    token: token
+                }));
+            } else {
+                statusEl.textContent = 'Bridge not available — running outside of app?';
+                statusEl.className = 'status error';
+                enrollBtn.disabled = false;
+            }
+        }
+
+        // Listen for enrollment result from C#
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener('message', (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'enrollment_result') {
+                    if (data.success) {
+                        statusEl.textContent = 'Connected! Loading chat...';
+                        statusEl.className = 'status success';
+                        // C# will navigate to chat after short delay
+                    } else {
+                        statusEl.textContent = data.message || 'Enrollment failed.';
+                        statusEl.className = 'status error';
+                        enrollBtn.disabled = false;
+                    }
+                }
+            });
+        }
+
+        tokenInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') enroll();
+        });
+        tokenInput.focus();
+    </script>
+</body>
+</html>

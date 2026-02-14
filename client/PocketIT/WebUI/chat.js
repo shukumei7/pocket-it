@@ -139,6 +139,45 @@
         }
     }
 
+    // ---- Offline responses ----
+
+    let isConnected = false;
+
+    // Configurable contact info — IT admins can customize these in appsettings.json
+    // For now, placeholders that the C# bridge can override via 'offline_config' message
+    let offlineContacts = {
+        phone: '',
+        email: '',
+        portal: ''
+    };
+
+    function contactBlock() {
+        const lines = [];
+        if (offlineContacts.phone) lines.push(`Phone: **${offlineContacts.phone}**`);
+        if (offlineContacts.email) lines.push(`Email: **${offlineContacts.email}**`);
+        if (offlineContacts.portal) lines.push(`Portal: **${offlineContacts.portal}**`);
+        if (lines.length === 0) lines.push('Please contact your IT department directly for urgent issues.');
+        return '\n\n' + lines.join('\n');
+    }
+
+    const offlineResponses = [
+        () => "Hey there! I'm sorry, but I can't reach the server right now. Your message has been saved and I'll process it once we're back online.\n\nIn the meantime, if this is urgent you can reach IT support directly:" + contactBlock(),
+        () => "Hi! Unfortunately the server is offline at the moment. Your message is queued and I'll get right on it once the connection is restored.\n\nFor immediate help:" + contactBlock(),
+        () => "Sorry about this — the server appears to be down. I've saved your message and will respond once we reconnect.\n\nIf you need help right away:" + contactBlock(),
+        () => "Looks like we've lost connection to the server. Your message is saved and queued for when we're back.\n\nNeed help now? You can reach IT directly:" + contactBlock(),
+        () => "I'm having trouble reaching the server. Your message is stored locally and will be sent when the connection returns.\n\nFor urgent issues, please contact:" + contactBlock(),
+        () => "Apologies! The server is down right now, so I can't process your request. It's saved and will go through once we reconnect.\n\nIn the meantime:" + contactBlock(),
+        () => "Hey! I'm currently offline. Your message is saved though — I'll pick up where we left off once the connection is restored.\n\nIf this can't wait:" + contactBlock(),
+        () => "Oh no — the server seems to be taking a break! Your message is safely queued.\n\nFor immediate assistance, you can reach IT support here:" + contactBlock()
+    ];
+    let offlineResponseIndex = 0;
+
+    function getOfflineResponse() {
+        const responseFn = offlineResponses[offlineResponseIndex];
+        offlineResponseIndex = (offlineResponseIndex + 1) % offlineResponses.length;
+        return responseFn();
+    }
+
     // ---- Send/receive ----
 
     function sendMessage() {
@@ -146,7 +185,17 @@
         if (!content) return;
         addMessage(content, 'user');
         inputEl.value = '';
-        showTyping();
+
+        if (!isConnected) {
+            // Offline: show canned response after a brief delay
+            setTimeout(() => {
+                addMessage(getOfflineResponse(), 'ai');
+            }, 500);
+        } else {
+            showTyping();
+        }
+
+        // Always send to bridge (C# will queue if offline)
         sendBridgeMessage('chat_message', { content });
     }
 
@@ -183,6 +232,7 @@
                     break;
 
                 case 'connection_status':
+                    isConnected = data.connected;
                     if (data.connected) {
                         statusEl.className = 'online';
                         statusEl.textContent = 'Connected';
@@ -190,6 +240,12 @@
                         statusEl.className = 'offline';
                         statusEl.textContent = 'Disconnected';
                     }
+                    break;
+
+                case 'offline_config':
+                    if (data.phone) offlineContacts.phone = data.phone;
+                    if (data.email) offlineContacts.email = data.email;
+                    if (data.portal) offlineContacts.portal = data.portal;
                     break;
 
                 case 'diagnostic_progress':

@@ -1,0 +1,4 @@
+* text=auto eol=lf
+releases/*.zip filter=lfs diff=lfs merge=lfs -text
+releases/PocketIT-latest.zip filter=lfs diff=lfs merge=lfs -text
+installer/PocketIT.Setup.exe filter=lfs diff=lfs merge=lfs -text

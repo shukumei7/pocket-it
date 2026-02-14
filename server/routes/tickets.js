@@ -40,7 +40,8 @@ router.get('/:id', requireIT, (req, res) => {
 
 router.post('/', (req, res) => {
   const db = req.app.locals.db;
-  const { device_id, title, description, priority, category } = req.body;
+  const { title, description, priority, category } = req.body;
+  const device_id = req.body.device_id || req.body.deviceId;
 
   if (!device_id || !title) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -84,6 +85,11 @@ router.patch('/:id', requireIT, (req, res) => {
   params.push(new Date().toISOString());
   params.push(req.params.id);
 
+  const ticket = db.prepare('SELECT id FROM tickets WHERE id = ?').get(req.params.id);
+  if (!ticket) {
+    return res.status(404).json({ error: 'Ticket not found' });
+  }
+
   const query = `UPDATE tickets SET ${updates.join(', ')} WHERE id = ?`;
   db.prepare(query).run(...params);
 
@@ -96,6 +102,11 @@ router.post('/:id/comments', requireIT, (req, res) => {
 
   if (!content) {
     return res.status(400).json({ error: 'Comment content required' });
+  }
+
+  const ticket = db.prepare('SELECT id FROM tickets WHERE id = ?').get(req.params.id);
+  if (!ticket) {
+    return res.status(404).json({ error: 'Ticket not found' });
   }
 
   const result = db.prepare(`

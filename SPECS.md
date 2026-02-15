@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.1.2 (MVP)
+Version: 0.1.3 (MVP)
 
 ## System Architecture
 
@@ -222,6 +222,28 @@ Sent immediately after connection with assigned agent name. Also sent with each 
 ```json
 {
   "agentName": "Jordan"
+}
+```
+
+#### `chat_history`
+Sent on connection with last 20 messages for conversation continuity.
+
+```json
+{
+  "messages": [
+    {
+      "id": 1,
+      "sender": "user",
+      "content": "My internet is slow",
+      "created_at": "2024-01-15T14:20:00Z"
+    },
+    {
+      "id": 2,
+      "sender": "ai",
+      "content": "Let me check your network connection.",
+      "created_at": "2024-01-15T14:20:05Z"
+    }
+  ]
 }
 ```
 
@@ -1285,6 +1307,12 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut
 
 ## Version History
+
+**0.1.3**
+- New endpoint: `DELETE /api/devices/:id` (admin auth) — removes device and all related data (chat messages, diagnostics)
+- Chat history on reconnect: server sends last 20 messages when device connects
+- Bug fix: C# WebView2 bridge now injects `"type":"chat_response"` before forwarding to chat.js (was silently dropping all AI responses)
+- Dashboard: "Remove Device" button with confirmation dialog
 
 **0.1.2**
 - Security hardening: null device_secret connections now rejected (requires re-enrollment)

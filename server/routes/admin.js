@@ -30,7 +30,7 @@ router.post('/login', async (req, res) => {
       db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
         username, 'login_failed', 'auth', JSON.stringify({ reason: 'user_not_found', ip: req.socket?.remoteAddress })
       );
-    } catch (e) { /* ignore logging errors */ }
+    } catch (e) { console.error('[Audit] Log write failed:', e.message); }
     // Track failed attempt
     const current = loginAttempts.get(username) || { count: 0, lockedUntil: null };
     current.count++;
@@ -49,7 +49,7 @@ router.post('/login', async (req, res) => {
       db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
         username, 'login_failed', 'auth', JSON.stringify({ reason: 'invalid_password', ip: req.socket?.remoteAddress })
       );
-    } catch (e) { /* ignore logging errors */ }
+    } catch (e) { console.error('[Audit] Log write failed:', e.message); }
     // Track failed attempt
     const current = loginAttempts.get(username) || { count: 0, lockedUntil: null };
     current.count++;
@@ -70,7 +70,7 @@ router.post('/login', async (req, res) => {
     db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
       username, 'login_success', 'auth', JSON.stringify({ ip: req.socket?.remoteAddress })
     );
-  } catch (e) { /* ignore logging errors */ }
+  } catch (e) { console.error('[Audit] Log write failed:', e.message); }
 
   const jwtSecret = process.env.POCKET_IT_JWT_SECRET;
   if (!jwtSecret) {

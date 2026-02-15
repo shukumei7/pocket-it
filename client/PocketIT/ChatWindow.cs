@@ -11,9 +11,11 @@ namespace PocketIT;
 public class ChatWindow : Form
 {
     private readonly WebView2 _webView;
+    private readonly string _initialPage;
 
-    public ChatWindow()
+    public ChatWindow(string initialPage = "chat.html")
     {
+        _initialPage = initialPage;
         Text = "Pocket IT";
         Width = 420;
         Height = 600;
@@ -44,7 +46,7 @@ public class ChatWindow : Form
         _webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
         // Navigate to embedded UI
-        var uiPath = Path.Combine(AppContext.BaseDirectory, "WebUI", "index.html");
+        var uiPath = Path.Combine(AppContext.BaseDirectory, "WebUI", _initialPage);
         if (File.Exists(uiPath))
         {
             _webView.CoreWebView2.Navigate($"file:///{uiPath.Replace('\\', '/')}");

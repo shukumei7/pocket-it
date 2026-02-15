@@ -508,6 +508,46 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
+## Current Status (v0.1.1)
+
+### Completed
+- AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
+- Device enrollment with one-time tokens
+- Device secret authentication on Socket.IO connections
+- 4 diagnostic checks (CPU, memory, disk, network)
+- 2 whitelisted remediation actions (flush DNS, clear temp)
+- Support ticket system with IT staff escalation
+- Offline message queueing with IT contact fallback
+- Remote deployment via PowerShell/WinRM
+- Security hardening: JWT required, rate limiting, account lockout, CORS whitelist, input validation, prompt injection defense, server-side action whitelist
+
+### Setup
+
+**Server:**
+```bash
+cd server
+cp .env.example .env
+# Edit .env — set POCKET_IT_JWT_SECRET (required)
+node seed-admin.js --username admin --password <your-password>
+npm install
+node server.js
+```
+
+**Client (requires .NET 8 SDK):**
+```bash
+cd client/PocketIT
+dotnet build
+# Configure appsettings.json with server URL and enrollment token
+dotnet run
+```
+
+### Known Limitations
+- No HTTPS (plaintext transport)
+- No IT staff web dashboard (planned)
+- Devices enrolled before v0.1.1 have no device_secret (backwards-compatible but weaker auth)
+- .NET 8 SDK required for client build (not included in .NET 6)
+- Only 2 remediation actions available
+
 ## MVP Scope
 
 **Current features:**

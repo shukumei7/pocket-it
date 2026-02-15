@@ -124,6 +124,22 @@
             color: #8f98a0;
             margin-top: 8px;
         }
+        .health-bar {
+            height: 4px;
+            background: #2a475e;
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .health-bar .fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        .health-bar .fill.good { background: #66bb6a; }
+        .health-bar .fill.warning { background: #ffa726; }
+        .health-bar .fill.critical { background: #ef5350; }
+        .health-bar .fill.unknown { background: #8f98a0; }
 
         /* Ticket list */
         .ticket-list { list-style: none; }
@@ -298,6 +314,14 @@
                 <div class="stat-card">
                     <div class="value" id="stat-tickets-total">0</div>
                     <div class="label">Total Tickets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="stat-health">—</div>
+                    <div class="label">Avg Health Score</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="stat-critical" style="color: #ef5350;">0</div>
+                    <div class="label">Critical Devices</div>
                 </div>
             </div>
 
@@ -515,6 +539,9 @@
                 if (data.deviceId === currentDeviceId) {
                     showDiagnosticResults(data);
                 }
+                if (data.healthScore !== undefined) {
+                    loadFleet(); // Refresh stats to show updated health score
+                }
             });
 
             socket.on('ticket_created', () => loadFleet());
@@ -534,13 +561,19 @@
                 document.getElementById('stat-total').textContent = stats.totalDevices || 0;
                 document.getElementById('stat-tickets-open').textContent = stats.openTickets || 0;
                 document.getElementById('stat-tickets-total').textContent = stats.totalTickets || 0;
+                document.getElementById('stat-health').textContent = stats.averageHealth !== null && stats.averageHealth !== undefined ? stats.averageHealth + '%' : '—';
+                document.getElementById('stat-critical').textContent = stats.criticalDevices || 0;
 
                 const grid = document.getElementById('device-grid');
                 if (devices.length === 0) {
                     grid.innerHTML = '<div class="empty-state">No devices enrolled yet.</div>';
                     return;
                 }
-                grid.innerHTML = devices.map(d => `
+                grid.innerHTML = devices.map(d => {
+                    const hs = d.health_score;
+                    const healthClass = hs === null || hs === undefined ? 'unknown' : hs >= 75 ? 'good' : hs >= 40 ? 'warning' : 'critical';
+                    const healthLabel = hs !== null && hs !== undefined ? hs + '%' : 'No data';
+                    return `
                     <div class="device-card" onclick="openDevice('${d.device_id}')">
                         <div class="device-header">
                             <span class="hostname">${escapeHtml(d.hostname || 'Unknown')}</span>
@@ -548,8 +581,10 @@
                         </div>
                         <div class="device-id">${escapeHtml(d.device_id.substring(0, 8))}...</div>
                         <div class="last-seen">Last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Never'}</div>
-                    </div>
-                `).join('');
+                        <div class="health-bar"><div class="fill ${healthClass}" style="width: ${hs !== null && hs !== undefined ? hs : 0}%"></div></div>
+                        <div style="font-size: 11px; color: #8f98a0; margin-top: 4px;">Health: ${healthLabel}</div>
+                    </div>`;
+                }).join('');
             } catch (err) {
                 console.error('Failed to load fleet:', err);
             }
@@ -670,11 +705,18 @@
             fetchWithAuth(`${API}/api/devices/${deviceId}`).then(r => r.json()).then(d => {
                 document.getElementById('detail-hostname').textContent = d.hostname || deviceId;
                 document.getElementById('detail-info').innerHTML = `
-                    <div style="font-size: 13px; color: #8f98a0;">
+                    <div style="font-size: 13px; color: #8f98a0; margin-bottom: 8px;">
                         ID: <code>${escapeHtml(d.device_id)}</code> |
                         OS: ${escapeHtml(d.os_version || 'Unknown')} |
                         Status: <span class="status-dot ${d.status}"></span> ${d.status}
                     </div>
+                    ${d.cpu_model || d.total_ram_gb || d.total_disk_gb ? `
+                    <div style="font-size: 13px; color: #8f98a0; background: #0f1923; border: 1px solid #2a475e; border-radius: 6px; padding: 10px; margin-bottom: 8px;">
+                        ${d.cpu_model ? '<div>CPU: ' + escapeHtml(d.cpu_model) + (d.processor_count ? ' (' + d.processor_count + ' cores)' : '') + '</div>' : ''}
+                        ${d.total_ram_gb ? '<div>RAM: ' + d.total_ram_gb + ' GB</div>' : ''}
+                        ${d.total_disk_gb ? '<div>Disk: ' + d.total_disk_gb + ' GB</div>' : ''}
+                        ${d.health_score !== null && d.health_score !== undefined ? '<div>Health Score: <strong style="color:' + (d.health_score >= 75 ? '#66bb6a' : d.health_score >= 40 ? '#ffa726' : '#ef5350') + '">' + d.health_score + '%</strong></div>' : ''}
+                    </div>` : ''}
                 `;
             });
 

@@ -131,7 +131,7 @@ curl http://localhost:9100/api/devices
 
 ### GET /api/devices/:id
 
-Get details for a specific device.
+Get details for a specific device including hardware specs and health score.
 
 **Auth:** IT staff (localhost bypass in MVP)
 
@@ -142,6 +142,11 @@ Get details for a specific device.
   "hostname": "DESKTOP-USER01",
   "os_version": "Windows 11 Pro 23H2",
   "status": "online",
+  "cpu_model": "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz",
+  "total_ram_gb": 16,
+  "total_disk_gb": 512,
+  "processor_count": 8,
+  "health_score": 85,
   "certificate_fingerprint": null,
   "enrolled_at": "2024-01-15T10:30:00.000Z",
   "last_seen": "2024-01-15T14:25:30.000Z"
@@ -182,6 +187,48 @@ Get diagnostic check history for a device.
 **Example:**
 ```bash
 curl http://localhost:9100/api/devices/device-abc123/diagnostics
+```
+
+### GET /api/devices/health/summary
+
+Get fleet health summary with average health score and device breakdown.
+
+**Auth:** IT staff (localhost bypass in MVP)
+
+**Response:**
+```json
+{
+  "avgScore": 78.5,
+  "breakdown": {
+    "healthy": 8,
+    "warning": 3,
+    "critical": 2,
+    "unscanned": 1
+  },
+  "devices": [
+    {
+      "device_id": "device-abc123",
+      "hostname": "DESKTOP-USER01",
+      "health_score": 85,
+      "cpu_model": "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz",
+      "total_ram_gb": 16,
+      "total_disk_gb": 512,
+      "processor_count": 8,
+      "last_seen": "2024-02-15T14:25:30.000Z"
+    }
+  ]
+}
+```
+
+**Health categories:**
+- `healthy`: health_score >= 70
+- `warning`: health_score >= 40 and < 70
+- `critical`: health_score < 40
+- `unscanned`: health_score is null
+
+**Example:**
+```bash
+curl http://localhost:9100/api/devices/health/summary
 ```
 
 ---
@@ -597,7 +644,7 @@ curl -X POST http://localhost:9100/api/admin/users \
 
 ### GET /api/admin/stats
 
-Get system statistics.
+Get system statistics including fleet health metrics.
 
 **Auth:** IT staff (localhost bypass in MVP)
 
@@ -607,9 +654,15 @@ Get system statistics.
   "totalDevices": 15,
   "onlineDevices": 12,
   "openTickets": 3,
-  "totalTickets": 47
+  "totalTickets": 47,
+  "averageHealth": 78.5,
+  "criticalDevices": 2
 }
 ```
+
+**Health metrics:**
+- `averageHealth`: Average health score across all devices with scores (0-100)
+- `criticalDevices`: Count of devices with health_score < 40
 
 **Example:**
 ```bash
@@ -633,6 +686,7 @@ Pocket IT uses Socket.IO for real-time bidirectional communication. See SPECS.md
 
 **Client → Server:**
 - `chat_message` — User sends message
+- `system_profile` — Device hardware information (CPU model, RAM, disk, cores)
 - `diagnostic_result` — Diagnostic check results
 - `remediation_result` — Remediation action outcome
 - `heartbeat` — Keep-alive ping

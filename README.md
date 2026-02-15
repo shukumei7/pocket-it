@@ -285,8 +285,9 @@ All endpoints accept `localhost` without authentication for MVP development.
 
 ### Devices
 - `GET /api/devices` — List all devices (IT auth)
-- `GET /api/devices/:id` — Get device details (IT auth)
+- `GET /api/devices/:id` — Get device details with hardware specs and health score (IT auth)
 - `GET /api/devices/:id/diagnostics` — Get diagnostic history (IT auth)
+- `GET /api/devices/health/summary` — Get fleet health summary (IT auth)
 - `DELETE /api/devices/:id` — Remove device and all related data (admin auth)
 
 ### Tickets
@@ -304,7 +305,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `GET /api/llm/models` — Available models for current provider
 
 ### Admin
-- `GET /api/admin/stats` — System statistics (admin auth)
+- `GET /api/admin/stats` — System statistics including average health and critical devices (admin auth)
 
 ## Socket.IO Namespaces
 
@@ -346,7 +347,7 @@ The server uses SQLite with 8 tables:
 
 | Table | Purpose |
 |-------|---------|
-| `devices` | Enrolled devices (device_id, hostname, os_version, status, enrolled_at, last_seen) |
+| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, enrolled_at, last_seen) |
 | `enrollment_tokens` | One-time enrollment tokens (token, expires_at, status, used_by_device) |
 | `it_users` | IT staff accounts (username, password_hash, role, last_login) |
 | `chat_messages` | Chat history (device_id, sender, content, message_type, metadata) |
@@ -517,7 +518,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.1.4)
+## Current Status (v0.2.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -525,6 +526,10 @@ pocket-it/
 - Device secret authentication on Socket.IO connections (required, no legacy null secrets allowed)
 - 4 diagnostic checks (CPU, memory, disk, network)
 - 5 whitelisted remediation actions (flush DNS, clear temp, restart spooler, repair network, clear browser cache)
+- **Real device diagnostics**: auto-collect system profile (CPU model, RAM, disk, cores) on connect
+- **Health scoring system**: 0-100 score computed from diagnostic results (ok=100, warning=50, error=0)
+- **Health dashboard**: colored health bars, hardware info display, average health stats
+- **AI hardware context**: diagnostics include CPU/RAM/disk specs for better recommendations
 - Support ticket system with IT staff escalation
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM

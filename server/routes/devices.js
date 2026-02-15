@@ -9,6 +9,13 @@ router.get('/', requireIT, (req, res) => {
   res.json(devices);
 });
 
+router.get('/health/summary', requireIT, (req, res) => {
+  const db = req.app.locals.db;
+  const FleetService = require('../services/fleetService');
+  const fleet = new FleetService(db);
+  res.json(fleet.getHealthSummary());
+});
+
 router.get('/:id', requireIT, (req, res) => {
   const db = req.app.locals.db;
   const device = db.prepare('SELECT * FROM devices WHERE device_id = ?').get(req.params.id);

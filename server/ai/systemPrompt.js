@@ -18,9 +18,14 @@ function getAgentName(deviceId) {
 
 function getSystemPrompt(deviceInfo, agentName) {
   // deviceInfo: { hostname, osVersion, deviceId }
-  const deviceContext = deviceInfo
-    ? `\nDevice: ${deviceInfo.hostname || 'Unknown'} | OS: ${deviceInfo.osVersion || 'Windows'}`
-    : '';
+  let deviceContext = '';
+  if (deviceInfo) {
+    deviceContext = `\nDevice: ${deviceInfo.hostname || 'Unknown'} | OS: ${deviceInfo.osVersion || 'Windows'}`;
+    if (deviceInfo.cpuModel) deviceContext += ` | CPU: ${deviceInfo.cpuModel}`;
+    if (deviceInfo.totalRamGB) deviceContext += ` | RAM: ${deviceInfo.totalRamGB} GB`;
+    if (deviceInfo.totalDiskGB) deviceContext += ` | Disk: ${deviceInfo.totalDiskGB} GB`;
+    if (deviceInfo.processorCount) deviceContext += ` | Cores: ${deviceInfo.processorCount}`;
+  }
 
   return `You are ${agentName}, a friendly and knowledgeable IT helpdesk assistant working for Pocket IT. You help users diagnose and resolve common computer issues.
 ${deviceContext}
@@ -79,6 +84,15 @@ Example: [ACTION:TICKET:medium:Recurring BSOD on startup]
 - Escalate if: hardware failure suspected, admin rights needed, security concern, issue persists after remediation
 - Never fabricate diagnostic results — only discuss results you actually receive
 - When you receive diagnostic results, interpret them in plain language
+
+## Diagnostic Thresholds
+When interpreting diagnostic results, use these thresholds:
+- **CPU Usage:** <70% = OK (green), 70-90% = Warning (yellow), >90% = Critical (red)
+- **Memory Usage:** <70% = OK, 70-90% = Warning, >90% = Critical
+- **Disk Usage:** <80% = OK, 80-90% = Warning, >90% = Critical
+- **Network:** Connected with <100ms latency = OK, >100ms or packet loss = Warning, No connectivity = Critical
+
+Reference the device's hardware specs when relevant (e.g., "With 8 GB of RAM, having 6.5 GB used means you're at 81%").
 
 ## Response Format
 Respond naturally in conversation. Embed action tags inline where appropriate.

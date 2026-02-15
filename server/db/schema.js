@@ -100,6 +100,22 @@ function initDatabase(dbPath) {
     // Column already exists
   }
 
+  // Phase B migrations: hardware profile + health score
+  const phaseB_columns = [
+    { name: 'cpu_model', type: 'TEXT' },
+    { name: 'total_ram_gb', type: 'REAL' },
+    { name: 'total_disk_gb', type: 'REAL' },
+    { name: 'processor_count', type: 'INTEGER' },
+    { name: 'health_score', type: 'INTEGER' }
+  ];
+  for (const col of phaseB_columns) {
+    try {
+      db.prepare(`ALTER TABLE devices ADD COLUMN ${col.name} ${col.type}`).run();
+    } catch (err) {
+      // Column already exists
+    }
+  }
+
   return db;
 }
 

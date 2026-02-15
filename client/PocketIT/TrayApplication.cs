@@ -54,6 +54,7 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnConnectionChanged += OnServerConnectionChanged;
         _serverConnection.OnDiagnosticRequest += OnServerDiagnosticRequest;
         _serverConnection.OnRemediationRequest += OnServerRemediationRequest;
+        _serverConnection.OnConnectedReady += OnServerConnectedReady;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -201,6 +202,27 @@ public class TrayApplication : ApplicationContext
             requiresApproval = true
         });
         _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
+    }
+
+    private async void OnServerConnectedReady()
+    {
+        try
+        {
+            // Send system profile
+            var profile = await DeviceIdentity.GetSystemProfileAsync();
+            await _serverConnection.SendSystemProfile(profile);
+
+            // Auto-run all diagnostics
+            var results = await _diagnosticsEngine.RunAllAsync();
+            foreach (var result in results)
+            {
+                await _serverConnection.SendDiagnosticResult(result);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Auto-diagnostics error: {ex.Message}");
+        }
     }
 
     private async void OnChatBridgeMessage(string type, string json)

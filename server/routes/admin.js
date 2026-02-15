@@ -128,12 +128,15 @@ router.get('/stats', requireIT, (req, res) => {
   const TicketService = require('../services/ticketService');
   const fleet = new FleetService(db);
   const tickets = new TicketService(db);
+  const healthSummary = fleet.getHealthSummary();
 
   res.json({
     totalDevices: fleet.getTotalCount(),
     onlineDevices: fleet.getOnlineCount(),
     openTickets: tickets.getOpenCount(),
-    totalTickets: tickets.getTotalCount()
+    totalTickets: tickets.getTotalCount(),
+    averageHealth: healthSummary.avgScore,
+    criticalDevices: healthSummary.breakdown.critical
   });
 });
 

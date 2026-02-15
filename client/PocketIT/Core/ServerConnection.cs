@@ -23,6 +23,7 @@ public class ServerConnection : IDisposable
     public event Action<string, string>? OnRemediationRequest;
     public event Action<bool>? OnConnectionChanged;
     public event Action<string>? OnChatHistory;
+    public event Action? OnConnectedReady;
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -63,6 +64,7 @@ public class ServerConnection : IDisposable
             _heartbeatTimer.Start();
             OnConnectionChanged?.Invoke(true);
             await FlushOfflineQueue();
+            OnConnectedReady?.Invoke();
         };
 
         _socket.OnDisconnected += (_, _) =>
@@ -129,6 +131,14 @@ public class ServerConnection : IDisposable
         if (_isConnected && _socket != null)
         {
             await _socket.EmitAsync("remediation_result", payload);
+        }
+    }
+
+    public async Task SendSystemProfile(Dictionary<string, object> profile)
+    {
+        if (_isConnected && _socket != null)
+        {
+            await _socket.EmitAsync("system_profile", profile);
         }
     }
 

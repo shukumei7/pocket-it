@@ -178,6 +178,18 @@ User sends a message to AI.
 }
 ```
 
+#### `system_profile`
+Client sends device hardware information.
+
+```json
+{
+  "cpuModel": "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz",
+  "totalRamGB": 16,
+  "totalDiskGB": 512,
+  "processorCount": 8
+}
+```
+
 #### `diagnostic_result`
 Client sends diagnostic check results.
 
@@ -440,7 +452,7 @@ New ticket created by AI.
 
 ### Table: `devices`
 
-Enrolled client devices.
+Enrolled client devices with hardware specifications and health metrics.
 
 ```sql
 CREATE TABLE devices (
@@ -448,6 +460,11 @@ CREATE TABLE devices (
   hostname TEXT,
   os_version TEXT,
   status TEXT DEFAULT 'online',                -- online | offline
+  cpu_model TEXT,                              -- CPU model string
+  total_ram_gb REAL,                           -- Total RAM in GB
+  total_disk_gb REAL,                          -- Total disk space in GB
+  processor_count INTEGER,                     -- Number of logical processors
+  health_score INTEGER,                        -- 0-100 computed health score
   certificate_fingerprint TEXT,                -- For future mTLS
   enrolled_at TEXT,                            -- ISO 8601 timestamp
   last_seen TEXT                               -- ISO 8601 timestamp
@@ -1328,6 +1345,17 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut
 
 ## Version History
+
+**0.2.0**
+- Real device diagnostics: client auto-collects system profile (CPU model, RAM, disk, cores) on connect
+- Health scoring system: 0-100 score computed from diagnostic results (ok=100, warning=50, error=0, averaged)
+- Health summary API: `GET /api/devices/health/summary` returns average health, breakdown, device list
+- Dashboard health visualization: colored health bars (green/yellow/red), hardware info display
+- AI hardware context: diagnostics include CPU/RAM/disk specs and threshold guidance for better recommendations
+- Auto-diagnostics on connect: client automatically runs all 4 checks when connecting to server
+- Database schema: 5 new columns on `devices` table (cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score)
+- Socket.IO: new `system_profile` event, health score recomputation on diagnostic results
+- Admin stats: `GET /api/admin/stats` now includes `averageHealth` and `criticalDevices`
 
 **0.1.4**
 - Dashboard login overlay for remote IT staff access (JWT stored in sessionStorage, included in API calls via `fetchWithAuth()` and Socket.IO handshake)

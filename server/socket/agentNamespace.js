@@ -82,6 +82,28 @@ function setup(io, app) {
       }
     });
 
+    // System profile from client (Phase B)
+    socket.on('system_profile', (data) => {
+      console.log(`[Agent] System profile from ${deviceId}`);
+      try {
+        db.prepare(`
+          UPDATE devices SET cpu_model = ?, total_ram_gb = ?, total_disk_gb = ?, processor_count = ?
+          WHERE device_id = ?
+        `).run(
+          data.cpuModel || null,
+          data.totalRamGB || null,
+          data.totalDiskGB || null,
+          data.processorCount || null,
+          deviceId
+        );
+      } catch (err) {
+        console.error('[Agent] System profile save error:', err.message);
+      }
+
+      // Notify IT dashboard
+      io.of('/it').emit('device_status_changed', { deviceId, status: 'online' });
+    });
+
     // Chat message from user
     socket.on('chat_message', async (data) => {
       const content = data.content;
@@ -118,8 +140,12 @@ function setup(io, app) {
 
       try {
         // Get device info for context
-        const device = db.prepare('SELECT hostname, os_version FROM devices WHERE device_id = ?').get(deviceId);
-        const deviceInfo = device ? { hostname: device.hostname, osVersion: device.os_version, deviceId } : { deviceId };
+        const device = db.prepare('SELECT hostname, os_version, cpu_model, total_ram_gb, total_disk_gb, processor_count FROM devices WHERE device_id = ?').get(deviceId);
+        const deviceInfo = device ? {
+          hostname: device.hostname, osVersion: device.os_version, deviceId,
+          cpuModel: device.cpu_model, totalRamGB: device.total_ram_gb,
+          totalDiskGB: device.total_disk_gb, processorCount: device.processor_count
+        } : { deviceId };
 
         const response = await diagnosticAI.processMessage(deviceId, content, deviceInfo);
 
@@ -200,12 +226,34 @@ function setup(io, app) {
         console.error('[Agent] Diagnostic save error:', err.message);
       }
 
+      // Recompute health score (Phase B)
+      let healthScore = null;
+      try {
+        const FleetService = require('../services/fleetService');
+        const fleet = new FleetService(db);
+        healthScore = fleet.computeHealthScore(deviceId);
+
+        // Notify IT dashboard with health score
+        io.of('/it').emit('device_diagnostic_update', {
+          deviceId,
+          checkType: data.checkType,
+          results: data.results,
+          healthScore: healthScore
+        });
+      } catch (err) {
+        console.error('[Agent] Health score computation error:', err.message);
+      }
+
       // Feed results back to AI for interpretation
       const diagnosticAI = app.locals.diagnosticAI;
       if (diagnosticAI) {
         try {
-          const device = db.prepare('SELECT hostname, os_version FROM devices WHERE device_id = ?').get(deviceId);
-          const deviceInfo = device ? { hostname: device.hostname, osVersion: device.os_version, deviceId } : { deviceId };
+          const device = db.prepare('SELECT hostname, os_version, cpu_model, total_ram_gb, total_disk_gb, processor_count FROM devices WHERE device_id = ?').get(deviceId);
+          const deviceInfo = device ? {
+            hostname: device.hostname, osVersion: device.os_version, deviceId,
+            cpuModel: device.cpu_model, totalRamGB: device.total_ram_gb,
+            totalDiskGB: device.total_disk_gb, processorCount: device.processor_count
+          } : { deviceId };
 
           const response = await diagnosticAI.processDiagnosticResult(deviceId, data.checkType, data.results);
 
@@ -232,13 +280,6 @@ function setup(io, app) {
           console.error('[Agent] Diagnostic AI processing error:', err.message);
         }
       }
-
-      // Notify IT namespace
-      io.of('/it').emit('device_diagnostic_update', {
-        deviceId,
-        checkType: data.checkType,
-        results: data.results
-      });
     });
 
     // Remediation result from client

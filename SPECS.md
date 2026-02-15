@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.1.0 (MVP)
+Version: 0.1.2 (MVP)
 
 ## System Architecture
 
@@ -217,7 +217,7 @@ Keep-alive ping (sent every 30 seconds).
 **Server → Client Events:**
 
 #### `agent_info`
-Sent immediately after connection with assigned agent name.
+Sent immediately after connection with assigned agent name. Also sent with each `chat_response` to allow dynamic agent name updates.
 
 ```json
 {
@@ -856,7 +856,8 @@ function requireIT(req, res, next) {
 **Device authentication:**
 - Device connects to `/agent` namespace with `deviceId` query parameter
 - Server verifies `deviceId` exists in `devices` table
-- No additional authentication in MVP
+- Server validates `device_secret` from handshake auth (required as of v0.1.2)
+- Devices with null `device_secret` are rejected (requires re-enrollment)
 
 ### Production Roadmap
 
@@ -1100,10 +1101,11 @@ Portal: **https://helpdesk.example.com**
 
 | Control | Implementation | Location |
 |---------|---------------|----------|
-| JWT secret required | Server exits on startup if `POCKET_IT_JWT_SECRET` unset | `server.js:5-9` |
+| JWT secret required | Server exits on startup if `POCKET_IT_JWT_SECRET` unset (no hardcoded fallback) | `server.js:5-9`, `socket/itNamespace.js` |
 | Device DB validation | `requireDevice` middleware verifies device_id in database | `auth/middleware.js:17-31` |
-| Device secret auth | Socket.IO handshake validates `device_secret` from enrollment | `socket/agentNamespace.js:23-35` |
+| Device secret auth | Socket.IO handshake validates `device_secret` from enrollment; null secrets rejected | `socket/agentNamespace.js:23-35` |
 | Re-enrollment protection | Existing device_id returns 409 Conflict | `routes/enrollment.js:43-44` |
+| Enrollment status check | `GET /api/enrollment/status/:deviceId` validates device with `x-device-secret` header | `routes/enrollment.js` |
 | Ticket auth | `POST /api/tickets` requires authenticated device | `routes/tickets.js:29` |
 | Prompt injection defense | User messages wrapped in `<user_message>` tags | `services/diagnosticAI.js:30` |
 | CORS hardened | No wildcard, no null origin allowed | `server.js:48-61` |
@@ -1283,6 +1285,20 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut
 
 ## Version History
+
+**0.1.2**
+- Security hardening: null device_secret connections now rejected (requires re-enrollment)
+- Security hardening: removed hardcoded JWT secret fallback in IT namespace
+- New endpoint: `GET /api/enrollment/status/:deviceId` with device_secret validation
+- Client device_secret validation before Socket.IO connect
+- Chat UI: agent name updates from chat responses (not just initial handshake)
+- Chat UI: "Connected to [agentName]" system message on connection
+- IT Dashboard fully functional with Fleet, Tickets, and Enrollment pages (localhost auth bypass)
+
+**0.1.1**
+- Device secret authentication on Socket.IO connections
+- Security hardening: JWT secret required, rate limiting, account lockout
+- Server-side remediation action whitelist
 
 **0.1.0 (MVP)**
 - Initial release

@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.1.3 (MVP)
+Version: 0.1.4 (MVP)
 
 ## System Architecture
 
@@ -265,7 +265,7 @@ AI response to user message.
 **Action types:**
 - `null` — Plain text response
 - `{ "type": "diagnose", "checkType": "cpu|memory|disk|network|all" }`
-- `{ "type": "remediate", "actionId": "flush_dns|clear_temp" }`
+- `{ "type": "remediate", "actionId": "flush_dns|clear_temp|restart_spooler|repair_network|clear_browser_cache" }`
 - `{ "type": "ticket", "priority": "low|medium|high|critical", "title": "..." }`
 
 #### `diagnostic_request`
@@ -629,6 +629,30 @@ public static class ActionWhitelist
             Description = "Deletes temporary files older than 7 days to free disk space.",
             RequiresApproval = true,
             RequiresElevation = false
+        },
+        ["restart_spooler"] = new RemediationInfo
+        {
+            ActionId = "restart_spooler",
+            DisplayName = "Restart Print Spooler",
+            Description = "Restarts the Windows Print Spooler service to fix stuck print jobs.",
+            RequiresApproval = true,
+            RequiresElevation = true
+        },
+        ["repair_network"] = new RemediationInfo
+        {
+            ActionId = "repair_network",
+            DisplayName = "Repair Network Stack",
+            Description = "Full network reset: Winsock, TCP/IP, DNS flush, IP release/renew.",
+            RequiresApproval = true,
+            RequiresElevation = true
+        },
+        ["clear_browser_cache"] = new RemediationInfo
+        {
+            ActionId = "clear_browser_cache",
+            DisplayName = "Clear Browser Cache",
+            Description = "Clears cache files for Chrome, Edge, and Firefox.",
+            RequiresApproval = true,
+            RequiresElevation = false
         }
     };
 
@@ -859,26 +883,16 @@ public async Task<DiagnosticResult> RunAsync()
 
 ### MVP Scope (Development)
 
-**Localhost bypass:**
-- All requests from `127.0.0.1` or `::1` bypass authentication
-- Implemented in `middleware.js`:
-
-```javascript
-function isLocalhost(req) {
-  const ip = req.ip || req.connection?.remoteAddress || '';
-  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-}
-
-function requireIT(req, res, next) {
-  if (isLocalhost(req)) return next();
-  // ... JWT validation for remote requests
-}
-```
+**Dashboard authentication:**
+- Remote IT staff use login overlay at `/dashboard/index.html`
+- JWT token stored in sessionStorage and included in API calls via `fetchWithAuth()` wrapper
+- Socket.IO handshake includes JWT in auth query parameter
+- Localhost requests still bypass authentication for development
 
 **Device authentication:**
 - Device connects to `/agent` namespace with `deviceId` query parameter
 - Server verifies `deviceId` exists in `devices` table
-- Server validates `device_secret` from handshake auth (required as of v0.1.2)
+- Server validates `device_secret` from handshake auth (required as of v0.1.2) AND `x-device-secret` header via `requireDevice` middleware (v0.1.4)
 - Devices with null `device_secret` are rejected (requires re-enrollment)
 
 ### Production Roadmap
@@ -1119,23 +1133,27 @@ Portal: **https://helpdesk.example.com**
 
 ## Security Threat Model
 
-### Implemented Security Controls (v0.1.0)
+### Implemented Security Controls (v0.1.4)
 
 | Control | Implementation | Location |
 |---------|---------------|----------|
 | JWT secret required | Server exits on startup if `POCKET_IT_JWT_SECRET` unset (no hardcoded fallback) | `server.js:5-9`, `socket/itNamespace.js` |
 | Device DB validation | `requireDevice` middleware verifies device_id in database | `auth/middleware.js:17-31` |
-| Device secret auth | Socket.IO handshake validates `device_secret` from enrollment; null secrets rejected | `socket/agentNamespace.js:23-35` |
+| Device secret auth (Socket.IO) | Socket.IO handshake validates `device_secret` from enrollment; null secrets rejected | `socket/agentNamespace.js:23-35` |
+| Device secret auth (HTTP) | `requireDevice` middleware validates `x-device-secret` header (v0.1.4) | `auth/middleware.js` |
 | Re-enrollment protection | Existing device_id returns 409 Conflict | `routes/enrollment.js:43-44` |
 | Enrollment status check | `GET /api/enrollment/status/:deviceId` validates device with `x-device-secret` header | `routes/enrollment.js` |
 | Ticket auth | `POST /api/tickets` requires authenticated device | `routes/tickets.js:29` |
 | Prompt injection defense | User messages wrapped in `<user_message>` tags | `services/diagnosticAI.js:30` |
+| XSS prevention | All user-controlled data in dashboard escaped via `escapeHtml()` (v0.1.4) | `public/dashboard/*.html` |
+| Socket.IO chat rate limiting | 20 messages/minute per device (v0.1.4) | `socket/agentNamespace.js` |
 | CORS hardened | No wildcard, no null origin allowed | `server.js:48-61` |
 | Body size limit | 100KB max JSON payload | `server.js:63` |
 | Account lockout | 5 failures → 15-minute lockout | `routes/admin.js:8-61` |
 | LLM timeouts | 30s AbortController on HTTP calls | `services/llmService.js` |
 | Server-side action whitelist | Remediation actions validated before forwarding | `socket/agentNamespace.js:104-112` |
 | Status/priority validation | Ticket PATCH validates enum values | `routes/tickets.js:76-84` |
+| JWT secret fallback removed | Admin login route no longer has hardcoded fallback (v0.1.4) | `routes/admin.js` |
 
 ### Threats and Mitigations
 
@@ -1225,47 +1243,50 @@ Portal: **https://helpdesk.example.com**
 
 ## Testing Strategy
 
-### Unit Tests
+### Unit Tests (34 tests)
 
-**Server:**
-- `decisionEngine.js` — Parse action tags correctly
-- `llmService.js` — Provider switching and error handling
-- `diagnosticAI.js` — Conversation context management
+**Server security tests:**
+- JWT secret requirement on startup
+- Device secret validation (Socket.IO and HTTP)
+- Re-enrollment protection
+- Prompt injection defense
+- XSS prevention (escapeHtml utility)
+- Socket.IO rate limiting (chat messages)
+- CORS configuration
+- Body size limits
+- Account lockout
+- LLM timeouts
+- Server-side action whitelist
+- Ticket status/priority validation
 
-**Client:**
-- `ActionWhitelist.cs` — Whitelist validation
-- `DiagnosticsEngine.cs` — Check orchestration
-- `RemediationEngine.cs` — Action execution and error handling
+**Run tests:**
+```bash
+cd server
+npm test
+```
 
-### Integration Tests
+### End-to-End Tests (16 tests)
 
-**Socket.IO protocol:**
-- Client connects to `/agent` namespace
-- Send `chat_message`, receive `chat_response`
-- Diagnostic request/result flow
-- Remediation request/result flow
-- IT namespace watch/unwatch flow
+**Coverage:**
+- Health check and API availability
+- IT staff authentication (login/logout)
+- Device enrollment flow
+- Device lifecycle (enrollment, status check, device removal)
+- Ticket CRUD operations
+- Ticket comments
+- Cascade delete verification (device removal clears chat/diagnostics/tickets)
+- Dashboard statistics endpoint
 
-**Database operations:**
-- Enrollment flow (token creation, device enrollment)
-- Chat message persistence
-- Ticket creation and retrieval
+**Run tests:**
+```bash
+cd server
+npm run test:e2e
+```
 
-### End-to-End Tests
-
-**User workflows:**
-1. Launch client, enroll device
-2. Send chat message, receive AI response
-3. AI requests diagnostic, client executes, AI interprets
-4. AI suggests remediation, user approves, action executes
-5. AI creates ticket, verify in database
-
-**IT staff workflows:**
-1. Connect to `/it` namespace
-2. Watch device
-3. Receive chat updates
-4. Send message to device
-5. Request diagnostic from device
+**Implementation:**
+- Node.js built-in test runner (`node --test`)
+- Isolated test database (`test-pocket-it.db`)
+- Automated cleanup after each test suite
 
 ## Deployment
 
@@ -1307,6 +1328,14 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut
 
 ## Version History
+
+**0.1.4**
+- Dashboard login overlay for remote IT staff access (JWT stored in sessionStorage, included in API calls via `fetchWithAuth()` and Socket.IO handshake)
+- Full ticket detail view: click ticket to see description, AI summary, editable status/priority dropdowns, comments with add-comment form
+- 3 new remediation actions: `restart_spooler`, `repair_network`, `clear_browser_cache` (total: 5 actions)
+- 16 E2E smoke tests covering health, auth, enrollment, device lifecycle, tickets CRUD, comments, cascade delete, dashboard stats
+- Security fixes: XSS prevention (all user data escaped via `escapeHtml()`), `requireDevice` middleware validates `x-device-secret` header, Socket.IO chat rate limiting (20 messages/minute), JWT secret fallback removed from admin login route
+- Test totals: 50 tests (34 security unit tests + 16 E2E tests)
 
 **0.1.3**
 - New endpoint: `DELETE /api/devices/:id` (admin auth) — removes device and all related data (chat messages, diagnostics)

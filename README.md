@@ -280,6 +280,9 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `POST /api/enrollment/enroll` — Enroll device with token
 - `GET /api/enrollment/status/:deviceId` — Check enrollment status (requires `x-device-secret` header)
 
+### Authentication
+- `POST /api/auth/login` — IT staff login (returns JWT token)
+
 ### Devices
 - `GET /api/devices` — List all devices (IT auth)
 - `GET /api/devices/:id` — Get device details (IT auth)
@@ -374,6 +377,9 @@ The client only executes actions from a hardcoded whitelist:
 |-----------|-------------|----------------|
 | `flush_dns` | Flush DNS resolver cache | `ipconfig /flushdns` |
 | `clear_temp` | Clear temporary files | Deletes files in `%TEMP%` older than 7 days |
+| `restart_spooler` | Restart Windows Print Spooler service | `net stop spooler && net start spooler` |
+| `repair_network` | Full network stack repair | Winsock reset, TCP/IP reset, DNS flush, IP release/renew |
+| `clear_browser_cache` | Clear browser cache files | Deletes cache for Chrome, Edge, Firefox |
 
 **User approval required:** All remediation actions require explicit user consent via an "Approve" button in the UI.
 
@@ -511,21 +517,23 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.1.3)
+## Current Status (v0.1.4)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
 - Device enrollment with one-time tokens
 - Device secret authentication on Socket.IO connections (required, no legacy null secrets allowed)
 - 4 diagnostic checks (CPU, memory, disk, network)
-- 2 whitelisted remediation actions (flush DNS, clear temp)
+- 5 whitelisted remediation actions (flush DNS, clear temp, restart spooler, repair network, clear browser cache)
 - Support ticket system with IT staff escalation
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
-- IT staff dashboard (Fleet, Tickets, Enrollment) with localhost auth bypass
-- Security hardening: JWT required, rate limiting, account lockout, CORS whitelist, input validation, prompt injection defense, server-side action whitelist
+- IT staff dashboard (Fleet, Tickets, Enrollment) with login overlay for remote access
+- Security hardening: JWT required, rate limiting, account lockout, CORS whitelist, input validation, prompt injection defense, server-side action whitelist, XSS prevention, Socket.IO chat rate limiting
 - Device removal with cascade delete (chat messages, diagnostics)
 - Chat history on reconnect (last 20 messages)
+- Full ticket detail view with comments and status/priority editing
+- 50 tests total (34 security unit tests + 16 E2E smoke tests)
 
 ### Setup
 
@@ -551,7 +559,6 @@ dotnet run
 - No HTTPS (plaintext transport)
 - Devices enrolled before v0.1.1 require re-enrollment (null device_secret connections now rejected)
 - .NET 8 SDK required for client build (not included in .NET 6)
-- Only 2 remediation actions available
 
 ## MVP Scope
 
@@ -596,6 +603,13 @@ curl http://localhost:9100/health
 **Generate enrollment token:**
 ```bash
 curl -X POST http://localhost:9100/api/enrollment/token
+```
+
+**Run tests:**
+```bash
+cd server
+npm test                    # Security unit tests (34)
+npm run test:e2e           # E2E smoke tests (16)
 ```
 
 ## License

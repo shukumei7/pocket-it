@@ -278,6 +278,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 ### Enrollment
 - `POST /api/enrollment/token` — Generate enrollment token (admin)
 - `POST /api/enrollment/enroll` — Enroll device with token
+- `GET /api/enrollment/status/:deviceId` — Check enrollment status (requires `x-device-secret` header)
 
 ### Devices
 - `GET /api/devices` — List all devices (IT auth)
@@ -312,7 +313,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `heartbeat` — Keep-alive ping
 
 **Server events:**
-- `agent_info` — Assigned agent name: `{ agentName: string }`
+- `agent_info` — Assigned agent name (sent on connect and with each chat response): `{ agentName: string }`
 - `chat_response` — AI response: `{ text, sender, agentName, action }`
 - `diagnostic_request` — Request diagnostic check: `{ checkType, requestId }`
 - `remediation_request` — Request remediation approval: `{ actionId, requestId }`
@@ -508,17 +509,18 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.1.1)
+## Current Status (v0.1.2)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
 - Device enrollment with one-time tokens
-- Device secret authentication on Socket.IO connections
+- Device secret authentication on Socket.IO connections (required, no legacy null secrets allowed)
 - 4 diagnostic checks (CPU, memory, disk, network)
 - 2 whitelisted remediation actions (flush DNS, clear temp)
 - Support ticket system with IT staff escalation
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
+- IT staff dashboard (Fleet, Tickets, Enrollment) with localhost auth bypass
 - Security hardening: JWT required, rate limiting, account lockout, CORS whitelist, input validation, prompt injection defense, server-side action whitelist
 
 ### Setup
@@ -543,8 +545,7 @@ dotnet run
 
 ### Known Limitations
 - No HTTPS (plaintext transport)
-- No IT staff web dashboard (planned)
-- Devices enrolled before v0.1.1 have no device_secret (backwards-compatible but weaker auth)
+- Devices enrolled before v0.1.1 require re-enrollment (null device_secret connections now rejected)
 - .NET 8 SDK required for client build (not included in .NET 6)
 - Only 2 remediation actions available
 
@@ -561,7 +562,6 @@ dotnet run
 - Localhost authentication bypass for development
 
 **Phase 2 roadmap:**
-- IT staff dashboard (web UI)
 - Remote IT staff access with JWT authentication
 - Device certificate authentication (mTLS)
 - Additional remediation actions (restart services, update drivers)

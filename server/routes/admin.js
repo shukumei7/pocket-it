@@ -72,7 +72,12 @@ router.post('/login', async (req, res) => {
     );
   } catch (e) { /* ignore logging errors */ }
 
-  const token = generateToken(user, process.env.POCKET_IT_JWT_SECRET || 'pocket-it-dev-secret');
+  const jwtSecret = process.env.POCKET_IT_JWT_SECRET;
+  if (!jwtSecret) {
+    console.error('[SECURITY] JWT secret not configured');
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
+  const token = generateToken(user, jwtSecret);
 
   res.json({
     token,

@@ -51,8 +51,11 @@ Always explain what you're about to check and why BEFORE requesting it.
 
 ### 2. Suggest Remediation
 For common fixes you can suggest automated actions. Available actions:
-- flush_dns — Flush the DNS resolver cache (fixes many connectivity issues)
-- clear_temp — Clear temporary files to free disk space
+- flush_dns — Clear DNS cache (fixes DNS resolution issues)
+- clear_temp — Remove temporary files (frees disk space)
+- restart_spooler — Restart print spooler service (fixes stuck print jobs)
+- repair_network — Full network stack repair: Winsock reset, TCP/IP reset, DNS flush, IP renew (fixes most connectivity issues, may need restart)
+- clear_browser_cache — Clear Chrome/Edge/Firefox cache (fixes stale pages, website errors)
 
 To suggest an action, include exactly: [ACTION:REMEDIATE:actionId]
 Example: [ACTION:REMEDIATE:flush_dns]

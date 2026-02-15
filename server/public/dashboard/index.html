@@ -258,6 +258,18 @@
     </style>
 </head>
 <body>
+    <!-- Login overlay -->
+    <div id="login-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:#0f1923; z-index:1000; display:flex; align-items:center; justify-content:center;">
+        <div style="background:#1b2838; border:1px solid #2a475e; border-radius:12px; padding:40px; width:360px; text-align:center;">
+            <div style="font-size:24px; font-weight:700; color:#66c0f4; margin-bottom:8px;">Pocket IT</div>
+            <div style="font-size:13px; color:#8f98a0; margin-bottom:24px;">IT Dashboard Login</div>
+            <div id="login-error" style="display:none; background:#4a1919; color:#ef5350; padding:8px 12px; border-radius:6px; font-size:13px; margin-bottom:16px;"></div>
+            <input type="text" id="login-username" placeholder="Username" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:10px 14px; border-radius:6px; font-size:14px; margin-bottom:12px;" />
+            <input type="password" id="login-password" placeholder="Password" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:10px 14px; border-radius:6px; font-size:14px; margin-bottom:16px;" />
+            <button onclick="doLogin()" style="width:100%; background:#66c0f4; color:#0f1923; border:none; padding:10px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Sign In</button>
+        </div>
+    </div>
+
     <nav>
         <span class="logo">Pocket IT</span>
         <a href="#" class="nav-link active" data-page="fleet">Fleet</a>
@@ -329,6 +341,41 @@
             <ul class="ticket-list" id="ticket-list">
                 <div class="empty-state">No tickets yet.</div>
             </ul>
+            <!-- Ticket detail panel -->
+            <div class="detail-panel" id="ticket-detail">
+                <div class="panel-header">
+                    <h3 id="ticket-detail-title">Ticket</h3>
+                    <button class="close-btn" onclick="closeTicketDetail()">Close</button>
+                </div>
+                <div id="ticket-detail-info" style="font-size:13px; color:#8f98a0; margin-bottom:16px;"></div>
+                <div id="ticket-detail-description" style="background:#0f1923; border:1px solid #2a475e; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px; line-height:1.5;"></div>
+                <div style="display:flex; gap:12px; margin-bottom:16px;">
+                    <div>
+                        <label style="font-size:12px; color:#8f98a0;">Status</label>
+                        <select id="ticket-status-select" onchange="updateTicket('status', this.value)" style="display:block; margin-top:4px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px;">
+                            <option value="open">Open</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="resolved">Resolved</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:12px; color:#8f98a0;">Priority</label>
+                        <select id="ticket-priority-select" onchange="updateTicket('priority', this.value)" style="display:block; margin-top:4px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px;">
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                </div>
+                <h4 style="margin:16px 0 8px; color:#c7d5e0;">Comments</h4>
+                <div id="ticket-comments" style="margin-bottom:12px;"></div>
+                <div class="chat-input-row">
+                    <input type="text" id="ticket-comment-input" placeholder="Add a comment..." />
+                    <button onclick="addTicketComment()">Comment</button>
+                </div>
+            </div>
         </div>
 
         <!-- Enrollment page -->
@@ -349,8 +396,65 @@
         const API = '';
         let socket = null;
         let currentDeviceId = null;
+        let currentTicketId = null;
+        let authToken = sessionStorage.getItem('pocket_it_token') || '';
 
-        // Navigation
+        // ---- Auth ----
+        async function fetchWithAuth(url, options = {}) {
+            if (authToken) {
+                options.headers = { ...options.headers, 'Authorization': 'Bearer ' + authToken };
+            }
+            const res = await fetch(url, options);
+            if (res.status === 401 && authToken) {
+                sessionStorage.removeItem('pocket_it_token');
+                authToken = '';
+                showLogin();
+            }
+            return res;
+        }
+
+        function showLogin() {
+            document.getElementById('login-overlay').style.display = 'flex';
+        }
+
+        function hideLogin() {
+            document.getElementById('login-overlay').style.display = 'none';
+        }
+
+        async function doLogin() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            const errorEl = document.getElementById('login-error');
+            errorEl.style.display = 'none';
+
+            try {
+                const res = await fetch(`${API}/api/admin/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (res.ok && data.token) {
+                    authToken = data.token;
+                    sessionStorage.setItem('pocket_it_token', authToken);
+                    hideLogin();
+                    initSocket();
+                    loadFleet();
+                } else {
+                    errorEl.textContent = data.error || 'Login failed';
+                    errorEl.style.display = 'block';
+                }
+            } catch (err) {
+                errorEl.textContent = 'Connection error';
+                errorEl.style.display = 'block';
+            }
+        }
+
+        document.getElementById('login-password').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doLogin();
+        });
+
+        // ---- Navigation ----
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -364,9 +468,12 @@
             });
         });
 
-        // Socket.IO
+        // ---- Socket.IO ----
         function initSocket() {
-            socket = io('/it');
+            if (socket) socket.disconnect();
+            const opts = {};
+            if (authToken) opts.auth = { token: authToken };
+            socket = io('/it', opts);
 
             socket.on('connect', () => {
                 document.getElementById('server-status').textContent = 'Connected';
@@ -379,9 +486,7 @@
                 document.getElementById('server-status').style.background = '#4a1919';
             });
 
-            socket.on('device_status_changed', (data) => {
-                loadFleet();
-            });
+            socket.on('device_status_changed', () => loadFleet());
 
             socket.on('device_chat_update', (data) => {
                 if (data.deviceId === currentDeviceId) {
@@ -406,17 +511,15 @@
                 }
             });
 
-            socket.on('ticket_created', (data) => {
-                loadFleet(); // refresh stats
-            });
+            socket.on('ticket_created', () => loadFleet());
         }
 
-        // API calls
+        // ---- Fleet ----
         async function loadFleet() {
             try {
                 const [statsRes, devicesRes] = await Promise.all([
-                    fetch(`${API}/api/admin/stats`),
-                    fetch(`${API}/api/devices`)
+                    fetchWithAuth(`${API}/api/admin/stats`),
+                    fetchWithAuth(`${API}/api/devices`)
                 ]);
                 const stats = await statsRes.json();
                 const devices = await devicesRes.json();
@@ -446,9 +549,10 @@
             }
         }
 
+        // ---- Tickets ----
         async function loadTickets() {
             try {
-                const res = await fetch(`${API}/api/tickets`);
+                const res = await fetchWithAuth(`${API}/api/tickets`);
                 const tickets = await res.json();
                 const list = document.getElementById('ticket-list');
                 if (tickets.length === 0) {
@@ -456,7 +560,7 @@
                     return;
                 }
                 list.innerHTML = tickets.map(t => `
-                    <li class="ticket-item">
+                    <li class="ticket-item" onclick="openTicket(${t.id})" style="cursor:pointer;">
                         <div class="priority ${t.priority}"></div>
                         <div class="ticket-info">
                             <div class="ticket-title">${t.title}</div>
@@ -473,6 +577,82 @@
             }
         }
 
+        async function openTicket(ticketId) {
+            currentTicketId = ticketId;
+            const panel = document.getElementById('ticket-detail');
+            panel.classList.add('active');
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/tickets/${ticketId}`);
+                const ticket = await res.json();
+
+                document.getElementById('ticket-detail-title').textContent = ticket.title;
+                document.getElementById('ticket-detail-info').innerHTML = `
+                    #${ticket.id} | Device: <code>${(ticket.device_id || '').substring(0, 12)}...</code> |
+                    Created: ${new Date(ticket.created_at).toLocaleString()}
+                    ${ticket.ai_summary ? ' | <em>AI-generated</em>' : ''}
+                `;
+                document.getElementById('ticket-detail-description').textContent =
+                    ticket.description || ticket.ai_summary || 'No description provided.';
+
+                document.getElementById('ticket-status-select').value = ticket.status || 'open';
+                document.getElementById('ticket-priority-select').value = ticket.priority || 'medium';
+
+                // Render comments
+                const commentsEl = document.getElementById('ticket-comments');
+                if (ticket.comments && ticket.comments.length > 0) {
+                    commentsEl.innerHTML = ticket.comments.map(c => `
+                        <div style="background:#0f1923; border:1px solid #2a475e; border-radius:6px; padding:10px; margin-bottom:8px;">
+                            <div style="font-size:12px; color:#8f98a0;">${c.author} &mdash; ${new Date(c.created_at).toLocaleString()}</div>
+                            <div style="font-size:13px; margin-top:4px;">${c.content}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    commentsEl.innerHTML = '<div style="font-size:13px; color:#8f98a0;">No comments yet.</div>';
+                }
+            } catch (err) {
+                console.error('Failed to load ticket:', err);
+            }
+        }
+
+        function closeTicketDetail() {
+            document.getElementById('ticket-detail').classList.remove('active');
+            currentTicketId = null;
+        }
+
+        async function updateTicket(field, value) {
+            if (!currentTicketId) return;
+            try {
+                await fetchWithAuth(`${API}/api/tickets/${currentTicketId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [field]: value })
+                });
+                loadTickets(); // refresh list
+            } catch (err) {
+                console.error('Failed to update ticket:', err);
+            }
+        }
+
+        async function addTicketComment() {
+            const input = document.getElementById('ticket-comment-input');
+            const content = input.value.trim();
+            if (!content || !currentTicketId) return;
+
+            try {
+                await fetchWithAuth(`${API}/api/tickets/${currentTicketId}/comments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, author: 'IT Staff' })
+                });
+                input.value = '';
+                openTicket(currentTicketId); // refresh detail
+            } catch (err) {
+                console.error('Failed to add comment:', err);
+            }
+        }
+
+        // ---- Device Detail ----
         function openDevice(deviceId) {
             currentDeviceId = deviceId;
             const panel = document.getElementById('device-detail');
@@ -481,8 +661,7 @@
             document.getElementById('detail-chat').innerHTML = '';
             document.getElementById('detail-diagnostics').innerHTML = '';
 
-            // Fetch device info
-            fetch(`${API}/api/devices/${deviceId}`).then(r => r.json()).then(d => {
+            fetchWithAuth(`${API}/api/devices/${deviceId}`).then(r => r.json()).then(d => {
                 document.getElementById('detail-hostname').textContent = d.hostname || deviceId;
                 document.getElementById('detail-info').innerHTML = `
                     <div style="font-size: 13px; color: #8f98a0;">
@@ -493,7 +672,6 @@
                 `;
             });
 
-            // Subscribe to device events
             if (socket) {
                 socket.emit('watch_device', { deviceId });
             }
@@ -544,7 +722,7 @@
 
         async function generateToken() {
             try {
-                const res = await fetch(`${API}/api/enrollment/token`, { method: 'POST' });
+                const res = await fetchWithAuth(`${API}/api/enrollment/token`, { method: 'POST' });
                 const data = await res.json();
                 document.getElementById('token-display').style.display = 'block';
                 document.getElementById('token-value').textContent = data.token;
@@ -557,7 +735,7 @@
             if (!currentDeviceId) return;
             if (!confirm('Remove this device and all its chat/diagnostic data? The device will need to re-enroll.')) return;
             try {
-                const res = await fetch(`${API}/api/devices/${currentDeviceId}`, { method: 'DELETE' });
+                const res = await fetchWithAuth(`${API}/api/devices/${currentDeviceId}`, { method: 'DELETE' });
                 if (res.ok) {
                     closeDetail();
                     loadFleet();
@@ -570,8 +748,22 @@
             }
         }
 
-        // Init
-        initSocket();
+        // ---- Init ----
+        async function init() {
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/stats`);
+                if (res.ok) {
+                    hideLogin();
+                    initSocket();
+                    loadFleet();
+                } else {
+                    showLogin();
+                }
+            } catch (err) {
+                showLogin();
+            }
+        }
+        init();
     </script>
 </body>
 </html>

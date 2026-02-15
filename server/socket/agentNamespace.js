@@ -118,7 +118,7 @@ function setup(io, app) {
 
         // If action is remediate, validate action ID before requesting approval
         if (response.action && response.action.type === 'remediate') {
-          const VALID_ACTIONS = ['flush_dns', 'clear_temp'];
+          const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache'];
           if (VALID_ACTIONS.includes(response.action.actionId)) {
             socket.emit('remediation_request', {
               actionId: response.action.actionId,
@@ -196,7 +196,7 @@ function setup(io, app) {
 
           // Handle any follow-up actions
           if (response.action && response.action.type === 'remediate') {
-            const VALID_ACTIONS = ['flush_dns', 'clear_temp'];
+            const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache'];
             if (VALID_ACTIONS.includes(response.action.actionId)) {
               socket.emit('remediation_request', {
                 actionId: response.action.actionId,

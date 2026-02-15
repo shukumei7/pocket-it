@@ -9,7 +9,8 @@ public class CpuCheck : IDiagnosticCheck
     public async Task<DiagnosticResult> RunAsync()
     {
         // Use a process to get CPU info since PerformanceCounter needs admin on some systems
-        var info = new ProcessStartInfo("wmic", "cpu get loadpercentage /value")
+        var wmicPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wbem", "wmic.exe");
+        var info = new ProcessStartInfo(wmicPath, "cpu get loadpercentage /value")
         {
             RedirectStandardOutput = true,
             UseShellExecute = false,

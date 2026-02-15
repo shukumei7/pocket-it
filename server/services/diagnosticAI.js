@@ -27,7 +27,7 @@ class DiagnosticAI {
     const ctx = this.getOrCreateContext(deviceId, deviceInfo);
 
     // Add user message to context
-    ctx.messages.push({ role: 'user', content: userMessage });
+    ctx.messages.push({ role: 'user', content: `<user_message>${userMessage}</user_message>` });
 
     // Trim context if too long
     if (ctx.messages.length > this.maxContextMessages) {

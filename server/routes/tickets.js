@@ -38,13 +38,25 @@ router.get('/:id', requireIT, (req, res) => {
   res.json({ ...ticket, comments });
 });
 
-router.post('/', (req, res) => {
+router.post('/', requireDevice, (req, res) => {
   const db = req.app.locals.db;
   const { title, description, priority, category } = req.body;
-  const device_id = req.body.device_id || req.body.deviceId;
+  const device_id = req.deviceId;
 
-  if (!device_id || !title) {
+  if (!title) {
     return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  if (title.length > 500) {
+    return res.status(400).json({ error: 'Title too long (max 500 chars)' });
+  }
+  if (description && description.length > 10000) {
+    return res.status(400).json({ error: 'Description too long (max 10000 chars)' });
+  }
+  const validPriorities = ['low', 'medium', 'high', 'critical'];
+  const safePriority = validPriorities.includes(priority) ? priority : 'medium';
+  if (category && category.length > 100) {
+    return res.status(400).json({ error: 'Category too long (max 100 chars)' });
   }
 
   const now = new Date().toISOString();
@@ -52,7 +64,7 @@ router.post('/', (req, res) => {
   const result = db.prepare(`
     INSERT INTO tickets (device_id, title, description, priority, category, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(device_id, title, description, priority || 'medium', category, now, now);
+  `).run(device_id, title, description, safePriority, category, now, now);
 
   res.status(201).json({ id: result.lastInsertRowid, device_id, title });
 });
@@ -60,6 +72,16 @@ router.post('/', (req, res) => {
 router.patch('/:id', requireIT, (req, res) => {
   const db = req.app.locals.db;
   const { status, assigned_to, priority } = req.body;
+
+  const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
+  const validPriorities = ['low', 'medium', 'high', 'critical'];
+
+  if (status && !validStatuses.includes(status)) {
+    return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+  }
+  if (priority && !validPriorities.includes(priority)) {
+    return res.status(400).json({ error: `Invalid priority. Must be one of: ${validPriorities.join(', ')}` });
+  }
 
   const updates = [];
   const params = [];

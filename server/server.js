@@ -1,5 +1,13 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// Security: require JWT secret in non-test environments
+if (!process.env.POCKET_IT_JWT_SECRET && process.env.NODE_ENV !== 'test') {
+  console.error('[SECURITY] POCKET_IT_JWT_SECRET is not set. Server will not start without it.');
+  console.error('[SECURITY] Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  process.exit(1);
+}
+
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -9,8 +17,50 @@ const { initDatabase } = require('./db/schema');
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+// Trust proxy only if explicitly configured
+// Do NOT set trust proxy to true blindly — it enables X-Forwarded-For which can be spoofed
+// app.set('trust proxy', 1); // Only enable behind a known reverse proxy
+
+// Rate limiting
+const rateLimit = require('express-rate-limit');
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // stricter for auth endpoints
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts' }
+});
+
+// Allow additional origins via env var (comma-separated)
+const extraOrigins = (process.env.POCKET_IT_CORS_ORIGINS || '').split(',').filter(Boolean);
+const allowedOrigins = [
+    'http://localhost:9100',
+    'https://localhost:9100',
+    'file://',
+    ...extraOrigins
+];
+
+app.use(cors({
+    origin: function(origin, callback) {
+        // Allow requests with no origin (same-origin, curl, server-to-server)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+}));
+app.use(express.json({ limit: '100kb' }));
 
 const dbDir = path.join(__dirname, 'db');
 if (!fs.existsSync(dbDir)) {
@@ -45,6 +95,10 @@ const chatRouter = require('./routes/chat');
 const adminRouter = require('./routes/admin');
 const createLLMRouter = require('./routes/llm');
 
+app.use('/api/', apiLimiter);
+app.use('/api/admin/login', authLimiter);
+app.use('/api/enrollment/token', authLimiter);
+
 app.use('/api/enrollment', enrollmentRouter);
 app.use('/api/devices', devicesRouter);
 app.use('/api/tickets', ticketsRouter);
@@ -61,7 +115,14 @@ app.get('/health', (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*'
+    origin: function(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
   }
 });
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -13,7 +14,7 @@ public class ServerConnection : IDisposable
     private readonly string _serverUrl;
     private readonly string _deviceId;
     private readonly System.Timers.Timer _heartbeatTimer;
-    private readonly List<object> _offlineQueue = new();
+    private readonly ConcurrentQueue<object> _offlineQueue = new();
     private bool _isConnected;
 
     public event Action<string>? OnChatResponse;
@@ -39,8 +40,9 @@ public class ServerConnection : IDisposable
                 new("hostname", DeviceIdentity.GetHostname())
             },
             Reconnection = true,
-            ReconnectionAttempts = int.MaxValue,
-            ReconnectionDelay = 5000
+            ReconnectionAttempts = 50,
+            ReconnectionDelay = 5000,
+            ConnectionTimeout = TimeSpan.FromSeconds(10)
         });
 
         _socket.OnConnected += async (_, _) =>
@@ -91,7 +93,7 @@ public class ServerConnection : IDisposable
         }
         else
         {
-            _offlineQueue.Add(new { type = "chat_message", data = payload });
+            _offlineQueue.Enqueue(new { type = "chat_message", data = payload });
         }
     }
 
@@ -123,9 +125,7 @@ public class ServerConnection : IDisposable
     private async Task FlushOfflineQueue()
     {
         if (_socket == null) return;
-        var queue = _offlineQueue.ToList();
-        _offlineQueue.Clear();
-        foreach (var item in queue)
+        while (_offlineQueue.TryDequeue(out var item))
         {
             var json = JsonSerializer.Serialize(item);
             var element = JsonSerializer.Deserialize<JsonElement>(json);

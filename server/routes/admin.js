@@ -4,6 +4,11 @@ const { generateToken, hashPassword, comparePassword } = require('../auth/userAu
 
 const router = express.Router();
 
+// Account lockout: track failed attempts per username
+const loginAttempts = new Map(); // username → { count, lockedUntil }
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
+
 router.post('/login', async (req, res) => {
   const db = req.app.locals.db;
   const { username, password } = req.body;
@@ -12,20 +17,60 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Username and password required' });
   }
 
+  // Check lockout
+  const attempts = loginAttempts.get(username);
+  if (attempts && attempts.lockedUntil && Date.now() < attempts.lockedUntil) {
+    return res.status(429).json({ error: 'Account temporarily locked. Try again later.' });
+  }
+
   const user = db.prepare('SELECT * FROM it_users WHERE username = ?').get(username);
 
   if (!user) {
+    try {
+      db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+        username, 'login_failed', 'auth', JSON.stringify({ reason: 'user_not_found', ip: req.socket?.remoteAddress })
+      );
+    } catch (e) { /* ignore logging errors */ }
+    // Track failed attempt
+    const current = loginAttempts.get(username) || { count: 0, lockedUntil: null };
+    current.count++;
+    if (current.count >= MAX_ATTEMPTS) {
+      current.lockedUntil = Date.now() + LOCKOUT_DURATION;
+      current.count = 0;
+    }
+    loginAttempts.set(username, current);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
   const isValid = await comparePassword(password, user.password_hash);
 
   if (!isValid) {
+    try {
+      db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+        username, 'login_failed', 'auth', JSON.stringify({ reason: 'invalid_password', ip: req.socket?.remoteAddress })
+      );
+    } catch (e) { /* ignore logging errors */ }
+    // Track failed attempt
+    const current = loginAttempts.get(username) || { count: 0, lockedUntil: null };
+    current.count++;
+    if (current.count >= MAX_ATTEMPTS) {
+      current.lockedUntil = Date.now() + LOCKOUT_DURATION;
+      current.count = 0;
+    }
+    loginAttempts.set(username, current);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
   db.prepare('UPDATE it_users SET last_login = ? WHERE id = ?')
     .run(new Date().toISOString(), user.id);
+
+  loginAttempts.delete(username);
+
+  try {
+    db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+      username, 'login_success', 'auth', JSON.stringify({ ip: req.socket?.remoteAddress })
+    );
+  } catch (e) { /* ignore logging errors */ }
 
   const token = generateToken(user, process.env.POCKET_IT_JWT_SECRET || 'pocket-it-dev-secret');
 

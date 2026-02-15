@@ -1,4 +1,5 @@
 const { verifyToken } = require('../auth/userAuth');
+const jwt = require('jsonwebtoken');
 
 function setup(io, app) {
   const itNs = io.of('/it');
@@ -9,7 +10,24 @@ function setup(io, app) {
   itNs.on('connection', (socket) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
 
-    // For MVP, accept connections (production would verify JWT)
+    // Verify JWT (skip for localhost in MVP)
+    const ip = socket.handshake.address;
+    const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+
+    if (!isLocal) {
+      if (!token) {
+        socket.disconnect();
+        return;
+      }
+      try {
+        const secret = process.env.POCKET_IT_JWT_SECRET || 'pocket-it-dev-secret';
+        jwt.verify(token, secret);
+      } catch (err) {
+        socket.disconnect();
+        return;
+      }
+    }
+
     console.log(`[IT] Dashboard connected: ${socket.id}`);
     watchers.set(socket.id, new Set());
 

@@ -12,6 +12,7 @@ function initDatabase(dbPath) {
       os_version TEXT,
       status TEXT DEFAULT 'online',
       certificate_fingerprint TEXT,
+      device_secret TEXT,
       enrolled_at TEXT,
       last_seen TEXT
     );

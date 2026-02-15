@@ -13,7 +13,8 @@ public class MemoryCheck : IDiagnosticCheck
 
         try
         {
-            var info = new ProcessStartInfo("wmic", "os get TotalVisibleMemorySize,FreePhysicalMemory /value")
+            var wmicPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wbem", "wmic.exe");
+            var info = new ProcessStartInfo(wmicPath, "os get TotalVisibleMemorySize,FreePhysicalMemory /value")
             {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,

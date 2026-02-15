@@ -191,6 +191,7 @@ public class TrayApplication : ApplicationContext
             {
                 case "chat_message":
                     var content = root.GetProperty("content").GetString() ?? "";
+                    if (content.Length > 5000) content = content[..5000];
                     await _serverConnection.SendChatMessage(content);
                     break;
 

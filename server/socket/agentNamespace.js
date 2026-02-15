@@ -17,17 +17,30 @@ function setup(io, app) {
       return;
     }
 
+    // Verify device is enrolled
+    const db = app.locals.db;
+
+    // Verify device secret
+    const deviceSecret = socket.handshake.query.deviceSecret;
+    const fullDevice = db.prepare('SELECT device_id, device_secret FROM devices WHERE device_id = ?').get(deviceId);
+    if (!fullDevice) {
+      console.log(`[Agent] Connection rejected: unknown device ${deviceId}`);
+      socket.disconnect();
+      return;
+    }
+    if (fullDevice.device_secret && fullDevice.device_secret !== deviceSecret) {
+      console.log(`[Agent] Connection rejected: invalid secret for ${deviceId}`);
+      socket.disconnect();
+      return;
+    }
+
     console.log(`[Agent] Device connected: ${deviceId} (${hostname || 'unknown'})`);
     connectedDevices.set(deviceId, socket);
 
-    // Update device status in DB
-    const db = app.locals.db;
+    // Update device status in DB (device already verified above)
     try {
-      const existing = db.prepare('SELECT device_id FROM devices WHERE device_id = ?').get(deviceId);
-      if (existing) {
-        db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\'), hostname = COALESCE(?, hostname) WHERE device_id = ?')
-          .run('online', hostname, deviceId);
-      }
+      db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\'), hostname = COALESCE(?, hostname) WHERE device_id = ?')
+        .run('online', hostname, deviceId);
     } catch (err) {
       console.error('[Agent] DB error on connect:', err.message);
     }
@@ -86,12 +99,17 @@ function setup(io, app) {
           });
         }
 
-        // If action is remediate, request approval from client
+        // If action is remediate, validate action ID before requesting approval
         if (response.action && response.action.type === 'remediate') {
-          socket.emit('remediation_request', {
-            actionId: response.action.actionId,
-            requestId: Date.now().toString()
-          });
+          const VALID_ACTIONS = ['flush_dns', 'clear_temp'];
+          if (VALID_ACTIONS.includes(response.action.actionId)) {
+            socket.emit('remediation_request', {
+              actionId: response.action.actionId,
+              requestId: Date.now().toString()
+            });
+          } else {
+            console.warn(`[Agent] Blocked invalid remediation action: ${response.action.actionId}`);
+          }
         }
 
         // If action is ticket, create ticket in DB
@@ -161,10 +179,15 @@ function setup(io, app) {
 
           // Handle any follow-up actions
           if (response.action && response.action.type === 'remediate') {
-            socket.emit('remediation_request', {
-              actionId: response.action.actionId,
-              requestId: Date.now().toString()
-            });
+            const VALID_ACTIONS = ['flush_dns', 'clear_temp'];
+            if (VALID_ACTIONS.includes(response.action.actionId)) {
+              socket.emit('remediation_request', {
+                actionId: response.action.actionId,
+                requestId: Date.now().toString()
+              });
+            } else {
+              console.warn(`[Agent] Blocked invalid remediation action: ${response.action.actionId}`);
+            }
           }
         } catch (err) {
           console.error('[Agent] Diagnostic AI processing error:', err.message);

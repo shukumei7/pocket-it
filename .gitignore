@@ -6,9 +6,13 @@ db/*.db
 # .NET
 bin/
 obj/
+publish/
 *.user
 *.suo
 .vs/
+
+# Installer
+installer/output/
 
 # OS
 .DS_Store

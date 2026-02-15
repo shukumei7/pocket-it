@@ -222,6 +222,52 @@ Computer Configuration → Administrative Templates → Windows Components → W
 Test-WSMan -ComputerName WS-042
 ```
 
+## Building the Installer
+
+For enterprise deployment, Pocket IT includes an Inno Setup installer that creates a self-contained, production-ready package.
+
+### Prerequisites
+
+- .NET 8.0 SDK
+- Inno Setup 6 ([download](https://jrsoftware.org/isdl.php))
+
+### Build
+
+```bash
+cd installer
+build.bat
+```
+
+**Output:** `installer/output/PocketIT-0.2.0-setup.exe`
+
+### Silent Deployment (for IT Admins)
+
+```bash
+# Silent install (shows progress bar)
+PocketIT-0.2.0-setup.exe /SILENT
+
+# Fully silent (no UI at all)
+PocketIT-0.2.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES
+
+# Custom install directory
+PocketIT-0.2.0-setup.exe /SILENT /DIR="C:\PocketIT"
+```
+
+### What the Installer Does
+
+- Installs self-contained app to Program Files (no .NET runtime needed)
+- Optional auto-start on Windows login (registry Run key, enabled by default)
+- Preserves `appsettings.json` on upgrade (IT config not overwritten)
+- WebView2 runtime check (pre-installed on Win10 21H2+ / Win11)
+- Clean uninstall removes app + local database
+
+### Client Configuration
+
+After install, edit `appsettings.json` in the install directory:
+
+- `Server.Url` — Pocket IT server address (default: `http://localhost:9100`)
+- `Enrollment.Token` — One-time enrollment token from the dashboard
+
 ## LLM Provider Options
 
 Pocket IT supports four LLM providers. Choose based on your requirements:

@@ -1096,6 +1096,23 @@ Portal: **https://helpdesk.example.com**
 
 ## Security Threat Model
 
+### Implemented Security Controls (v0.1.0)
+
+| Control | Implementation | Location |
+|---------|---------------|----------|
+| JWT secret required | Server exits on startup if `POCKET_IT_JWT_SECRET` unset | `server.js:5-9` |
+| Device DB validation | `requireDevice` middleware verifies device_id in database | `auth/middleware.js:17-31` |
+| Device secret auth | Socket.IO handshake validates `device_secret` from enrollment | `socket/agentNamespace.js:23-35` |
+| Re-enrollment protection | Existing device_id returns 409 Conflict | `routes/enrollment.js:43-44` |
+| Ticket auth | `POST /api/tickets` requires authenticated device | `routes/tickets.js:29` |
+| Prompt injection defense | User messages wrapped in `<user_message>` tags | `services/diagnosticAI.js:30` |
+| CORS hardened | No wildcard, no null origin allowed | `server.js:48-61` |
+| Body size limit | 100KB max JSON payload | `server.js:63` |
+| Account lockout | 5 failures → 15-minute lockout | `routes/admin.js:8-61` |
+| LLM timeouts | 30s AbortController on HTTP calls | `services/llmService.js` |
+| Server-side action whitelist | Remediation actions validated before forwarding | `socket/agentNamespace.js:104-112` |
+| Status/priority validation | Ticket PATCH validates enum values | `routes/tickets.js:76-84` |
+
 ### Threats and Mitigations
 
 | Threat | Mitigation |

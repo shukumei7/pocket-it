@@ -397,6 +397,36 @@ The client can run four types of diagnostic checks:
 
 **Connection state tracking:** The UI displays connection status (Connected/Disconnected) and adapts behavior automatically. When offline, AI responses are replaced with helpful offline messages directing users to alternative support options.
 
+## Security
+
+Pocket IT prioritizes security and integrity at every layer:
+
+### Authentication & Authorization
+- **JWT required** — `POCKET_IT_JWT_SECRET` must be set (server refuses to start without it)
+- **Device enrollment** — one-time tokens with 24-hour expiry; re-enrollment of existing devices rejected
+- **Device secrets** — unique `device_secret` generated at enrollment, validated on every Socket.IO connection
+- **IT staff auth** — JWT Bearer tokens with role-based access (admin/technician/viewer)
+- **Localhost bypass** — development only; remote access requires full auth
+
+### Input Validation & Integrity
+- **Parameterized SQL** — all database queries use prepared statements
+- **Body size limit** — 100KB max on JSON payloads
+- **CORS whitelist** — specific origins only (no wildcard, no null)
+- **Ticket validation** — status and priority values validated against allowed enums
+- **Prompt injection defense** — user messages wrapped in `<user_message>` tags
+
+### Rate Limiting & Abuse Prevention
+- **API rate limit** — 100 requests per 15 minutes per IP
+- **Auth rate limit** — 10 attempts per 15 minutes per IP
+- **Account lockout** — 5 failed logins locks account for 15 minutes
+- **LLM timeouts** — 30-second abort on all LLM HTTP calls
+
+### Remediation Safety
+- **Hardcoded whitelist** — only `flush_dns` and `clear_temp` allowed (client AND server)
+- **User approval required** — no action executes without explicit user consent
+- **Server-side validation** — AI-suggested actions checked against whitelist before forwarding to client
+- **Audit logging** — all remediation executions logged to `audit_log` table
+
 ## Security Model
 
 **MVP scope (localhost bypass):**

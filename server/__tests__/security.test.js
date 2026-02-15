@@ -115,10 +115,10 @@ describe('Auth Middleware - Unit Tests', () => {
     testDb = setup.db;
     dbPath = setup.dbPath;
 
-    // Insert test device
+    // Insert test device with device_secret
     testDb.prepare(`
-      INSERT INTO devices (device_id, hostname, os_version, enrolled_at, last_seen)
-      VALUES ('test-device-001', 'test-host', 'Windows 11', datetime('now'), datetime('now'))
+      INSERT INTO devices (device_id, hostname, os_version, enrolled_at, last_seen, device_secret)
+      VALUES ('test-device-001', 'test-host', 'Windows 11', datetime('now'), datetime('now'), 'test-secret-001')
     `).run();
   });
 
@@ -135,7 +135,7 @@ describe('Auth Middleware - Unit Tests', () => {
       requireDevice(req, res, next);
 
       assert.strictEqual(res.statusCode, 401);
-      assert.strictEqual(res._json.error, 'Device ID required');
+      assert.strictEqual(res._json.error, 'Device authentication required');
     });
 
     it('should reject request with unknown device', () => {
@@ -146,13 +146,25 @@ describe('Auth Middleware - Unit Tests', () => {
 
       requireDevice(req, res, next);
 
+      assert.strictEqual(res.statusCode, 401);
+      assert.strictEqual(res._json.error, 'Device authentication required');
+    });
+
+    it('should reject request with unknown device even with secret', () => {
+      const { req, res, next } = createMocks({
+        headers: { 'x-device-id': 'unknown-device', 'x-device-secret': 'some-secret' }
+      });
+      req.app.locals.db = testDb;
+
+      requireDevice(req, res, next);
+
       assert.strictEqual(res.statusCode, 403);
-      assert.strictEqual(res._json.error, 'Device not enrolled');
     });
 
     it('should accept request with valid device', () => {
+      const device = testDb.prepare('SELECT device_secret FROM devices WHERE device_id = ?').get('test-device-001');
       const { req, res, next } = createMocks({
-        headers: { 'x-device-id': 'test-device-001' }
+        headers: { 'x-device-id': 'test-device-001', 'x-device-secret': device.device_secret }
       });
       req.app.locals.db = testDb;
 
@@ -399,8 +411,8 @@ describe('Ticket Validation', () => {
     dbPath = setup.dbPath;
 
     testDb.prepare(`
-      INSERT INTO devices (device_id, hostname, os_version, enrolled_at, last_seen)
-      VALUES ('test-device-002', 'test-host', 'Windows 11', datetime('now'), datetime('now'))
+      INSERT INTO devices (device_id, hostname, os_version, enrolled_at, last_seen, device_secret)
+      VALUES ('test-device-002', 'test-host', 'Windows 11', datetime('now'), datetime('now'), 'test-secret-002')
     `).run();
   });
 
@@ -418,7 +430,7 @@ describe('Ticket Validation', () => {
     requireDevice(req, res, next);
 
     assert.strictEqual(res.statusCode, 401);
-    assert.strictEqual(res._json.error, 'Device ID required');
+    assert.strictEqual(res._json.error, 'Device authentication required');
   });
 
   it('should reject POST /api/tickets with unknown device (403)', () => {
@@ -430,8 +442,8 @@ describe('Ticket Validation', () => {
 
     requireDevice(req, res, next);
 
-    assert.strictEqual(res.statusCode, 403);
-    assert.strictEqual(res._json.error, 'Device not enrolled');
+    assert.strictEqual(res.statusCode, 401);
+    assert.strictEqual(res._json.error, 'Device authentication required');
   });
 
   it('should validate invalid status in PATCH request', () => {

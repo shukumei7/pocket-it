@@ -399,6 +399,12 @@
         let currentTicketId = null;
         let authToken = sessionStorage.getItem('pocket_it_token') || '';
 
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         // ---- Auth ----
         async function fetchWithAuth(url, options = {}) {
             if (authToken) {
@@ -537,10 +543,10 @@
                 grid.innerHTML = devices.map(d => `
                     <div class="device-card" onclick="openDevice('${d.device_id}')">
                         <div class="device-header">
-                            <span class="hostname">${d.hostname || 'Unknown'}</span>
+                            <span class="hostname">${escapeHtml(d.hostname || 'Unknown')}</span>
                             <span class="status-dot ${d.status || 'offline'}"></span>
                         </div>
-                        <div class="device-id">${d.device_id.substring(0, 8)}...</div>
+                        <div class="device-id">${escapeHtml(d.device_id.substring(0, 8))}...</div>
                         <div class="last-seen">Last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Never'}</div>
                     </div>
                 `).join('');
@@ -563,9 +569,9 @@
                     <li class="ticket-item" onclick="openTicket(${t.id})" style="cursor:pointer;">
                         <div class="priority ${t.priority}"></div>
                         <div class="ticket-info">
-                            <div class="ticket-title">${t.title}</div>
+                            <div class="ticket-title">${escapeHtml(t.title)}</div>
                             <div class="ticket-meta">
-                                Device: ${(t.device_id || '').substring(0, 8)}... |
+                                Device: ${escapeHtml((t.device_id || '').substring(0, 8))}... |
                                 Created: ${new Date(t.created_at).toLocaleString()}
                             </div>
                         </div>
@@ -588,7 +594,7 @@
 
                 document.getElementById('ticket-detail-title').textContent = ticket.title;
                 document.getElementById('ticket-detail-info').innerHTML = `
-                    #${ticket.id} | Device: <code>${(ticket.device_id || '').substring(0, 12)}...</code> |
+                    #${ticket.id} | Device: <code>${escapeHtml((ticket.device_id || '').substring(0, 12))}...</code> |
                     Created: ${new Date(ticket.created_at).toLocaleString()}
                     ${ticket.ai_summary ? ' | <em>AI-generated</em>' : ''}
                 `;
@@ -603,8 +609,8 @@
                 if (ticket.comments && ticket.comments.length > 0) {
                     commentsEl.innerHTML = ticket.comments.map(c => `
                         <div style="background:#0f1923; border:1px solid #2a475e; border-radius:6px; padding:10px; margin-bottom:8px;">
-                            <div style="font-size:12px; color:#8f98a0;">${c.author} &mdash; ${new Date(c.created_at).toLocaleString()}</div>
-                            <div style="font-size:13px; margin-top:4px;">${c.content}</div>
+                            <div style="font-size:12px; color:#8f98a0;">${escapeHtml(c.author)} &mdash; ${new Date(c.created_at).toLocaleString()}</div>
+                            <div style="font-size:13px; margin-top:4px;">${escapeHtml(c.content)}</div>
                         </div>
                     `).join('');
                 } else {
@@ -665,8 +671,8 @@
                 document.getElementById('detail-hostname').textContent = d.hostname || deviceId;
                 document.getElementById('detail-info').innerHTML = `
                     <div style="font-size: 13px; color: #8f98a0;">
-                        ID: <code>${d.device_id}</code> |
-                        OS: ${d.os_version || 'Unknown'} |
+                        ID: <code>${escapeHtml(d.device_id)}</code> |
+                        OS: ${escapeHtml(d.os_version || 'Unknown')} |
                         Status: <span class="status-dot ${d.status}"></span> ${d.status}
                     </div>
                 `;
@@ -690,7 +696,7 @@
             const chatEl = document.getElementById('detail-chat');
             const msg = document.createElement('div');
             msg.className = 'msg';
-            msg.innerHTML = `<span class="sender-tag ${sender}">${sender}:</span> ${content}`;
+            msg.innerHTML = `<span class="sender-tag ${escapeHtml(sender)}">${escapeHtml(sender)}:</span> ${escapeHtml(content)}`;
             chatEl.appendChild(msg);
             chatEl.scrollTop = chatEl.scrollHeight;
         }

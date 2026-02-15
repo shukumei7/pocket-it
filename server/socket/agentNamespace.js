@@ -4,6 +4,9 @@ function setup(io, app) {
   // Store connected devices: deviceId → socket
   const connectedDevices = new Map();
 
+  // Chat rate limiting: deviceId → { count, resetTime }
+  const chatRateLimiter = new Map();
+
   // Make connectedDevices accessible from app for other handlers
   app.locals.connectedDevices = connectedDevices;
 
@@ -83,6 +86,25 @@ function setup(io, app) {
     socket.on('chat_message', async (data) => {
       const content = data.content;
       console.log(`[Agent] Chat from ${deviceId}: ${content.substring(0, 50)}...`);
+
+      // Rate limit: 20 messages per minute per device
+      const now = Date.now();
+      const rateLimit = chatRateLimiter.get(deviceId) || { count: 0, resetTime: now + 60000 };
+      if (now > rateLimit.resetTime) {
+        rateLimit.count = 0;
+        rateLimit.resetTime = now + 60000;
+      }
+      rateLimit.count++;
+      chatRateLimiter.set(deviceId, rateLimit);
+
+      if (rateLimit.count > 20) {
+        socket.emit('chat_response', {
+          text: 'Please slow down — you can send up to 20 messages per minute.',
+          sender: 'ai',
+          action: null
+        });
+        return;
+      }
 
       const diagnosticAI = app.locals.diagnosticAI;
       if (!diagnosticAI) {
@@ -244,6 +266,7 @@ function setup(io, app) {
     socket.on('disconnect', () => {
       console.log(`[Agent] Device disconnected: ${deviceId}`);
       connectedDevices.delete(deviceId);
+      chatRateLimiter.delete(deviceId);
 
       try {
         db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\') WHERE device_id = ?')

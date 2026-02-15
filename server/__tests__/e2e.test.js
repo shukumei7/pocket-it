@@ -205,11 +205,15 @@ describe('E2E Smoke Tests', () => {
 
     // Test 9: Create ticket via device
     it('should create a ticket', async () => {
+        const db = app.locals.db;
+        const device = db.prepare('SELECT device_secret FROM devices WHERE device_id = ?').get('test-device-001');
+
         const res = await fetch(`${baseUrl}/api/tickets`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-device-id': 'test-device-001'
+                'x-device-id': 'test-device-001',
+                'x-device-secret': device.device_secret
             },
             body: JSON.stringify({
                 title: 'Test ticket',

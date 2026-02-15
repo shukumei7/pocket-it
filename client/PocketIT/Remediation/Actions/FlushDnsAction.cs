@@ -8,7 +8,8 @@ public class FlushDnsAction : IRemediationAction
 
     public async Task<RemediationResult> ExecuteAsync()
     {
-        var info = new ProcessStartInfo("ipconfig", "/flushdns")
+        var ipconfigPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "ipconfig.exe");
+        var info = new ProcessStartInfo(ipconfigPath, "/flushdns")
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,

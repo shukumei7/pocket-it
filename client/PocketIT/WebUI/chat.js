@@ -45,9 +45,17 @@
         return div;
     }
 
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     function formatMessage(text) {
-        // Basic markdown-lite: bold, italic, code
-        return text
+        // Escape HTML entities FIRST to prevent XSS
+        let safe = escapeHtml(text);
+        // Then apply markdown-lite formatting on the escaped text
+        return safe
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
             .replace(/`(.*?)`/g, '<code>$1</code>')
@@ -103,7 +111,11 @@
         approveBtn.textContent = 'Approve';
         approveBtn.onclick = () => {
             sendBridgeMessage('approve_remediation', { actionId: action.actionId });
-            container.innerHTML = '<span style="color: #66bb6a; font-size: 13px;">Approved — running...</span>';
+            container.textContent = '';
+            const span = document.createElement('span');
+            span.style.cssText = 'color: #66bb6a; font-size: 13px;';
+            span.textContent = 'Approved \u2014 running...';
+            container.appendChild(span);
         };
 
         const denyBtn = document.createElement('button');
@@ -111,7 +123,11 @@
         denyBtn.textContent = 'Deny';
         denyBtn.onclick = () => {
             sendBridgeMessage('deny_remediation', { actionId: action.actionId });
-            container.innerHTML = '<span style="color: #ef5350; font-size: 13px;">Denied</span>';
+            container.textContent = '';
+            const span = document.createElement('span');
+            span.style.cssText = 'color: #ef5350; font-size: 13px;';
+            span.textContent = 'Denied';
+            container.appendChild(span);
         };
 
         container.appendChild(approveBtn);

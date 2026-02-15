@@ -4,8 +4,7 @@ const { requireAdmin } = require('../auth/middleware');
 
 const router = express.Router();
 
-// MVP: Allow token generation without auth for localhost convenience
-router.post('/token', (req, res) => {
+router.post('/token', requireAdmin, (req, res) => {
   const db = req.app.locals.db;
   const token = uuidv4();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -39,30 +38,27 @@ router.post('/enroll', (req, res) => {
 
   const enrolledAt = new Date().toISOString();
 
-  // Check if device already exists
+  // Check if device already exists — reject re-enrollment
   const existingDevice = db.prepare('SELECT device_id FROM devices WHERE device_id = ?').get(deviceId);
-
   if (existingDevice) {
-    // Update existing device
-    db.prepare(`
-      UPDATE devices
-      SET hostname = ?, os_version = ?, status = 'online', last_seen = ?
-      WHERE device_id = ?
-    `).run(hostname, osVersion, enrolledAt, deviceId);
-  } else {
-    // Insert new device
-    db.prepare(`
-      INSERT INTO devices (device_id, hostname, os_version, status, enrolled_at, last_seen)
-      VALUES (?, ?, ?, 'online', ?, ?)
-    `).run(deviceId, hostname, osVersion, enrolledAt, enrolledAt);
+    return res.status(409).json({ error: 'Device already enrolled. Contact IT to re-enroll.' });
   }
+
+  // Generate device secret for Socket.IO authentication
+  const deviceSecret = uuidv4();
+
+  // Insert new device
+  db.prepare(`
+    INSERT INTO devices (device_id, hostname, os_version, status, enrolled_at, last_seen, device_secret)
+    VALUES (?, ?, ?, 'online', ?, ?, ?)
+  `).run(deviceId, hostname, osVersion, enrolledAt, enrolledAt, deviceSecret);
 
   // Mark token as used
   db.prepare(`
     UPDATE enrollment_tokens SET status = 'used', used_by_device = ? WHERE token = ?
   `).run(deviceId, token);
 
-  res.json({ success: true, deviceId });
+  res.json({ success: true, deviceId, deviceSecret });
 });
 
 module.exports = router;

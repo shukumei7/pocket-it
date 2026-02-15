@@ -84,12 +84,17 @@ public class EnrollmentFlow
         }
     }
 
-    public async Task<bool> CheckEnrolledAsync()
+    public async Task<bool> CheckEnrolledAsync(string deviceSecret = "")
     {
         var deviceId = DeviceIdentity.GetMachineId();
         try
         {
-            var response = await _http.GetAsync($"{_serverUrl}/api/devices/{deviceId}");
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{_serverUrl}/api/enrollment/status/{deviceId}");
+            if (!string.IsNullOrEmpty(deviceSecret))
+            {
+                request.Headers.Add("x-device-secret", deviceSecret);
+            }
+            var response = await _http.SendAsync(request);
             return response.IsSuccessStatusCode;
         }
         catch

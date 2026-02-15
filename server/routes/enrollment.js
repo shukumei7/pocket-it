@@ -61,4 +61,26 @@ router.post('/enroll', (req, res) => {
   res.json({ success: true, deviceId, deviceSecret });
 });
 
+router.get('/status/:deviceId', (req, res) => {
+  const db = req.app.locals.db;
+  const { deviceId } = req.params;
+  const deviceSecret = req.headers['x-device-secret'];
+
+  if (!deviceSecret) {
+    return res.status(401).json({ error: 'Device secret required' });
+  }
+
+  const device = db.prepare('SELECT device_id, device_secret FROM devices WHERE device_id = ?').get(deviceId);
+
+  if (!device) {
+    return res.status(404).json({ enrolled: false });
+  }
+
+  if (!device.device_secret || device.device_secret !== deviceSecret) {
+    return res.status(401).json({ error: 'Invalid device secret' });
+  }
+
+  res.json({ enrolled: true, deviceId });
+});
+
 module.exports = router;

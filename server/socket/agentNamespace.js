@@ -28,7 +28,12 @@ function setup(io, app) {
       socket.disconnect();
       return;
     }
-    if (fullDevice.device_secret && fullDevice.device_secret !== deviceSecret) {
+    if (!fullDevice.device_secret) {
+      console.log(`[Agent] Connection rejected: device ${deviceId} has no secret (re-enrollment required)`);
+      socket.disconnect();
+      return;
+    }
+    if (fullDevice.device_secret !== deviceSecret) {
       console.log(`[Agent] Connection rejected: invalid secret for ${deviceId}`);
       socket.disconnect();
       return;

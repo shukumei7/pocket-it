@@ -284,6 +284,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `GET /api/devices` — List all devices (IT auth)
 - `GET /api/devices/:id` — Get device details (IT auth)
 - `GET /api/devices/:id/diagnostics` — Get diagnostic history (IT auth)
+- `DELETE /api/devices/:id` — Remove device and all related data (admin auth)
 
 ### Tickets
 - `GET /api/tickets?status=open` — List tickets, optional status filter (IT auth)
@@ -314,6 +315,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 
 **Server events:**
 - `agent_info` — Assigned agent name (sent on connect and with each chat response): `{ agentName: string }`
+- `chat_history` — Last 20 messages sent on connection: `{ messages: array }`
 - `chat_response` — AI response: `{ text, sender, agentName, action }`
 - `diagnostic_request` — Request diagnostic check: `{ checkType, requestId }`
 - `remediation_request` — Request remediation approval: `{ actionId, requestId }`
@@ -509,7 +511,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.1.2)
+## Current Status (v0.1.3)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -522,6 +524,8 @@ pocket-it/
 - Remote deployment via PowerShell/WinRM
 - IT staff dashboard (Fleet, Tickets, Enrollment) with localhost auth bypass
 - Security hardening: JWT required, rate limiting, account lockout, CORS whitelist, input validation, prompt injection defense, server-side action whitelist
+- Device removal with cascade delete (chat messages, diagnostics)
+- Chat history on reconnect (last 20 messages)
 
 ### Setup
 

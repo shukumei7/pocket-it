@@ -316,6 +316,10 @@
                     <button class="diag-btn" onclick="requestDiag('network')">Network</button>
                 </div>
                 <div id="detail-diagnostics" style="margin-top: 12px;"></div>
+                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #2a475e;">
+                    <button class="diag-btn" onclick="removeDevice()" style="background: #4a1919; color: #ef5350;">Remove Device</button>
+                    <span style="font-size: 12px; color: #8f98a0; margin-left: 8px;">Removes device and all its data. Device must re-enroll.</span>
+                </div>
             </div>
         </div>
 
@@ -546,6 +550,23 @@
                 document.getElementById('token-value').textContent = data.token;
             } catch (err) {
                 alert('Failed to generate token: ' + err.message);
+            }
+        }
+
+        async function removeDevice() {
+            if (!currentDeviceId) return;
+            if (!confirm('Remove this device and all its chat/diagnostic data? The device will need to re-enroll.')) return;
+            try {
+                const res = await fetch(`${API}/api/devices/${currentDeviceId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    closeDetail();
+                    loadFleet();
+                } else {
+                    const data = await res.json();
+                    alert('Failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Failed to remove device: ' + err.message);
             }
         }
 

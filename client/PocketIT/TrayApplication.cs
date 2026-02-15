@@ -86,7 +86,8 @@ public class TrayApplication : ApplicationContext
         try
         {
             // Check enrollment
-            var isEnrolled = await _enrollmentFlow.CheckEnrolledAsync();
+            var deviceSecret = _localDb.GetSetting("device_secret") ?? "";
+            var isEnrolled = await _enrollmentFlow.CheckEnrolledAsync(deviceSecret);
             var enrollmentToken = _config["Enrollment:Token"] ?? "";
 
             if (!isEnrolled && !string.IsNullOrEmpty(enrollmentToken))
@@ -95,6 +96,7 @@ public class TrayApplication : ApplicationContext
                 if (result.Success && !string.IsNullOrEmpty(result.DeviceSecret))
                 {
                     _localDb.SetSetting("device_secret", result.DeviceSecret);
+                    _serverConnection.UpdateDeviceSecret(result.DeviceSecret);
                 }
                 else if (!result.Success)
                 {

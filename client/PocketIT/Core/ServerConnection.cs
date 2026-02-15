@@ -13,7 +13,7 @@ public class ServerConnection : IDisposable
     private SocketIOClient.SocketIO? _socket;
     private readonly string _serverUrl;
     private readonly string _deviceId;
-    private readonly string _deviceSecret;
+    private string _deviceSecret;
     private readonly System.Timers.Timer _heartbeatTimer;
     private readonly ConcurrentQueue<object> _offlineQueue = new();
     private bool _isConnected;
@@ -30,6 +30,14 @@ public class ServerConnection : IDisposable
         _deviceSecret = deviceSecret;
         _heartbeatTimer = new System.Timers.Timer(30000);
         _heartbeatTimer.Elapsed += async (_, _) => await SendHeartbeat();
+    }
+
+    /// <summary>
+    /// Updates the device secret before connecting. Must be called before ConnectAsync.
+    /// </summary>
+    public void UpdateDeviceSecret(string secret)
+    {
+        _deviceSecret = secret;
     }
 
     public async Task ConnectAsync()

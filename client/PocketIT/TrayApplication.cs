@@ -50,6 +50,7 @@ public class TrayApplication : ApplicationContext
 
         // Wire server connection events
         _serverConnection.OnChatResponse += OnServerChatResponse;
+        _serverConnection.OnChatHistory += OnServerChatHistory;
         _serverConnection.OnConnectionChanged += OnServerConnectionChanged;
         _serverConnection.OnDiagnosticRequest += OnServerDiagnosticRequest;
         _serverConnection.OnRemediationRequest += OnServerRemediationRequest;
@@ -153,8 +154,19 @@ public class TrayApplication : ApplicationContext
 
     private void OnServerChatResponse(string json)
     {
-        // Forward chat response to UI (already in JSON format from server)
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(json), null);
+        // Inject "type" field for WebView bridge dispatch
+        var wrapped = json.TrimStart().StartsWith("{")
+            ? "{\"type\":\"chat_response\"," + json.TrimStart().Substring(1)
+            : json;
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(wrapped), null);
+    }
+
+    private void OnServerChatHistory(string json)
+    {
+        var wrapped = json.TrimStart().StartsWith("{")
+            ? "{\"type\":\"chat_history\"," + json.TrimStart().Substring(1)
+            : json;
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(wrapped), null);
     }
 
     private void OnServerConnectionChanged(bool connected)

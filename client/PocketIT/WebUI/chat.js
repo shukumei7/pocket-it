@@ -270,6 +270,14 @@
                     addMessage(`Running ${data.checkType} diagnostic...`, 'system');
                     break;
 
+                case 'chat_history':
+                    if (data.messages && Array.isArray(data.messages)) {
+                        data.messages.forEach(function(msg) {
+                            addMessage(msg.content, msg.sender);
+                        });
+                    }
+                    break;
+
                 case 'remediation_result':
                     hideTyping();
                     if (data.success) {

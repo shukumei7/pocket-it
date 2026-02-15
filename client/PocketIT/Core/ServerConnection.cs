@@ -22,6 +22,7 @@ public class ServerConnection : IDisposable
     public event Action<string>? OnDiagnosticRequest;
     public event Action<string, string>? OnRemediationRequest;
     public event Action<bool>? OnConnectionChanged;
+    public event Action<string>? OnChatHistory;
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -90,6 +91,12 @@ public class ServerConnection : IDisposable
             var actionId = data.GetProperty("actionId").GetString() ?? "";
             var requestId = data.GetProperty("requestId").GetString() ?? "";
             OnRemediationRequest?.Invoke(actionId, requestId);
+        });
+
+        _socket.On("chat_history", response =>
+        {
+            var data = response.GetValue<JsonElement>();
+            OnChatHistory?.Invoke(data.GetRawText());
         });
 
         await _socket.ConnectAsync();

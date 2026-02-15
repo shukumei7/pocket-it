@@ -57,6 +57,18 @@ function setup(io, app) {
       socket.emit('agent_info', { agentName });
     }
 
+    // Send recent chat history on reconnect
+    try {
+      const recentMessages = db.prepare(
+        'SELECT sender, content, created_at FROM chat_messages WHERE device_id = ? ORDER BY created_at DESC LIMIT 20'
+      ).all(deviceId).reverse();
+      if (recentMessages.length > 0) {
+        socket.emit('chat_history', { messages: recentMessages });
+      }
+    } catch (err) {
+      console.error('[Agent] Chat history load error:', err.message);
+    }
+
     // Heartbeat
     socket.on('heartbeat', (data) => {
       try {

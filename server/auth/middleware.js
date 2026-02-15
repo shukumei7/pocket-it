@@ -16,14 +16,20 @@ function isLocalhost(req) {
 
 function requireDevice(req, res, next) {
   const deviceId = req.headers['x-device-id'];
-  if (!deviceId) {
-    return res.status(401).json({ error: 'Device ID required' });
+  const deviceSecret = req.headers['x-device-secret'];
+
+  if (!deviceId || !deviceSecret) {
+    return res.status(401).json({ error: 'Device authentication required' });
   }
 
   const db = req.app.locals.db;
-  const device = db.prepare('SELECT device_id FROM devices WHERE device_id = ?').get(deviceId);
+  const device = db.prepare('SELECT device_id, device_secret FROM devices WHERE device_id = ?').get(deviceId);
   if (!device) {
     return res.status(403).json({ error: 'Device not enrolled' });
+  }
+
+  if (!device.device_secret || device.device_secret !== deviceSecret) {
+    return res.status(403).json({ error: 'Invalid device credentials' });
   }
 
   req.deviceId = deviceId;

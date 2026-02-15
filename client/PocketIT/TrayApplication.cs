@@ -22,6 +22,7 @@ public class TrayApplication : ApplicationContext
     private readonly RemediationEngine _remediationEngine;
     private readonly IConfiguration _config;
     private readonly SynchronizationContext _uiContext;
+    private readonly LocalDatabase _localDb;
 
     public TrayApplication()
     {
@@ -37,9 +38,13 @@ public class TrayApplication : ApplicationContext
         var enrollmentToken = _config["Enrollment:Token"] ?? "";
         var deviceId = DeviceIdentity.GetMachineId();
 
+        var dbPath = Path.Combine(AppContext.BaseDirectory, _config["Database:Path"] ?? "pocket-it.db");
+        _localDb = new LocalDatabase(dbPath);
+
         // Create components
         _enrollmentFlow = new EnrollmentFlow(serverUrl);
-        _serverConnection = new ServerConnection(serverUrl, deviceId);
+        var deviceSecret = _localDb.GetSetting("device_secret") ?? "";
+        _serverConnection = new ServerConnection(serverUrl, deviceId, deviceSecret);
         _diagnosticsEngine = new DiagnosticsEngine();
         _remediationEngine = new RemediationEngine();
 
@@ -87,7 +92,11 @@ public class TrayApplication : ApplicationContext
             if (!isEnrolled && !string.IsNullOrEmpty(enrollmentToken))
             {
                 var result = await _enrollmentFlow.EnrollAsync(enrollmentToken);
-                if (!result.Success)
+                if (result.Success && !string.IsNullOrEmpty(result.DeviceSecret))
+                {
+                    _localDb.SetSetting("device_secret", result.DeviceSecret);
+                }
+                else if (!result.Success)
                 {
                     _uiContext.Post(_ => _trayIcon.ShowBalloonTip(5000, "Pocket IT",
                         $"Enrollment failed: {result.Message}", ToolTipIcon.Warning), null);
@@ -242,6 +251,7 @@ public class TrayApplication : ApplicationContext
             _trayIcon.Dispose();
             _chatWindow?.Dispose();
             _serverConnection?.Dispose();
+            _localDb?.Dispose();
         }
         base.Dispose(disposing);
     }

@@ -24,6 +24,10 @@ public class LocalDatabase : IDisposable
                 content TEXT NOT NULL,
                 created_at TEXT DEFAULT (datetime('now')),
                 synced INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             )";
         cmd.ExecuteNonQuery();
     }
@@ -55,6 +59,23 @@ public class LocalDatabase : IDisposable
         cmd.CommandText = "UPDATE offline_messages SET synced = 1 WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", id);
         cmd.ExecuteNonQuery();
+    }
+
+    public void SetSetting(string key, string value)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "INSERT OR REPLACE INTO settings (key, value) VALUES (@key, @value)";
+        cmd.Parameters.AddWithValue("@key", key);
+        cmd.Parameters.AddWithValue("@value", value);
+        cmd.ExecuteNonQuery();
+    }
+
+    public string? GetSetting(string key)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "SELECT value FROM settings WHERE key = @key";
+        cmd.Parameters.AddWithValue("@key", key);
+        return cmd.ExecuteScalar() as string;
     }
 
     public void Dispose()

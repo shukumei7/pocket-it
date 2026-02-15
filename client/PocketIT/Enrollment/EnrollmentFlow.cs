@@ -10,6 +10,7 @@ public class EnrollmentResult
     public bool Success { get; set; }
     public string Message { get; set; } = "";
     public string DeviceId { get; set; } = "";
+    public string DeviceSecret { get; set; } = "";
 }
 
 public class EnrollmentFlow
@@ -46,11 +47,18 @@ public class EnrollmentFlow
 
             if (response.IsSuccessStatusCode)
             {
+                var responseDoc = JsonDocument.Parse(responseBody);
+                var deviceSecret = "";
+                if (responseDoc.RootElement.TryGetProperty("deviceSecret", out var secretProp))
+                {
+                    deviceSecret = secretProp.GetString() ?? "";
+                }
                 return new EnrollmentResult
                 {
                     Success = true,
                     Message = "Device enrolled successfully!",
-                    DeviceId = deviceId
+                    DeviceId = deviceId,
+                    DeviceSecret = deviceSecret
                 };
             }
             else

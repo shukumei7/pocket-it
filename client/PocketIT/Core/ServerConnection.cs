@@ -13,6 +13,7 @@ public class ServerConnection : IDisposable
     private SocketIOClient.SocketIO? _socket;
     private readonly string _serverUrl;
     private readonly string _deviceId;
+    private readonly string _deviceSecret;
     private readonly System.Timers.Timer _heartbeatTimer;
     private readonly ConcurrentQueue<object> _offlineQueue = new();
     private bool _isConnected;
@@ -22,10 +23,11 @@ public class ServerConnection : IDisposable
     public event Action<string, string>? OnRemediationRequest;
     public event Action<bool>? OnConnectionChanged;
 
-    public ServerConnection(string serverUrl, string deviceId)
+    public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
         _serverUrl = serverUrl;
         _deviceId = deviceId;
+        _deviceSecret = deviceSecret;
         _heartbeatTimer = new System.Timers.Timer(30000);
         _heartbeatTimer.Elapsed += async (_, _) => await SendHeartbeat();
     }
@@ -37,7 +39,8 @@ public class ServerConnection : IDisposable
             Query = new List<KeyValuePair<string, string>>
             {
                 new("deviceId", _deviceId),
-                new("hostname", DeviceIdentity.GetHostname())
+                new("hostname", DeviceIdentity.GetHostname()),
+                new("deviceSecret", _deviceSecret)
             },
             Reconnection = true,
             ReconnectionAttempts = 50,

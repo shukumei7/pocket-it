@@ -237,6 +237,7 @@
             switch (data.type) {
                 case 'chat_response':
                     hideTyping();
+                    if (data.agentName) agentName = data.agentName;
                     addMessage(data.text || data.content, data.sender || 'ai', {
                         action: data.action,
                         diagnosticResults: data.diagnosticResults
@@ -252,6 +253,7 @@
                     if (data.connected) {
                         statusEl.className = 'online';
                         statusEl.textContent = 'Connected';
+                        addMessage('Connected to ' + agentName + '. How can I help you today?', 'system');
                     } else {
                         statusEl.className = 'offline';
                         statusEl.textContent = 'Disconnected';

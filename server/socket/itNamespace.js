@@ -20,7 +20,12 @@ function setup(io, app) {
         return;
       }
       try {
-        const secret = process.env.POCKET_IT_JWT_SECRET || 'pocket-it-dev-secret';
+        const secret = process.env.POCKET_IT_JWT_SECRET;
+        if (!secret) {
+          console.error('[IT] JWT secret not configured, rejecting remote connection');
+          socket.disconnect();
+          return;
+        }
         jwt.verify(token, secret);
       } catch (err) {
         socket.disconnect();

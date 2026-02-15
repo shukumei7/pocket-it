@@ -8,6 +8,9 @@ public class RemediationEngine
     {
         RegisterAction(new Actions.FlushDnsAction());
         RegisterAction(new Actions.ClearTempFilesAction());
+        RegisterAction(new Actions.RestartSpoolerAction());
+        RegisterAction(new Actions.RepairNetworkAction());
+        RegisterAction(new Actions.ClearBrowserCacheAction());
     }
 
     private void RegisterAction(IRemediationAction action)

@@ -480,17 +480,21 @@ public class TrayApplication : ApplicationContext
                     break;
 
                 case "approve_remediation":
+                {
                     var actionId = root.GetProperty("actionId").GetString() ?? "";
                     var requestId = root.GetProperty("requestId").GetString() ?? "";
                     var parameter = root.TryGetProperty("parameter", out var paramProp) ? paramProp.GetString() : null;
                     var result = await _remediationEngine.ExecuteAsync(actionId, parameter);
                     await _serverConnection.SendRemediationResult(requestId, result.Success, result.Message);
                     break;
+                }
 
                 case "deny_remediation":
-                    requestId = root.GetProperty("requestId").GetString() ?? "";
+                {
+                    var requestId = root.GetProperty("requestId").GetString() ?? "";
                     await _serverConnection.SendRemediationResult(requestId, false, "User denied remediation");
                     break;
+                }
 
                 case "approve_diagnostic":
                     var diagCheckType = root.GetProperty("checkType").GetString() ?? "all";

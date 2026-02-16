@@ -13,8 +13,8 @@ public class RemoteTerminalService : IDisposable
     private const int MaxOutputBufferBytes = 1 * 1024 * 1024; // 1 MB
 
     private Process? _process;
-    private Timer? _flushTimer;
-    private Timer? _idleTimer;
+    private System.Threading.Timer? _flushTimer;
+    private System.Threading.Timer? _idleTimer;
     private readonly StringBuilder _pendingOutput = new();
     private readonly StringBuilder _rollingBuffer = new();
     private readonly object _lock = new();
@@ -63,8 +63,8 @@ public class RemoteTerminalService : IDisposable
             _pendingOutput.Clear();
             _rollingBuffer.Clear();
 
-            _flushTimer = new Timer(FlushOutput, null, FlushIntervalMs, FlushIntervalMs);
-            _idleTimer = new Timer(OnIdleTimeout, null, DefaultIdleTimeoutMs, Timeout.Infinite);
+            _flushTimer = new System.Threading.Timer(FlushOutput, null, FlushIntervalMs, FlushIntervalMs);
+            _idleTimer = new System.Threading.Timer(OnIdleTimeout, null, DefaultIdleTimeoutMs, Timeout.Infinite);
         }
     }
 

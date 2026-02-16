@@ -84,7 +84,7 @@ public class TrayApplication : ApplicationContext
             Visible = true,
             ContextMenuStrip = contextMenu
         };
-        _trayIcon.Click += OnOpenChat;
+        _trayIcon.MouseClick += OnTrayMouseClick;
 
         if (!ValidateConfig()) return;
 
@@ -217,7 +217,7 @@ public class TrayApplication : ApplicationContext
         }
 
         _chatWindow.Show();
-        _chatWindow.BringToFront();
+        _chatWindow.Activate();
     }
 
     private void ShowEnrollmentWindow()
@@ -241,7 +241,7 @@ public class TrayApplication : ApplicationContext
         }
 
         _chatWindow.Show();
-        _chatWindow.BringToFront();
+        _chatWindow.Activate();
     }
 
     private void OnServerChatResponse(string json)
@@ -388,6 +388,11 @@ public class TrayApplication : ApplicationContext
         {
             Logger.Error("Bridge message handling failed", ex);
         }
+    }
+
+    private void OnTrayMouseClick(object? sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left) ShowChatWindow();
     }
 
     private void OnOpenChat(object? sender, EventArgs e) => ShowChatWindow();

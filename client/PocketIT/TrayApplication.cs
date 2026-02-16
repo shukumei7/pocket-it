@@ -86,7 +86,7 @@ public class TrayApplication : ApplicationContext
         };
         _trayIcon.DoubleClick += OnOpenChat;
 
-        if (\!ValidateConfig()) return;
+        if (!ValidateConfig()) return;
 
         // Start async initialization (enrollment + connection)
         Task.Run(InitializeAsync);
@@ -109,8 +109,8 @@ public class TrayApplication : ApplicationContext
             return false;
         }
 
-        if (\!Uri.TryCreate(serverUrl, UriKind.Absolute, out var uri) ||
-            (uri.Scheme \!= "http" && uri.Scheme \!= "https"))
+        if (!Uri.TryCreate(serverUrl, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != "http" && uri.Scheme != "https"))
         {
             Logger.Error($"Invalid Server:Url: {serverUrl}");
             _trayIcon.ShowBalloonTip(5000, "Pocket IT",

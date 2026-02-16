@@ -325,12 +325,15 @@ public class TrayApplication : ApplicationContext
             var profile = await DeviceIdentity.GetSystemProfileAsync();
             await _serverConnection.SendSystemProfile(profile);
 
-            // Auto-run all diagnostics
-            var results = await _diagnosticsEngine.RunAllAsync();
-            foreach (var result in results)
+            // Request consent for auto-diagnostics via chat UI
+            var diagMsg = JsonSerializer.Serialize(new
             {
-                await _serverConnection.SendDiagnosticResult(result);
-            }
+                type = "diagnostic_request",
+                checkType = "all",
+                requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(),
+                description = "Full System Diagnostic (auto check-up)"
+            });
+            _uiContext.Post(_ => _chatWindow?.SendToWebView(diagMsg), null);
         }
         catch (Exception ex)
         {

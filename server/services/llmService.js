@@ -1,6 +1,4 @@
-const { execFile } = require('child_process');
-const { promisify } = require('util');
-const execFileAsync = promisify(execFile);
+const { spawn } = require('child_process');
 
 class LLMService {
   constructor(config) {
@@ -113,19 +111,37 @@ class LLMService {
       args.push('--model', this.claudeCliModel);
     }
 
-    try {
-      const env = { ...process.env };
-      delete env.CLAUDECODE;
-      const { stdout } = await execFileAsync('claude', args, {
-        input: prompt,
-        timeout: 60000,
-        maxBuffer: 1024 * 1024,
-        env
+    const env = { ...process.env };
+    delete env.CLAUDECODE;
+
+    return new Promise((resolve, reject) => {
+      const child = spawn('claude', args, { env });
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (d) => { stdout += d; });
+      child.stderr.on('data', (d) => { stderr += d; });
+
+      child.on('error', (err) => reject(new Error(`Claude CLI spawn error: ${err.message}`)));
+
+      child.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+        } else {
+          resolve(stdout.trim());
+        }
       });
-      return stdout.trim();
-    } catch (err) {
-      throw new Error(`Claude CLI error: ${err.message}`);
-    }
+
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error('Claude CLI timed out after 60s'));
+      }, 60000);
+
+      child.on('close', () => clearTimeout(timer));
+
+      child.stdin.write(prompt);
+      child.stdin.end();
+    });
   }
 
   async _ollamaChat(messages) {

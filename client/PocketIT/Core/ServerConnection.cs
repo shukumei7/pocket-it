@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using PocketIT.Diagnostics;
 using SocketIOClient;
 
 namespace PocketIT.Core;
@@ -137,15 +138,23 @@ public class ServerConnection : IDisposable
         }
     }
 
-    public async Task SendDiagnosticResult(object result)
+    public async Task SendDiagnosticResult(DiagnosticResult result)
     {
+        var payload = new
+        {
+            checkType = result.CheckType,
+            status = result.Status,
+            results = result.Details,
+            label = result.Label,
+            value = result.Value
+        };
         if (_isConnected && _socket != null)
         {
-            await _socket.EmitAsync("diagnostic_result", result);
+            await _socket.EmitAsync("diagnostic_result", payload);
         }
         else
         {
-            _offlineQueue.Enqueue(new { type = "diagnostic_result", data = result });
+            _offlineQueue.Enqueue(new { type = "diagnostic_result", data = payload });
         }
     }
 

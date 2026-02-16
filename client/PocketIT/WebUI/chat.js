@@ -237,6 +237,12 @@
         }
     });
 
+    document.getElementById('clear-btn').addEventListener('click', () => {
+        messagesEl.innerHTML = '';
+        addMessage('Chat cleared. Start a new conversation.', 'system');
+        sendBridgeMessage('clear_chat', {});
+    });
+
     // Listen for messages from C# bridge
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.addEventListener('message', (event) => {

@@ -332,6 +332,15 @@ function setup(io, app) {
       });
     });
 
+    // Clear chat context
+    socket.on('clear_context', () => {
+      console.log(`[Agent] Context cleared for ${deviceId}`);
+      const diagnosticAI = app.locals.diagnosticAI;
+      if (diagnosticAI) {
+        diagnosticAI.clearContext(deviceId);
+      }
+    });
+
     // Disconnect
     socket.on('disconnect', () => {
       console.log(`[Agent] Device disconnected: ${deviceId}`);

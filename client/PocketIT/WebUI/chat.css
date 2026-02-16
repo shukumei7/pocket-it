@@ -20,6 +20,25 @@ body {
     border-bottom: 1px solid #0f3460;
 }
 #header h1 { font-size: 16px; font-weight: 600; }
+#header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+#clear-btn {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.5);
+    padding: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+#clear-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+}
 #status {
     font-size: 12px;
     padding: 2px 8px;

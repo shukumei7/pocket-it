@@ -390,6 +390,10 @@ public class TrayApplication : ApplicationContext
                     Logger.Info($"User denied diagnostic: {root.GetProperty("checkType").GetString()}");
                     break;
 
+                case "clear_chat":
+                    await _serverConnection.SendClearContext();
+                    break;
+
                 case "enroll":
                     var token = root.GetProperty("token").GetString() ?? "";
                     var enrollResult = await _enrollmentFlow.EnrollAsync(token);

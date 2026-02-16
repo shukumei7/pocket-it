@@ -184,6 +184,14 @@ public class ServerConnection : IDisposable
         }
     }
 
+    public async Task SendClearContext()
+    {
+        if (_isConnected && _socket != null)
+        {
+            await _socket.EmitAsync("clear_context", new { deviceId = _deviceId });
+        }
+    }
+
     private async Task SendHeartbeat()
     {
         if (_isConnected && _socket != null)

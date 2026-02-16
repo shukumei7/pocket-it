@@ -16,12 +16,13 @@ function parseResponse(responseText) {
     return result;
   }
 
-  // Check for remediation action
-  const remediateMatch = responseText.match(/\[ACTION:REMEDIATE:(\w+)\]/);
+  // Check for remediation action (with optional parameter after second colon)
+  const remediateMatch = responseText.match(/\[ACTION:REMEDIATE:(\w+)(?::(.+?))?\]/);
   if (remediateMatch) {
     result.action = {
       type: 'remediate',
-      actionId: remediateMatch[1]
+      actionId: remediateMatch[1],
+      parameter: remediateMatch[2] || null
     };
     result.text = responseText.replace(remediateMatch[0], '').trim();
     return result;

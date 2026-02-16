@@ -12,4 +12,7 @@ public interface IRemediationAction
     string ActionId { get; }
     Task<RemediationResult> ExecuteAsync();
     bool RequiresElevation => false;
+    bool RequiresParameter => false;
+    string ParameterLabel => "";
+    Task<RemediationResult> ExecuteAsync(string parameter) => ExecuteAsync();
 }

@@ -35,6 +35,18 @@ public static class ActionWhitelist
             "Clear Browser Cache",
             "Removes cached files from Chrome, Edge, and Firefox. Fixes stale page loads and some website errors.",
             "Low"
+        ),
+        ["kill_process"] = new RemediationInfo(
+            "kill_process",
+            "Kill Process",
+            "Terminates a specific process by its PID. Protected system processes are blocked.",
+            "High"
+        ),
+        ["restart_service"] = new RemediationInfo(
+            "restart_service",
+            "Restart Service",
+            "Stops and restarts a Windows service by name. Only whitelisted services are allowed.",
+            "Medium"
         )
     };
 

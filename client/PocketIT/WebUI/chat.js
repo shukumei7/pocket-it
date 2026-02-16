@@ -209,7 +209,7 @@
             const msgType = action.type === 'diagnostic' ? 'approve_diagnostic' : 'approve_remediation';
             const payload = action.type === 'diagnostic'
                 ? { checkType: action.checkType, requestId: action.requestId }
-                : { actionId: action.actionId, requestId: action.requestId };
+                : { actionId: action.actionId, requestId: action.requestId, parameter: action.parameter || null };
             sendBridgeMessage(msgType, payload);
             container.textContent = '';
             const span = document.createElement('span');
@@ -389,8 +389,18 @@
                     break;
 
                 case 'remediation_request':
-                    addMessage(`${agentName} wants to run: **${data.description}**`, 'ai', {
-                        action: { type: 'remediate', actionId: data.actionId, requestId: data.requestId }
+                    var remDesc = data.description;
+                    if (data.parameter) {
+                        if (data.actionId === 'kill_process') {
+                            remDesc += ` (PID: ${data.parameter})`;
+                        } else if (data.actionId === 'restart_service') {
+                            remDesc += `: ${data.parameter}`;
+                        } else {
+                            remDesc += ` (${data.parameter})`;
+                        }
+                    }
+                    addMessage(`${agentName} wants to run: **${remDesc}**`, 'ai', {
+                        action: { type: 'remediate', actionId: data.actionId, requestId: data.requestId, parameter: data.parameter || null }
                     });
                     break;
 

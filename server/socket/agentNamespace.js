@@ -195,11 +195,12 @@ function setup(io, app) {
 
         // If action is remediate, validate action ID before requesting approval
         if (response.action && response.action.type === 'remediate') {
-          const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache'];
+          const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service'];
           if (VALID_ACTIONS.includes(response.action.actionId)) {
             socket.emit('remediation_request', {
               actionId: response.action.actionId,
-              requestId: Date.now().toString()
+              requestId: Date.now().toString(),
+              parameter: response.action.parameter || null
             });
           } else {
             console.warn(`[Agent] Blocked invalid remediation action: ${response.action.actionId}`);
@@ -311,11 +312,12 @@ function setup(io, app) {
           });
 
           if (response.action && response.action.type === 'remediate') {
-            const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache'];
+            const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service'];
             if (VALID_ACTIONS.includes(response.action.actionId)) {
               socket.emit('remediation_request', {
                 actionId: response.action.actionId,
-                requestId: Date.now().toString()
+                requestId: Date.now().toString(),
+                parameter: response.action.parameter || null
               });
             }
           }

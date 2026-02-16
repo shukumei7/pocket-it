@@ -22,7 +22,7 @@ public class ServerConnection : IDisposable
 
     public event Action<string>? OnChatResponse;
     public event Action<string, string>? OnDiagnosticRequest; // checkType, requestId
-    public event Action<string, string>? OnRemediationRequest;
+    public event Action<string, string, string?>? OnRemediationRequest; // actionId, requestId, parameter
     public event Action<bool>? OnConnectionChanged;
     public event Action<string>? OnChatHistory;
     public event Action? OnConnectedReady;
@@ -103,7 +103,8 @@ public class ServerConnection : IDisposable
             var data = response.GetValue<JsonElement>();
             var actionId = data.GetProperty("actionId").GetString() ?? "";
             var requestId = data.GetProperty("requestId").GetString() ?? "";
-            OnRemediationRequest?.Invoke(actionId, requestId);
+            var parameter = data.TryGetProperty("parameter", out var paramProp) ? paramProp.GetString() : null;
+            OnRemediationRequest?.Invoke(actionId, requestId, parameter);
         });
 
         _socket.On("chat_history", response =>

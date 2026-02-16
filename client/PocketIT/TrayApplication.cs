@@ -302,7 +302,7 @@ public class TrayApplication : ApplicationContext
         _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
     }
 
-    private void OnServerRemediationRequest(string actionId, string requestId)
+    private void OnServerRemediationRequest(string actionId, string requestId, string? parameter)
     {
         // Forward to chat window for user approval
         var info = _remediationEngine.GetActionInfo(actionId);
@@ -311,6 +311,7 @@ public class TrayApplication : ApplicationContext
             type = "remediation_request",
             actionId,
             requestId,
+            parameter,
             description = info?.Description ?? actionId,
             requiresApproval = true
         });
@@ -359,7 +360,8 @@ public class TrayApplication : ApplicationContext
                 case "approve_remediation":
                     var actionId = root.GetProperty("actionId").GetString() ?? "";
                     var requestId = root.GetProperty("requestId").GetString() ?? "";
-                    var result = await _remediationEngine.ExecuteAsync(actionId);
+                    var parameter = root.TryGetProperty("parameter", out var paramProp) ? paramProp.GetString() : null;
+                    var result = await _remediationEngine.ExecuteAsync(actionId, parameter);
                     await _serverConnection.SendRemediationResult(requestId, result.Success, result.Message);
                     break;
 

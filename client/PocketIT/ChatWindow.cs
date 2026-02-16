@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -12,6 +13,8 @@ public class ChatWindow : Form
 {
     private readonly WebView2 _webView;
     private readonly string _initialPage;
+    private readonly Queue<string> _pendingMessages = new();
+    private bool _webViewReady;
 
     public ChatWindow(string initialPage = "chat.html")
     {
@@ -55,16 +58,28 @@ public class ChatWindow : Form
         {
             _webView.CoreWebView2.NavigateToString("<html><body><h2>Pocket IT</h2><p>Chat UI loading...</p></body></html>");
         }
+
+        // Flush queued messages once navigation completes
+        _webView.CoreWebView2.NavigationCompleted += (_, _) =>
+        {
+            _webViewReady = true;
+            while (_pendingMessages.Count > 0)
+            {
+                var msg = _pendingMessages.Dequeue();
+                _webView.CoreWebView2.PostWebMessageAsString(msg);
+            }
+        };
     }
 
     public event Action<string, string>? OnBridgeMessage; // type, json data
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        var json = e.WebMessageAsJson;
+        var json = e.TryGetWebMessageAsString();
+        if (string.IsNullOrEmpty(json)) return;
         try
         {
-            using var doc = JsonDocument.Parse(json.Trim('"').Replace("\\\"", "\"").Replace("\\\\", "\\"));
+            using var doc = JsonDocument.Parse(json);
             var type = doc.RootElement.GetProperty("type").GetString() ?? "";
             OnBridgeMessage?.Invoke(type, json);
         }
@@ -77,14 +92,19 @@ public class ChatWindow : Form
     // Send message from C# to JS
     public void SendToWebView(string jsonMessage)
     {
-        if (_webView.CoreWebView2 != null)
+        if (_webViewReady && _webView.CoreWebView2 != null)
         {
             BeginInvoke(() => _webView.CoreWebView2.PostWebMessageAsString(jsonMessage));
+        }
+        else
+        {
+            _pendingMessages.Enqueue(jsonMessage);
         }
     }
 
     public void NavigateTo(string page)
     {
+        _webViewReady = false;
         var uiPath = Path.Combine(AppContext.BaseDirectory, "WebUI", page);
         if (_webView.CoreWebView2 != null && File.Exists(uiPath))
         {

@@ -127,12 +127,16 @@ public class TrayApplication : ApplicationContext
         {
             // Check enrollment
             var deviceSecret = _localDb.GetSetting("device_secret") ?? "";
+            Logger.Info($"Enrollment check: secret={(!string.IsNullOrEmpty(deviceSecret) ? "present" : "empty")}");
             var isEnrolled = await _enrollmentFlow.CheckEnrolledAsync(deviceSecret);
+            Logger.Info($"Enrollment status: {isEnrolled}");
             var enrollmentToken = _config["Enrollment:Token"] ?? "";
 
             if (!isEnrolled && !string.IsNullOrEmpty(enrollmentToken))
             {
+                Logger.Info("Attempting enrollment with config token");
                 var result = await _enrollmentFlow.EnrollAsync(enrollmentToken);
+                Logger.Info($"Enrollment result: success={result.Success}, message={result.Message}");
                 if (result.Success && !string.IsNullOrEmpty(result.DeviceSecret))
                 {
                     _localDb.SetSetting("device_secret", result.DeviceSecret);
@@ -143,6 +147,9 @@ public class TrayApplication : ApplicationContext
                 {
                     _uiContext.Post(_ => _trayIcon.ShowBalloonTip(5000, "Pocket IT",
                         $"Enrollment failed: {result.Message}", ToolTipIcon.Warning), null);
+                    // If device exists but local secret is lost, show enrollment UI
+                    _uiContext.Post(_ => ShowEnrollmentWindow(), null);
+                    return;
                 }
             }
 
@@ -154,6 +161,7 @@ public class TrayApplication : ApplicationContext
             }
 
             _isEnrolled = true;
+            Logger.Info("Device enrolled, connecting to server");
 
             // Connect to server
             await _serverConnection.ConnectAsync();
@@ -201,6 +209,11 @@ public class TrayApplication : ApplicationContext
             // Send agent info
             var agentInfo = JsonSerializer.Serialize(new { type = "agent_info", agentName = "Pocket IT" });
             _chatWindow.SendToWebView(agentInfo);
+
+            // Send current connection status
+            var connected = _serverConnection.IsConnected;
+            var statusMsg = JsonSerializer.Serialize(new { type = "connection_status", connected });
+            _chatWindow.SendToWebView(statusMsg);
         }
 
         if (!_chatWindow.Visible)

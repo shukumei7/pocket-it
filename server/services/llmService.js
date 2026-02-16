@@ -114,10 +114,13 @@ class LLMService {
     }
 
     try {
+      const env = { ...process.env };
+      delete env.CLAUDECODE;
       const { stdout } = await execFileAsync('claude', args, {
         input: prompt,
         timeout: 60000,
-        maxBuffer: 1024 * 1024
+        maxBuffer: 1024 * 1024,
+        env
       });
       return stdout.trim();
     } catch (err) {

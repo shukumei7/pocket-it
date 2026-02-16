@@ -17,6 +17,7 @@ public class ServerConnection : IDisposable
     private readonly System.Timers.Timer _heartbeatTimer;
     private readonly ConcurrentQueue<object> _offlineQueue = new();
     private bool _isConnected;
+    public bool IsConnected => _isConnected;
 
     public event Action<string>? OnChatResponse;
     public event Action<string>? OnDiagnosticRequest;

@@ -416,6 +416,26 @@ Rick, Mabel, Jordan, Casey, Morgan, Alex, Sam, Taylor, Quinn, Avery, Robin, Jami
 - Concise but thorough
 - Conversational tone with variation
 
+## Remote Terminal
+
+IT admins can open interactive PowerShell sessions on managed endpoints directly from the dashboard. This feature enables real-time command execution for advanced troubleshooting and system administration tasks.
+
+**Key features:**
+- **User consent required** — endpoint users must approve terminal access before session starts
+- **Real-time I/O** — live terminal interaction via Socket.IO with xterm.js terminal UI in dashboard
+- **Line-buffered input** — command execution on Enter key press with local echo support
+- **Auto-disconnect** — sessions automatically end after 15 minutes of inactivity
+- **Bidirectional control** — either party (IT admin or endpoint user) can end the session at any time
+- **Audit logging** — all terminal session events (start, stop, deny) logged to audit trail
+- **Ctrl+C support** — send break signals to interrupt running processes
+- **Visual indicators** — active session status badge in dashboard and banner in client chat
+
+**Security notes:**
+- Terminal sessions run under the client application's user context (not SYSTEM)
+- PowerShell execution policy applies to all commands
+- Consent denial is logged and notifies the IT admin immediately
+- Session timeout prevents abandoned connections from remaining open
+
 ## Whitelisted Remediation Actions
 
 The client only executes actions from a hardcoded whitelist:
@@ -564,7 +584,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.4.0)
+## Current Status (v0.6.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -579,6 +599,7 @@ pocket-it/
 - **Proactive monitoring**: scheduled diagnostics (15-minute interval), alert thresholds with consecutive hit tracking
 - **Notification channels**: webhook, Slack, and Teams notifications with retry logic
 - **Dashboard Alerts tab**: real-time alert updates, acknowledge/resolve actions, threshold configuration, notification channel management
+- **Remote terminal**: IT admins can open interactive PowerShell sessions with user consent, 15-minute idle timeout, Ctrl+C support
 - Support ticket system with IT staff escalation
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
@@ -637,12 +658,13 @@ dotnet run
 | v0.2.1 | Reliability | File-based logger, config validation, elevation checks |
 | v0.3.0 | Expanded Capabilities | 5 new diagnostic checks, parameterized remediation, kill_process, restart_service |
 | v0.4.0 | Proactive Monitoring | Scheduled diagnostics, alert thresholds, notifications (webhook/Slack/Teams), dashboard alerts tab |
+| v0.6.0 | Remote Terminal | Interactive PowerShell sessions, user consent flow, xterm.js UI, 15-minute timeout |
 
 ### Planned
 | Version | Theme | Key Capabilities |
 |---------|-------|-----------------|
 | v0.5.0 | Remote Execution & File Access | Auto-remediation policies, IT-admin file browser, remote PowerShell script execution |
-| v0.6.0 | Reporting & Analytics | Trend charts, health history, CSV/PDF export, scheduled reports |
+| v0.7.0 | Reporting & Analytics | Trend charts, health history, CSV/PDF export, scheduled reports |
 | v0.7.0 | Patch & Software Management | Trigger Windows Update, remote install/uninstall, compliance policies |
 | v0.8.0 | Knowledge Base | Searchable KB, AI references KB in responses, IT staff curated solutions |
 | v0.9.0 | Multi-tenant & RBAC | Organizations, role-based permissions, IT team management |

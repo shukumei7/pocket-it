@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-16
+
+### Added
+- Remote interactive terminal — IT admins can open a live PowerShell session on managed endpoints via the dashboard
+- User consent flow — endpoint users must approve terminal access before session starts
+- xterm.js terminal UI in dashboard with line-buffered input and local echo
+- Socket.IO relay for real-time terminal I/O between dashboard and client
+- 15-minute idle timeout with automatic session cleanup
+- Audit logging for terminal session lifecycle (start, stop, deny)
+- Ctrl+C break signal support
+- Session indicators in both dashboard (status badge) and client chat (active banner)
+
+### Technical
+- NEW: `client/PocketIT/Terminal/RemoteTerminalService.cs` — persistent PowerShell process manager
+- EDIT: `client/PocketIT/Core/ServerConnection.cs` — terminal socket events
+- EDIT: `server/socket/itNamespace.js` — dashboard → device terminal relay
+- EDIT: `server/socket/agentNamespace.js` — device → dashboard terminal relay
+- EDIT: `client/PocketIT/TrayApplication.cs` — terminal event wiring and consent bridge
+- EDIT: `client/PocketIT/WebUI/chat.js` — terminal consent prompt and session indicator
+- EDIT: `client/PocketIT/WebUI/chat.css` — terminal banner styling
+- EDIT: `server/public/dashboard/index.html` — xterm.js terminal UI
+
 ## [0.4.0] - 2026-02-16
 
 ### Added
@@ -160,7 +182,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/example/pocket-it/compare/v0.4.0...v0.6.0
 [0.4.0]: https://github.com/example/pocket-it/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/example/pocket-it/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/example/pocket-it/compare/v0.2.0...v0.2.1

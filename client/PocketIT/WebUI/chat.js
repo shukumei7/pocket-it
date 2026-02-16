@@ -29,8 +29,8 @@
             div.appendChild(createDiagnosticCard(options.diagnosticResults));
         }
 
-        // Action buttons (remediation approval)
-        if (options.action && options.action.type === 'remediate') {
+        // Action buttons (remediation and diagnostic approval)
+        if (options.action && (options.action.type === 'remediate' || options.action.type === 'diagnostic')) {
             div.appendChild(createActionButtons(options.action));
         }
 
@@ -110,11 +110,15 @@
         approveBtn.className = 'action-button approve';
         approveBtn.textContent = 'Approve';
         approveBtn.onclick = () => {
-            sendBridgeMessage('approve_remediation', { actionId: action.actionId, requestId: action.requestId });
+            const msgType = action.type === 'diagnostic' ? 'approve_diagnostic' : 'approve_remediation';
+            const payload = action.type === 'diagnostic'
+                ? { checkType: action.checkType, requestId: action.requestId }
+                : { actionId: action.actionId, requestId: action.requestId };
+            sendBridgeMessage(msgType, payload);
             container.textContent = '';
             const span = document.createElement('span');
             span.style.cssText = 'color: #66bb6a; font-size: 13px;';
-            span.textContent = 'Approved \u2014 running...';
+            span.textContent = action.type === 'diagnostic' ? 'Approved \u2014 running diagnostic...' : 'Approved \u2014 running...';
             container.appendChild(span);
         };
 
@@ -122,7 +126,11 @@
         denyBtn.className = 'action-button deny';
         denyBtn.textContent = 'Deny';
         denyBtn.onclick = () => {
-            sendBridgeMessage('deny_remediation', { actionId: action.actionId, requestId: action.requestId });
+            const msgType = action.type === 'diagnostic' ? 'deny_diagnostic' : 'deny_remediation';
+            const payload = action.type === 'diagnostic'
+                ? { checkType: action.checkType, requestId: action.requestId }
+                : { actionId: action.actionId, requestId: action.requestId };
+            sendBridgeMessage(msgType, payload);
             container.textContent = '';
             const span = document.createElement('span');
             span.style.cssText = 'color: #ef5350; font-size: 13px;';
@@ -281,6 +289,12 @@
                 case 'remediation_request':
                     addMessage(`${agentName} wants to run: **${data.description}**`, 'ai', {
                         action: { type: 'remediate', actionId: data.actionId, requestId: data.requestId }
+                    });
+                    break;
+
+                case 'diagnostic_request':
+                    addMessage(`${agentName} wants to run: **${data.description || data.checkType}**`, 'ai', {
+                        action: { type: 'diagnostic', checkType: data.checkType, requestId: data.requestId }
                     });
                     break;
 

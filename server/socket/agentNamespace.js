@@ -7,6 +7,15 @@ function setup(io, app) {
   // Chat rate limiting: deviceId → { count, resetTime }
   const chatRateLimiter = new Map();
 
+  // Diagnostic descriptions for chat UI
+  const DIAGNOSTIC_DESCRIPTIONS = {
+    cpu: 'CPU Usage Check',
+    memory: 'Memory Usage Check',
+    disk: 'Disk Space Check',
+    network: 'Network Connectivity Check',
+    all: 'Full System Diagnostic'
+  };
+
   // Make connectedDevices accessible from app for other handlers
   app.locals.connectedDevices = connectedDevices;
 
@@ -158,9 +167,21 @@ function setup(io, app) {
 
         // If action is diagnose, also request diagnostic from client
         if (response.action && response.action.type === 'diagnose') {
+          const requestId = Date.now().toString();
+          const checkType = response.action.checkType;
+
+          // Audit log: AI-triggered diagnostic request
+          try {
+            db.prepare('INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))')
+              .run('ai', 'diagnostic_requested', deviceId, JSON.stringify({ checkType, requestId }));
+          } catch (err) {
+            console.error('[Agent] Audit log error:', err.message);
+          }
+
           socket.emit('diagnostic_request', {
-            checkType: response.action.checkType,
-            requestId: Date.now().toString()
+            checkType,
+            requestId,
+            description: DIAGNOSTIC_DESCRIPTIONS[checkType] || checkType
           });
         }
 
@@ -224,6 +245,14 @@ function setup(io, app) {
         ).run(deviceId, data.checkType, data.status || 'completed', JSON.stringify(data.results));
       } catch (err) {
         console.error('[Agent] Diagnostic save error:', err.message);
+      }
+
+      // Audit log: Diagnostic completed
+      try {
+        db.prepare('INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))')
+          .run(deviceId, 'diagnostic_completed', data.checkType, JSON.stringify({ status: data.status }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
       }
 
       // Recompute health score (Phase B)

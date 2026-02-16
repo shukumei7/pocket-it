@@ -21,7 +21,7 @@ public class ServerConnection : IDisposable
     public bool IsConnected => _isConnected;
 
     public event Action<string>? OnChatResponse;
-    public event Action<string>? OnDiagnosticRequest;
+    public event Action<string, string>? OnDiagnosticRequest; // checkType, requestId
     public event Action<string, string>? OnRemediationRequest;
     public event Action<bool>? OnConnectionChanged;
     public event Action<string>? OnChatHistory;
@@ -94,7 +94,8 @@ public class ServerConnection : IDisposable
         {
             var data = response.GetValue<JsonElement>();
             var checkType = data.GetProperty("checkType").GetString() ?? "all";
-            OnDiagnosticRequest?.Invoke(checkType);
+            var requestId = data.TryGetProperty("requestId", out var rid) ? rid.GetString() ?? "" : "";
+            OnDiagnosticRequest?.Invoke(checkType, requestId);
         });
 
         _socket.On("remediation_request", response =>

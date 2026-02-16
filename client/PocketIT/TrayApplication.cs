@@ -289,17 +289,17 @@ public class TrayApplication : ApplicationContext
         }, null);
     }
 
-    private async void OnServerDiagnosticRequest(string checkType)
+    private void OnServerDiagnosticRequest(string checkType, string requestId)
     {
-        try
+        // Forward to chat window for user consent (like remediation)
+        var msg = JsonSerializer.Serialize(new
         {
-            var result = await _diagnosticsEngine.RunCheckAsync(checkType);
-            await _serverConnection.SendDiagnosticResult(result);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error("Diagnostic request failed", ex);
-        }
+            type = "diagnostic_request",
+            checkType,
+            requestId,
+            description = checkType == "all" ? "Full System Diagnostic" : $"{char.ToUpper(checkType[0])}{checkType[1..]} Check"
+        });
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
     }
 
     private void OnServerRemediationRequest(string actionId, string requestId)
@@ -363,6 +363,28 @@ public class TrayApplication : ApplicationContext
                 case "deny_remediation":
                     requestId = root.GetProperty("requestId").GetString() ?? "";
                     await _serverConnection.SendRemediationResult(requestId, false, "User denied remediation");
+                    break;
+
+                case "approve_diagnostic":
+                    var diagCheckType = root.GetProperty("checkType").GetString() ?? "all";
+                    Logger.Info($"User approved diagnostic: {diagCheckType}");
+                    if (diagCheckType == "all")
+                    {
+                        var allResults = await _diagnosticsEngine.RunAllAsync();
+                        foreach (var diagResult in allResults)
+                        {
+                            await _serverConnection.SendDiagnosticResult(diagResult);
+                        }
+                    }
+                    else
+                    {
+                        var diagResult = await _diagnosticsEngine.RunCheckAsync(diagCheckType);
+                        await _serverConnection.SendDiagnosticResult(diagResult);
+                    }
+                    break;
+
+                case "deny_diagnostic":
+                    Logger.Info($"User denied diagnostic: {root.GetProperty("checkType").GetString()}");
                     break;
 
                 case "enroll":

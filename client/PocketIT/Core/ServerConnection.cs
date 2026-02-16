@@ -29,6 +29,9 @@ public class ServerConnection : IDisposable
     public event Action<string, string>? OnFileBrowseRequest; // requestId, path
     public event Action<string, string>? OnFileReadRequest; // requestId, path
     public event Action<string, string, string, bool, int>? OnScriptRequest; // requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds
+    public event Action<string>? OnTerminalStartRequest;  // requestId
+    public event Action<string>? OnTerminalInput;          // input text
+    public event Action<string>? OnTerminalStopRequest;    // requestId
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -153,6 +156,29 @@ public class ServerConnection : IDisposable
             OnScriptRequest?.Invoke(requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds);
         });
 
+        _socket.On("terminal_start_request", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            Logger.Info($"Terminal start request (requestId: {requestId})");
+            OnTerminalStartRequest?.Invoke(requestId);
+        });
+
+        _socket.On("terminal_input", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var input = json.GetProperty("input").GetString() ?? "";
+            OnTerminalInput?.Invoke(input);
+        });
+
+        _socket.On("terminal_stop_request", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            Logger.Info($"Terminal stop request (requestId: {requestId})");
+            OnTerminalStopRequest?.Invoke(requestId);
+        });
+
         try
         {
             await _socket.ConnectAsync();
@@ -246,6 +272,26 @@ public class ServerConnection : IDisposable
     public async Task SendScriptResult(string requestId, string? scriptName, bool success, string output = "", string errorOutput = "", int exitCode = -1, long durationMs = 0, bool truncated = false, bool timedOut = false, string? validationError = null)
     {
         await EmitAsync("script_result", new { requestId, scriptName, success, output, errorOutput, exitCode, durationMs, truncated, timedOut, validationError });
+    }
+
+    public async Task SendTerminalStarted(string requestId)
+    {
+        await EmitAsync("terminal_started", new { requestId });
+    }
+
+    public async Task SendTerminalOutput(string output)
+    {
+        await EmitAsync("terminal_output", new { output });
+    }
+
+    public async Task SendTerminalStopped(string requestId, int exitCode, string reason)
+    {
+        await EmitAsync("terminal_stopped", new { requestId, exitCode, reason });
+    }
+
+    public async Task SendTerminalDenied(string requestId)
+    {
+        await EmitAsync("terminal_denied", new { requestId });
     }
 
     private async Task EmitAsync(string eventName, object data)

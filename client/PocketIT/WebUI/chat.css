@@ -398,3 +398,32 @@ body {
     scrollbar-width: thin;
     scrollbar-color: #2a475e #0a0f14;
 }
+
+/* Remote terminal session banner */
+.terminal-active-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    margin: 0;
+    background: #1a2e1a;
+    border-left: 3px solid #4caf50;
+    border-bottom: 1px solid #2a4a2a;
+    font-size: 13px;
+    color: #a5d6a7;
+    font-family: inherit;
+}
+.terminal-end-btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    background: #c62828;
+    color: white;
+    transition: background 0.2s;
+}
+.terminal-end-btn:hover {
+    background: #d32f2f;
+}

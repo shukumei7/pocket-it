@@ -526,6 +526,69 @@ function setup(io, app) {
       });
     });
 
+    // v0.6.0: Remote terminal events from client
+    socket.on('terminal_started', (data) => {
+      console.log(`[Agent] Terminal started on ${deviceId}: ${data.requestId}`);
+
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'terminal_session_started', deviceId, JSON.stringify({ requestId: data.requestId }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      io.of('/it').emit('terminal_started', {
+        deviceId,
+        requestId: data.requestId
+      });
+    });
+
+    socket.on('terminal_output', (data) => {
+      io.of('/it').emit('terminal_output', {
+        deviceId,
+        output: data.output
+      });
+    });
+
+    socket.on('terminal_stopped', (data) => {
+      console.log(`[Agent] Terminal stopped on ${deviceId}: ${data.requestId} (exit=${data.exitCode})`);
+
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'terminal_session_ended', deviceId, JSON.stringify({
+          requestId: data.requestId, exitCode: data.exitCode, reason: data.reason
+        }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      io.of('/it').emit('terminal_stopped', {
+        deviceId,
+        requestId: data.requestId,
+        exitCode: data.exitCode,
+        reason: data.reason
+      });
+    });
+
+    socket.on('terminal_denied', (data) => {
+      console.log(`[Agent] Terminal denied on ${deviceId}: ${data.requestId}`);
+
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'terminal_denied', deviceId, JSON.stringify({ requestId: data.requestId }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      io.of('/it').emit('terminal_denied', {
+        deviceId,
+        requestId: data.requestId
+      });
+    });
+
     // Disconnect
     socket.on('disconnect', () => {
       console.log(`[Agent] Device disconnected: ${deviceId}`);

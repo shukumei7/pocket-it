@@ -10,6 +10,7 @@ using PocketIT.Core;
 using PocketIT.Enrollment;
 using PocketIT.Diagnostics;
 using PocketIT.Remediation;
+using PocketIT.Terminal;
 
 namespace PocketIT;
 
@@ -27,6 +28,7 @@ public class TrayApplication : ApplicationContext
     private readonly LocalDatabase _localDb;
     private readonly FileAccess.FileAccessService _fileAccess = new();
     private readonly Scripts.ScriptExecutionService _scriptExecution = new();
+    private RemoteTerminalService? _remoteTerminal;
     private bool _isEnrolled;
     private bool _wasConnected;
 
@@ -82,6 +84,9 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnFileBrowseRequest += OnServerFileBrowseRequest;
         _serverConnection.OnFileReadRequest += OnServerFileReadRequest;
         _serverConnection.OnScriptRequest += OnServerScriptRequest;
+        _serverConnection.OnTerminalStartRequest += OnServerTerminalStartRequest;
+        _serverConnection.OnTerminalInput += OnServerTerminalInput;
+        _serverConnection.OnTerminalStopRequest += OnServerTerminalStopRequest;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -301,6 +306,13 @@ public class TrayApplication : ApplicationContext
             if (_wasConnected && !connected)
             {
                 _trayIcon.ShowBalloonTip(3000, "Pocket IT", "Lost connection to server. Reconnecting...", ToolTipIcon.Warning);
+                // Stop any active terminal session on disconnect
+                if (_remoteTerminal != null)
+                {
+                    _remoteTerminal.StopSession();
+                    _remoteTerminal.Dispose();
+                    _remoteTerminal = null;
+                }
             }
             _wasConnected = connected;
         }, null);
@@ -399,6 +411,33 @@ public class TrayApplication : ApplicationContext
             timeoutSeconds
         };
         _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
+    }
+
+    private void OnServerTerminalStartRequest(string requestId)
+    {
+        Logger.Info($"Terminal start request: {requestId}");
+        var bridgeData = new
+        {
+            type = "terminal_start_request",
+            requestId
+        };
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
+    }
+
+    private void OnServerTerminalInput(string input)
+    {
+        if (_remoteTerminal?.IsSessionActive == true)
+        {
+            _remoteTerminal.SendInput(input);
+        }
+    }
+
+    private void OnServerTerminalStopRequest(string requestId)
+    {
+        Logger.Info($"Terminal stop request: {requestId}");
+        _remoteTerminal?.StopSession();
+        _remoteTerminal?.Dispose();
+        _remoteTerminal = null;
     }
 
     private async void OnServerConnectedReady()
@@ -573,6 +612,51 @@ public class TrayApplication : ApplicationContext
                     break;
                 }
 
+                case "approve_terminal":
+                {
+                    var requestId = root.GetProperty("requestId").GetString() ?? "";
+                    Logger.Info($"Terminal approved: {requestId}");
+
+                    _remoteTerminal?.Dispose();
+                    _remoteTerminal = new RemoteTerminalService();
+
+                    _remoteTerminal.OnOutput += output =>
+                    {
+                        _ = _serverConnection.SendTerminalOutput(output);
+                    };
+
+                    _remoteTerminal.OnSessionEnded += exitCode =>
+                    {
+                        _ = _serverConnection.SendTerminalStopped(requestId, exitCode, exitCode == -1 ? "idle_timeout" : "process_exited");
+                        _remoteTerminal?.Dispose();
+                        _remoteTerminal = null;
+                        var endMsg = JsonSerializer.Serialize(new { type = "terminal_session_ended", exitCode });
+                        _uiContext.Post(_ => _chatWindow?.SendToWebView(endMsg), null);
+                    };
+
+                    _remoteTerminal.StartSession();
+                    _ = _serverConnection.SendTerminalStarted(requestId);
+
+                    var activeMsg = JsonSerializer.Serialize(new { type = "terminal_session_active" });
+                    _uiContext.Post(_ => _chatWindow?.SendToWebView(activeMsg), null);
+                    break;
+                }
+
+                case "deny_terminal":
+                {
+                    var requestId = root.GetProperty("requestId").GetString() ?? "";
+                    Logger.Info($"Terminal denied: {requestId}");
+                    _ = _serverConnection.SendTerminalDenied(requestId);
+                    break;
+                }
+
+                case "end_terminal":
+                {
+                    Logger.Info("User ended terminal session");
+                    _remoteTerminal?.StopSession();
+                    break;
+                }
+
                 case "enroll":
                     var token = root.GetProperty("token").GetString() ?? "";
                     var enrollResult = await _enrollmentFlow.EnrollAsync(token);
@@ -667,6 +751,7 @@ public class TrayApplication : ApplicationContext
         {
             _trayIcon.Dispose();
             _chatWindow?.Dispose();
+            _remoteTerminal?.Dispose();
             _scheduledChecks?.Dispose();
             _serverConnection?.Dispose();
             _localDb?.Dispose();

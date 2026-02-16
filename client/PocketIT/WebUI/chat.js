@@ -337,6 +337,79 @@
         return card;
     }
 
+    function createTerminalPrompt(requestId) {
+        const card = document.createElement('div');
+        card.className = 'action-card';
+
+        card.innerHTML = `
+            <div class="action-header">
+                <strong>\uD83D\uDCBB Remote Terminal Request</strong>
+            </div>
+            <div class="action-body" style="margin: 8px 0;">
+                <div style="font-size: 13px; color: #c7d5e0;">IT staff wants to open a remote terminal session on your computer.</div>
+                <div style="font-size: 13px; color: #8f98a0; margin-top: 4px;">They will be able to run commands interactively.</div>
+                <div style="font-size: 11px; color: #ffa726; margin-top: 4px;">You can end the session at any time.</div>
+            </div>
+        `;
+
+        const btnRow = document.createElement('div');
+        btnRow.className = 'action-buttons';
+
+        const approveBtn = document.createElement('button');
+        approveBtn.className = 'btn-approve';
+        approveBtn.textContent = 'Allow';
+        approveBtn.onclick = () => {
+            sendBridgeMessage('approve_terminal', { requestId });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #66bb6a; font-size: 12px;">Allowed \u2014 session starting...</span>';
+        };
+
+        const denyBtn = document.createElement('button');
+        denyBtn.className = 'btn-deny';
+        denyBtn.textContent = 'Deny';
+        denyBtn.onclick = () => {
+            sendBridgeMessage('deny_terminal', { requestId });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #ef5350; font-size: 12px;">Denied</span>';
+        };
+
+        btnRow.appendChild(approveBtn);
+        btnRow.appendChild(denyBtn);
+        card.appendChild(btnRow);
+        return card;
+    }
+
+    function showTerminalActive() {
+        hideTerminalActive();
+        const banner = document.createElement('div');
+        banner.className = 'terminal-active-banner';
+        banner.id = 'terminal-active-banner';
+
+        const label = document.createElement('span');
+        label.textContent = '\uD83D\uDCBB Remote terminal session active';
+        banner.appendChild(label);
+
+        const endBtn = document.createElement('button');
+        endBtn.className = 'terminal-end-btn';
+        endBtn.textContent = 'End Session';
+        endBtn.onclick = () => {
+            sendBridgeMessage('end_terminal', {});
+        };
+        banner.appendChild(endBtn);
+
+        messagesEl.parentElement.insertBefore(banner, messagesEl);
+    }
+
+    function hideTerminalActive() {
+        const existing = document.getElementById('terminal-active-banner');
+        if (existing) {
+            existing.remove();
+            addMessage('Terminal session ended.', 'system');
+        }
+    }
+
     // ---- Typing indicator ----
 
     let typingEl = null;
@@ -516,6 +589,19 @@
                 case 'script_request':
                     const scriptCard = createScriptPrompt(data.scriptName, data.scriptContent, data.requiresElevation, data.timeoutSeconds, data.requestId);
                     appendToChat(scriptCard);
+                    break;
+
+                case 'terminal_start_request':
+                    const terminalCard = createTerminalPrompt(data.requestId);
+                    appendToChat(terminalCard);
+                    break;
+
+                case 'terminal_session_active':
+                    showTerminalActive();
+                    break;
+
+                case 'terminal_session_ended':
+                    hideTerminalActive();
                     break;
 
                 case 'remediation_result':

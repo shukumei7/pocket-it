@@ -255,6 +255,73 @@ function setup(io, app) {
       }
     });
 
+    // v0.6.0: Remote terminal
+    socket.on('start_terminal', (data) => {
+      const { deviceId } = data;
+      console.log(`[IT] Terminal start request for ${deviceId}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'terminal_requested', deviceId, JSON.stringify({}));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `term-${Date.now()}`;
+          deviceSocket.emit('terminal_start_request', { requestId });
+          socket.emit('terminal_requested', { deviceId, requestId });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('terminal_input', (data) => {
+      const { deviceId, input } = data;
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('terminal_input', { input });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('stop_terminal', (data) => {
+      const { deviceId } = data;
+      console.log(`[IT] Terminal stop request for ${deviceId}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'terminal_stop_requested', deviceId, JSON.stringify({}));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `term-${Date.now()}`;
+          deviceSocket.emit('terminal_stop_request', { requestId });
+          socket.emit('terminal_stop_requested', { deviceId, requestId });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`[IT] Dashboard disconnected: ${socket.id}`);
       watchers.delete(socket.id);

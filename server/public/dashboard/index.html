@@ -490,7 +490,33 @@
             border-bottom: 1px solid #2a475e; color: #8f98a0; font-weight: 500;
         }
         .policy-table td { padding: 8px; border-bottom: 1px solid #1a2535; }
+
+        /* Terminal */
+        #terminal-container {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 4px;
+        }
+
+        #terminal-status {
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        #terminal-status.connected {
+            color: #4caf50;
+        }
+
+        #terminal-status.waiting {
+            color: #ff9800;
+        }
+
+        #terminal-status.error {
+            color: #f44336;
+        }
     </style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
 </head>
 <body>
     <!-- Login overlay -->
@@ -608,6 +634,16 @@
                         </div>
                     </details>
                     <div id="script-output-area"></div>
+                </div>
+
+                <h4 style="margin: 16px 0 8px;">Remote Terminal</h4>
+                <div id="terminal-section">
+                    <div id="terminal-controls" style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                        <button id="btn-start-terminal" class="diag-btn" onclick="startTerminal()">Open Terminal</button>
+                        <button id="btn-stop-terminal" class="diag-btn" onclick="stopTerminal()" disabled style="background: #4a1919; color: #ef5350;">Disconnect</button>
+                        <span id="terminal-status">Not connected</span>
+                    </div>
+                    <div id="terminal-container" style="display:none; height:400px;"></div>
                 </div>
 
                 <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #2a475e;">
@@ -799,6 +835,8 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script>
         // Dashboard JS
@@ -807,6 +845,10 @@
         let currentDeviceId = null;
         let currentTicketId = null;
         let authToken = sessionStorage.getItem('pocket_it_token') || '';
+        let term = null;
+        let fitAddon = null;
+        let terminalDeviceId = null;
+        let terminalLineBuffer = '';
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -965,6 +1007,82 @@
 
             socket.on('auto_remediation_triggered', () => {
                 loadAlerts();
+            });
+
+            socket.on('terminal_started', (data) => {
+                if (data.deviceId !== terminalDeviceId) return;
+                document.getElementById('terminal-container').style.display = 'block';
+                term = new Terminal({
+                    cursorBlink: true,
+                    theme: {
+                        background: '#1e1e1e',
+                        foreground: '#d4d4d4'
+                    },
+                    fontSize: 14,
+                    fontFamily: 'Consolas, "Courier New", monospace'
+                });
+                fitAddon = new FitAddon.FitAddon();
+                term.loadAddon(fitAddon);
+                term.open(document.getElementById('terminal-container'));
+                fitAddon.fit();
+                // Line-buffered input with local echo (no PTY — PowerShell won't echo)
+                terminalLineBuffer = '';
+                term.onData(d => {
+                    if (d === '\r') {
+                        // Enter: send accumulated line, echo newline
+                        term.write('\r\n');
+                        socket.emit('terminal_input', { deviceId: terminalDeviceId, input: terminalLineBuffer });
+                        terminalLineBuffer = '';
+                    } else if (d === '\x7f' || d === '\b') {
+                        // Backspace: remove last char, erase on screen
+                        if (terminalLineBuffer.length > 0) {
+                            terminalLineBuffer = terminalLineBuffer.slice(0, -1);
+                            term.write('\b \b');
+                        }
+                    } else if (d === '\x03') {
+                        // Ctrl+C: send break signal, clear buffer
+                        term.write('^C\r\n');
+                        terminalLineBuffer = '';
+                        socket.emit('terminal_input', { deviceId: terminalDeviceId, input: '\x03' });
+                    } else if (d >= ' ') {
+                        // Printable char: echo locally and buffer
+                        terminalLineBuffer += d;
+                        term.write(d);
+                    }
+                    // Ignore other control sequences (arrows, etc.)
+                });
+                const statusEl = document.getElementById('terminal-status');
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'connected';
+                document.getElementById('btn-start-terminal').disabled = true;
+                document.getElementById('btn-stop-terminal').disabled = false;
+            });
+
+            socket.on('terminal_output', (data) => {
+                if (data.deviceId !== terminalDeviceId) return;
+                if (term) term.write(data.output);
+            });
+
+            socket.on('terminal_stopped', (data) => {
+                if (data.deviceId !== terminalDeviceId) return;
+                if (term) {
+                    term.write('\r\n\r\n[Session ended: ' + (data.reason || 'unknown') + ']\r\n');
+                }
+                setTimeout(() => cleanupTerminal(), 1000);
+            });
+
+            socket.on('terminal_denied', (data) => {
+                if (data.deviceId !== terminalDeviceId) return;
+                const statusEl = document.getElementById('terminal-status');
+                statusEl.textContent = 'User denied terminal access';
+                statusEl.className = 'error';
+                setTimeout(() => {
+                    statusEl.textContent = 'Not connected';
+                    statusEl.className = '';
+                }, 3000);
+                document.getElementById('btn-start-terminal').disabled = false;
+                document.getElementById('btn-stop-terminal').disabled = true;
+                terminalDeviceId = null;
             });
         }
 
@@ -1134,6 +1252,7 @@
 
         // ---- Device Detail ----
         function openDevice(deviceId) {
+            cleanupTerminal();
             currentDeviceId = deviceId;
             const panel = document.getElementById('device-detail');
             panel.classList.add('active');
@@ -1172,11 +1291,49 @@
         function closeDetail() {
             const panel = document.getElementById('device-detail');
             panel.classList.remove('active');
+            cleanupTerminal();
             if (socket && currentDeviceId) {
                 socket.emit('unwatch_device', { deviceId: currentDeviceId });
             }
             currentDeviceId = null;
         }
+
+        function startTerminal() {
+            if (!currentDeviceId || !socket) return;
+            terminalDeviceId = currentDeviceId;
+            const statusEl = document.getElementById('terminal-status');
+            statusEl.textContent = 'Waiting for user approval...';
+            statusEl.className = 'waiting';
+            document.getElementById('btn-start-terminal').disabled = true;
+            document.getElementById('btn-stop-terminal').disabled = false;
+            socket.emit('start_terminal', { deviceId: terminalDeviceId });
+        }
+
+        function stopTerminal() {
+            if (!terminalDeviceId || !socket) return;
+            socket.emit('stop_terminal', { deviceId: terminalDeviceId });
+            cleanupTerminal();
+        }
+
+        function cleanupTerminal() {
+            if (term) {
+                term.dispose();
+                term = null;
+            }
+            fitAddon = null;
+            terminalLineBuffer = '';
+            document.getElementById('terminal-container').style.display = 'none';
+            const statusEl = document.getElementById('terminal-status');
+            statusEl.textContent = 'Not connected';
+            statusEl.className = '';
+            document.getElementById('btn-stop-terminal').disabled = true;
+            document.getElementById('btn-start-terminal').disabled = false;
+            terminalDeviceId = null;
+        }
+
+        window.addEventListener('resize', () => {
+            if (fitAddon) fitAddon.fit();
+        });
 
         function appendChatMessage(sender, content) {
             const chatEl = document.getElementById('detail-chat');

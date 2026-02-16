@@ -7,6 +7,9 @@ function setup(io, app) {
   // Chat rate limiting: deviceId → { count, resetTime }
   const chatRateLimiter = new Map();
 
+  // Diagnostic result buffers: deviceId → { results: {}, timer }
+  const diagnosticBuffers = new Map();
+
   // Diagnostic descriptions for chat UI
   const DIAGNOSTIC_DESCRIPTIONS = {
     cpu: 'CPU Usage Check',
@@ -273,18 +276,27 @@ function setup(io, app) {
         console.error('[Agent] Health score computation error:', err.message);
       }
 
-      // Feed results back to AI for interpretation
-      const diagnosticAI = app.locals.diagnosticAI;
-      if (diagnosticAI) {
-        try {
-          const device = db.prepare('SELECT hostname, os_version, cpu_model, total_ram_gb, total_disk_gb, processor_count FROM devices WHERE device_id = ?').get(deviceId);
-          const deviceInfo = device ? {
-            hostname: device.hostname, osVersion: device.os_version, deviceId,
-            cpuModel: device.cpu_model, totalRamGB: device.total_ram_gb,
-            totalDiskGB: device.total_disk_gb, processorCount: device.processor_count
-          } : { deviceId };
+      // Buffer diagnostic results — debounce 2s so "all" checks produce one AI response
+      let buffer = diagnosticBuffers.get(deviceId);
+      if (!buffer) {
+        buffer = { results: {}, timer: null };
+        diagnosticBuffers.set(deviceId, buffer);
+      }
+      buffer.results[data.checkType] = data.results;
 
-          const response = await diagnosticAI.processDiagnosticResult(deviceId, data.checkType, data.results);
+      if (buffer.timer) clearTimeout(buffer.timer);
+      buffer.timer = setTimeout(async () => {
+        const bufferedResults = buffer.results;
+        diagnosticBuffers.delete(deviceId);
+
+        const diagnosticAI = app.locals.diagnosticAI;
+        if (!diagnosticAI) return;
+
+        try {
+          const checkTypes = Object.keys(bufferedResults);
+          const label = checkTypes.length === 1 ? checkTypes[0] : 'all';
+
+          const response = await diagnosticAI.processDiagnosticResult(deviceId, label, bufferedResults);
 
           socket.emit('chat_response', {
             text: response.text,
@@ -293,7 +305,6 @@ function setup(io, app) {
             action: response.action
           });
 
-          // Handle any follow-up actions
           if (response.action && response.action.type === 'remediate') {
             const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache'];
             if (VALID_ACTIONS.includes(response.action.actionId)) {
@@ -301,14 +312,12 @@ function setup(io, app) {
                 actionId: response.action.actionId,
                 requestId: Date.now().toString()
               });
-            } else {
-              console.warn(`[Agent] Blocked invalid remediation action: ${response.action.actionId}`);
             }
           }
         } catch (err) {
           console.error('[Agent] Diagnostic AI processing error:', err.message);
         }
-      }
+      }, 2000);
     });
 
     // Remediation result from client
@@ -346,6 +355,7 @@ function setup(io, app) {
       console.log(`[Agent] Device disconnected: ${deviceId}`);
       connectedDevices.delete(deviceId);
       chatRateLimiter.delete(deviceId);
+      diagnosticBuffers.delete(deviceId);
 
       try {
         db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\') WHERE device_id = ?')

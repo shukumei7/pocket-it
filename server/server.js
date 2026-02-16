@@ -102,6 +102,14 @@ const diagnosticAI = new DiagnosticAI(llmService, db);
 app.locals.diagnosticAI = diagnosticAI;
 app.locals.llmService = llmService;
 
+const AlertService = require('./services/alertService');
+const NotificationService = require('./services/notificationService');
+
+const alertService = new AlertService(db);
+const notificationService = new NotificationService(db);
+app.locals.alertService = alertService;
+app.locals.notificationService = notificationService;
+
 const enrollmentRouter = require('./routes/enrollment');
 const devicesRouter = require('./routes/devices');
 const ticketsRouter = require('./routes/tickets');
@@ -119,6 +127,9 @@ app.use('/api/tickets', ticketsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/llm', createLLMRouter(llmService));
+
+const createAlertsRouter = require('./routes/alerts');
+app.use('/api/alerts', createAlertsRouter(alertService, notificationService));
 
 app.use(express.static(path.join(__dirname, 'public')));
 

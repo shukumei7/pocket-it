@@ -62,6 +62,17 @@ function setup(io, app) {
     console.log(`[Agent] Device connected: ${deviceId} (${hostname || 'unknown'})`);
     connectedDevices.set(deviceId, socket);
 
+    // v0.4.0: Resolve uptime alert on reconnect
+    try {
+      const alertService = app.locals.alertService;
+      if (alertService) {
+        alertService.resolveUptimeAlert(deviceId);
+        io.of('/it').emit('alert_stats_updated', alertService.getStats());
+      }
+    } catch (err) {
+      console.error('[Agent] Uptime resolve error:', err.message);
+    }
+
     // Update device status in DB (device already verified above)
     try {
       db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\'), hostname = COALESCE(?, hostname) WHERE device_id = ?')
@@ -94,6 +105,16 @@ function setup(io, app) {
       try {
         db.prepare('UPDATE devices SET last_seen = datetime(\'now\'), status = ? WHERE device_id = ?')
           .run('online', deviceId);
+
+        // v0.4.0: Resolve uptime alert on heartbeat
+        try {
+          const alertService = app.locals.alertService;
+          if (alertService) {
+            alertService.resolveUptimeAlert(deviceId);
+          }
+        } catch (err) {
+          console.error('[Agent] Heartbeat alert resolve error:', err.message);
+        }
       } catch (err) {
         console.error('[Agent] Heartbeat DB error:', err.message);
       }
@@ -282,6 +303,38 @@ function setup(io, app) {
         console.error('[Agent] Health score computation error:', err.message);
       }
 
+      // Evaluate alert thresholds (v0.4.0)
+      try {
+        const alertService = app.locals.alertService;
+        if (alertService) {
+          const newAlerts = alertService.evaluateResult(deviceId, data.checkType, data.results);
+          if (newAlerts.length > 0) {
+            // Get device info for notifications
+            const device = db.prepare('SELECT * FROM devices WHERE device_id = ?').get(deviceId);
+
+            // Emit each new alert to IT dashboard
+            for (const alert of newAlerts) {
+              io.of('/it').emit('new_alert', { alert, hostname: device?.hostname || deviceId });
+            }
+
+            // Dispatch notifications
+            const notificationService = app.locals.notificationService;
+            if (notificationService) {
+              for (const alert of newAlerts) {
+                notificationService.dispatchAlert(alert, device).catch(err => {
+                  console.error('[Agent] Notification dispatch error:', err.message);
+                });
+              }
+            }
+
+            // Emit updated stats
+            io.of('/it').emit('alert_stats_updated', alertService.getStats());
+          }
+        }
+      } catch (err) {
+        console.error('[Agent] Alert evaluation error:', err.message);
+      }
+
       // Buffer diagnostic results — debounce 2s so "all" checks produce one AI response
       let buffer = diagnosticBuffers.get(deviceId);
       if (!buffer) {
@@ -378,6 +431,44 @@ function setup(io, app) {
       });
     });
   });
+
+  // v0.4.0: Uptime monitoring — check for stale devices every 60s
+  const HEARTBEAT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+  setInterval(() => {
+    try {
+      const db = app.locals.db;
+      const alertService = app.locals.alertService;
+      const notificationService = app.locals.notificationService;
+      if (!alertService) return;
+
+      // Find online devices that haven't sent a heartbeat in >5 minutes
+      const staleDevices = db.prepare(
+        "SELECT device_id, hostname FROM devices WHERE status = 'online' AND last_seen < datetime('now', '-5 minutes')"
+      ).all();
+
+      for (const device of staleDevices) {
+        // Mark as offline
+        db.prepare("UPDATE devices SET status = 'offline' WHERE device_id = ?").run(device.device_id);
+
+        // Create uptime alert
+        const alert = alertService.createUptimeAlert(device.device_id, device.hostname);
+        if (alert) {
+          io.of('/it').emit('new_alert', { alert, hostname: device.hostname || device.device_id });
+          io.of('/it').emit('device_status_changed', { deviceId: device.device_id, status: 'offline' });
+
+          if (notificationService) {
+            notificationService.dispatchAlert(alert, device).catch(err => {
+              console.error('[Agent] Uptime notification error:', err.message);
+            });
+          }
+
+          io.of('/it').emit('alert_stats_updated', alertService.getStats());
+        }
+      }
+    } catch (err) {
+      console.error('[Agent] Uptime check error:', err.message);
+    }
+  }, 60 * 1000);
 
   return agentNs;
 }

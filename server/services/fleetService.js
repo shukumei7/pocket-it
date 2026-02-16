@@ -27,7 +27,7 @@ class FleetService {
 
   computeHealthScore(deviceId) {
     // Get latest result per check type
-    const checkTypes = ['cpu', 'memory', 'disk', 'network'];
+    const checkTypes = ['cpu', 'memory', 'disk', 'network', 'top_processes', 'event_log', 'windows_update', 'services'];
     const scores = [];
 
     for (const type of checkTypes) {

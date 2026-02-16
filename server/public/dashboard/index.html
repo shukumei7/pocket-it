@@ -271,6 +271,96 @@
         /* Pages */
         .page { display: none; }
         .page.active { display: block; }
+
+        /* Alerts */
+        .alert-list { list-style: none; }
+        .alert-item {
+            background: #1b2838;
+            border: 1px solid #2a475e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .alert-item .severity-indicator {
+            width: 4px;
+            height: 40px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        .severity-indicator.critical { background: #d50000; }
+        .severity-indicator.warning { background: #ffa726; }
+        .alert-item .alert-info { flex: 1; }
+        .alert-item .alert-title { font-weight: 600; font-size: 14px; }
+        .alert-item .alert-meta { font-size: 12px; color: #8f98a0; margin-top: 4px; }
+        .alert-item .alert-actions { display: flex; gap: 6px; }
+        .alert-item .alert-actions button {
+            background: #2a475e;
+            color: #c7d5e0;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .alert-item .alert-actions button:hover { background: #3d6080; }
+        .alert-item .alert-actions button.resolve-btn { background: #1b5e20; color: #a5d6a7; }
+        .alert-item .alert-actions button.resolve-btn:hover { background: #2e7d32; }
+
+        .alert-section {
+            background: #1b2838;
+            border: 1px solid #2a475e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        .alert-section h3 { font-size: 15px; margin-bottom: 12px; color: #c7d5e0; }
+
+        .threshold-table, .channel-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .threshold-table th, .channel-table th {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #2a475e;
+            color: #8f98a0;
+            font-weight: 500;
+        }
+        .threshold-table td, .channel-table td {
+            padding: 8px;
+            border-bottom: 1px solid #1a2535;
+        }
+        .toggle-btn {
+            background: none;
+            border: 1px solid #2a475e;
+            color: #8f98a0;
+            padding: 3px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .toggle-btn.active { border-color: #66bb6a; color: #66bb6a; }
+        .toggle-btn:hover { border-color: #66c0f4; color: #66c0f4; }
+
+        .alert-filter-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .alert-filter-btn {
+            background: #1b2838;
+            border: 1px solid #2a475e;
+            color: #8f98a0;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .alert-filter-btn.active { background: #2a475e; color: #c7d5e0; border-color: #66c0f4; }
     </style>
 </head>
 <body>
@@ -291,6 +381,7 @@
         <a href="#" class="nav-link active" data-page="fleet">Fleet</a>
         <a href="#" class="nav-link" data-page="tickets">Tickets</a>
         <a href="#" class="nav-link" data-page="enrollment">Enrollment</a>
+        <a href="#" class="nav-link" data-page="alerts">Alerts <span id="nav-alert-badge" style="display:none; background:#ef5350; color:#fff; font-size:10px; padding:2px 6px; border-radius:8px; margin-left:4px;">0</span></a>
         <span class="spacer"></span>
         <span class="status-badge" id="server-status">Connected</span>
     </nav>
@@ -322,6 +413,10 @@
                 <div class="stat-card">
                     <div class="value" id="stat-critical" style="color: #ef5350;">0</div>
                     <div class="label">Critical Devices</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="stat-alerts" style="color: #ef5350;">0</div>
+                    <div class="label">Active Alerts</div>
                 </div>
             </div>
 
@@ -412,6 +507,87 @@
                 <div id="token-value" style="font-family: monospace; font-size: 18px; color: #66c0f4; margin-top: 8px; user-select: all;"></div>
             </div>
         </div>
+
+        <!-- Alerts page -->
+        <div class="page" id="page-alerts">
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="value" id="alert-stat-active" style="color: #ef5350;">0</div>
+                    <div class="label">Active Alerts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="alert-stat-critical" style="color: #d50000;">0</div>
+                    <div class="label">Critical</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="alert-stat-warning" style="color: #ffa726;">0</div>
+                    <div class="label">Warning</div>
+                </div>
+            </div>
+
+            <div class="alert-filter-row">
+                <button class="alert-filter-btn active" onclick="filterAlerts('active')">Active</button>
+                <button class="alert-filter-btn" onclick="filterAlerts('all')">All History</button>
+            </div>
+
+            <h2 class="section-title">Alerts</h2>
+            <ul class="alert-list" id="alert-list">
+                <div class="empty-state">No alerts.</div>
+            </ul>
+
+            <div style="margin-top: 32px;">
+                <h2 class="section-title">Threshold Configuration</h2>
+                <div class="alert-section">
+                    <table class="threshold-table" id="threshold-table">
+                        <thead>
+                            <tr>
+                                <th>Check Type</th>
+                                <th>Field</th>
+                                <th>Condition</th>
+                                <th>Severity</th>
+                                <th>Consecutive</th>
+                                <th>Enabled</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="threshold-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px;">
+                <h2 class="section-title">Notification Channels</h2>
+                <div class="alert-section">
+                    <table class="channel-table" id="channel-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Enabled</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="channel-tbody"></tbody>
+                    </table>
+                    <button class="diag-btn" onclick="showAddChannelForm()" style="margin-top: 12px;">Add Channel</button>
+                    <div id="add-channel-form" style="display: none; margin-top: 12px; background: #0f1923; border: 1px solid #2a475e; border-radius: 6px; padding: 16px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                            <input type="text" id="channel-name" placeholder="Channel name" style="background:#1b2838; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-size:13px;" />
+                            <select id="channel-type" style="background:#1b2838; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-size:13px;">
+                                <option value="webhook">Webhook</option>
+                                <option value="slack">Slack</option>
+                                <option value="teams">Teams</option>
+                            </select>
+                        </div>
+                        <input type="text" id="channel-url" placeholder="Webhook URL" style="width:100%; background:#1b2838; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-size:13px; margin-bottom:8px;" />
+                        <div style="display: flex; gap: 8px;">
+                            <button class="diag-btn" onclick="addChannel()">Save</button>
+                            <button class="diag-btn" onclick="hideAddChannelForm()">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -495,6 +671,7 @@
                 document.getElementById(`page-${page}`).classList.add('active');
                 if (page === 'fleet') loadFleet();
                 if (page === 'tickets') loadTickets();
+                if (page === 'alerts') loadAlerts();
             });
         });
 
@@ -545,6 +722,25 @@
             });
 
             socket.on('ticket_created', () => loadFleet());
+
+            socket.on('new_alert', (data) => {
+                loadAlerts();
+            });
+
+            socket.on('alert_stats_updated', (data) => {
+                // Update badge
+                const badge = document.getElementById('nav-alert-badge');
+                if (data.activeCount > 0) {
+                    badge.textContent = data.activeCount;
+                    badge.style.display = 'inline';
+                } else {
+                    badge.style.display = 'none';
+                }
+                // Update stats if on alerts page
+                document.getElementById('alert-stat-active').textContent = data.activeCount || 0;
+                document.getElementById('alert-stat-critical').textContent = data.criticalCount || 0;
+                document.getElementById('alert-stat-warning').textContent = data.warningCount || 0;
+            });
         }
 
         // ---- Fleet ----
@@ -563,6 +759,24 @@
                 document.getElementById('stat-tickets-total').textContent = stats.totalTickets || 0;
                 document.getElementById('stat-health').textContent = stats.averageHealth !== null && stats.averageHealth !== undefined ? stats.averageHealth + '%' : '—';
                 document.getElementById('stat-critical').textContent = stats.criticalDevices || 0;
+
+                // Load alert stats for fleet page
+                try {
+                    const alertStatsRes = await fetchWithAuth(`${API}/api/alerts/stats`);
+                    const alertStats = await alertStatsRes.json();
+                    document.getElementById('stat-alerts').textContent = alertStats.activeCount || 0;
+
+                    // Update nav badge too
+                    const badge = document.getElementById('nav-alert-badge');
+                    if (alertStats.activeCount > 0) {
+                        badge.textContent = alertStats.activeCount;
+                        badge.style.display = 'inline';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                } catch (err) {
+                    console.error('Failed to load alert stats:', err);
+                }
 
                 const grid = document.getElementById('device-grid');
                 if (devices.length === 0) {
@@ -793,6 +1007,243 @@
                 }
             } catch (err) {
                 alert('Failed to remove device: ' + err.message);
+            }
+        }
+
+        // ---- Alerts ----
+        let alertFilter = 'active';
+
+        async function loadAlerts() {
+            try {
+                // Load stats
+                const statsRes = await fetchWithAuth(`${API}/api/alerts/stats`);
+                const stats = await statsRes.json();
+                document.getElementById('alert-stat-active').textContent = stats.activeCount || 0;
+                document.getElementById('alert-stat-critical').textContent = stats.criticalCount || 0;
+                document.getElementById('alert-stat-warning').textContent = stats.warningCount || 0;
+
+                // Update nav badge
+                const badge = document.getElementById('nav-alert-badge');
+                if (stats.activeCount > 0) {
+                    badge.textContent = stats.activeCount;
+                    badge.style.display = 'inline';
+                } else {
+                    badge.style.display = 'none';
+                }
+
+                // Load alerts
+                const url = alertFilter === 'active'
+                    ? `${API}/api/alerts?status=active`
+                    : `${API}/api/alerts?limit=100`;
+                const alertsRes = await fetchWithAuth(url);
+                const alerts = await alertsRes.json();
+
+                const list = document.getElementById('alert-list');
+                if (alerts.length === 0) {
+                    list.innerHTML = '<div class="empty-state">No alerts.</div>';
+                    return;
+                }
+
+                list.innerHTML = alerts.map(a => `
+                    <li class="alert-item">
+                        <div class="severity-indicator ${a.severity}"></div>
+                        <div class="alert-info">
+                            <div class="alert-title">${escapeHtml(a.message)}</div>
+                            <div class="alert-meta">
+                                Device: ${escapeHtml(a.hostname || (a.device_id || '').substring(0, 8))} |
+                                Check: ${escapeHtml(a.check_type)} |
+                                ${a.triggered_at ? new Date(a.triggered_at).toLocaleString() : ''}
+                                ${a.status === 'acknowledged' ? ' | Acknowledged by ' + escapeHtml(a.acknowledged_by || 'staff') : ''}
+                                ${a.status === 'resolved' ? ' | Resolved ' + (a.resolved_at ? new Date(a.resolved_at).toLocaleString() : '') : ''}
+                            </div>
+                        </div>
+                        <div class="alert-actions">
+                            ${a.status === 'active' ? `<button onclick="acknowledgeAlert(${a.id})">Acknowledge</button>` : ''}
+                            ${a.status !== 'resolved' ? `<button class="resolve-btn" onclick="resolveAlert(${a.id})">Resolve</button>` : ''}
+                        </div>
+                    </li>
+                `).join('');
+
+                // Load thresholds
+                await loadThresholds();
+                // Load channels
+                await loadChannels();
+            } catch (err) {
+                console.error('Failed to load alerts:', err);
+            }
+        }
+
+        function filterAlerts(filter) {
+            alertFilter = filter;
+            document.querySelectorAll('.alert-filter-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            loadAlerts();
+        }
+
+        async function acknowledgeAlert(alertId) {
+            try {
+                await fetchWithAuth(`${API}/api/alerts/${alertId}/acknowledge`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acknowledgedBy: 'IT Staff' })
+                });
+                loadAlerts();
+            } catch (err) {
+                console.error('Failed to acknowledge alert:', err);
+            }
+        }
+
+        async function resolveAlert(alertId) {
+            try {
+                await fetchWithAuth(`${API}/api/alerts/${alertId}/resolve`, { method: 'POST' });
+                loadAlerts();
+            } catch (err) {
+                console.error('Failed to resolve alert:', err);
+            }
+        }
+
+        async function loadThresholds() {
+            try {
+                const res = await fetchWithAuth(`${API}/api/alerts/thresholds`);
+                const thresholds = await res.json();
+                const tbody = document.getElementById('threshold-tbody');
+                tbody.innerHTML = thresholds.map(t => `
+                    <tr>
+                        <td>${escapeHtml(t.check_type)}</td>
+                        <td>${escapeHtml(t.field_path)}</td>
+                        <td>${escapeHtml(t.operator)} ${t.threshold_value}</td>
+                        <td><span style="color: ${t.severity === 'critical' ? '#ef5350' : '#ffa726'}">${t.severity}</span></td>
+                        <td>${t.consecutive_required}x</td>
+                        <td>
+                            <button class="toggle-btn ${t.enabled ? 'active' : ''}"
+                                onclick="toggleThreshold(${t.id}, ${t.enabled ? 0 : 1})">
+                                ${t.enabled ? 'ON' : 'OFF'}
+                            </button>
+                        </td>
+                        <td><button class="toggle-btn" onclick="deleteThreshold(${t.id})">Delete</button></td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load thresholds:', err);
+            }
+        }
+
+        async function toggleThreshold(id, enabled) {
+            try {
+                await fetchWithAuth(`${API}/api/alerts/thresholds/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                loadThresholds();
+            } catch (err) {
+                console.error('Failed to toggle threshold:', err);
+            }
+        }
+
+        async function deleteThreshold(id) {
+            if (!confirm('Delete this threshold?')) return;
+            try {
+                await fetchWithAuth(`${API}/api/alerts/thresholds/${id}`, { method: 'DELETE' });
+                loadThresholds();
+            } catch (err) {
+                console.error('Failed to delete threshold:', err);
+            }
+        }
+
+        async function loadChannels() {
+            try {
+                const res = await fetchWithAuth(`${API}/api/alerts/channels`);
+                const channels = await res.json();
+                const tbody = document.getElementById('channel-tbody');
+                if (channels.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="color:#8f98a0; text-align:center;">No notification channels configured.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = channels.map(c => `
+                    <tr>
+                        <td>${escapeHtml(c.name)}</td>
+                        <td>${escapeHtml(c.channel_type)}</td>
+                        <td>
+                            <button class="toggle-btn ${c.enabled ? 'active' : ''}"
+                                onclick="toggleChannel(${c.id}, ${c.enabled ? 0 : 1})">
+                                ${c.enabled ? 'ON' : 'OFF'}
+                            </button>
+                        </td>
+                        <td>
+                            <button class="toggle-btn" onclick="testChannel(${c.id})">Test</button>
+                            <button class="toggle-btn" onclick="deleteChannel(${c.id})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load channels:', err);
+            }
+        }
+
+        function showAddChannelForm() {
+            document.getElementById('add-channel-form').style.display = 'block';
+        }
+
+        function hideAddChannelForm() {
+            document.getElementById('add-channel-form').style.display = 'none';
+        }
+
+        async function addChannel() {
+            const name = document.getElementById('channel-name').value.trim();
+            const type = document.getElementById('channel-type').value;
+            const url = document.getElementById('channel-url').value.trim();
+
+            if (!name || !url) {
+                alert('Name and URL are required');
+                return;
+            }
+
+            try {
+                await fetchWithAuth(`${API}/api/alerts/channels`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, channel_type: type, config: { url } })
+                });
+                document.getElementById('channel-name').value = '';
+                document.getElementById('channel-url').value = '';
+                hideAddChannelForm();
+                loadChannels();
+            } catch (err) {
+                console.error('Failed to add channel:', err);
+            }
+        }
+
+        async function toggleChannel(id, enabled) {
+            try {
+                await fetchWithAuth(`${API}/api/alerts/channels/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                loadChannels();
+            } catch (err) {
+                console.error('Failed to toggle channel:', err);
+            }
+        }
+
+        async function testChannel(id) {
+            try {
+                const res = await fetchWithAuth(`${API}/api/alerts/channels/${id}/test`, { method: 'POST' });
+                const data = await res.json();
+                alert(data.success ? 'Test notification sent!' : 'Test failed: ' + (data.error || 'Unknown error'));
+            } catch (err) {
+                alert('Test failed: ' + err.message);
+            }
+        }
+
+        async function deleteChannel(id) {
+            if (!confirm('Delete this notification channel?')) return;
+            try {
+                await fetchWithAuth(`${API}/api/alerts/channels/${id}`, { method: 'DELETE' });
+                loadChannels();
+            } catch (err) {
+                console.error('Failed to delete channel:', err);
             }
         }
 

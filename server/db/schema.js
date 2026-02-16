@@ -116,6 +116,71 @@ function initDatabase(dbPath) {
     }
   }
 
+  // v0.4.0: Alert monitoring tables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS alert_thresholds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      check_type TEXT NOT NULL,
+      field_path TEXT NOT NULL,
+      operator TEXT NOT NULL CHECK(operator IN ('>', '<', '>=', '<=', '=')),
+      threshold_value REAL NOT NULL,
+      severity TEXT NOT NULL CHECK(severity IN ('warning', 'critical')),
+      consecutive_required INTEGER DEFAULT 1,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      device_id TEXT NOT NULL,
+      threshold_id INTEGER REFERENCES alert_thresholds(id),
+      check_type TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      status TEXT DEFAULT 'active' CHECK(status IN ('active', 'acknowledged', 'resolved')),
+      message TEXT NOT NULL,
+      field_path TEXT,
+      field_value REAL,
+      triggered_at TEXT DEFAULT (datetime('now')),
+      acknowledged_at TEXT,
+      acknowledged_by TEXT,
+      resolved_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      channel_type TEXT NOT NULL CHECK(channel_type IN ('webhook', 'slack', 'teams')),
+      config TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_alerts_device_status ON alerts(device_id, status);
+    CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
+    CREATE INDEX IF NOT EXISTS idx_alert_thresholds_check_type ON alert_thresholds(check_type);
+  `);
+
+  // Seed default alert thresholds (only if table is empty)
+  const thresholdCount = db.prepare('SELECT COUNT(*) as count FROM alert_thresholds').get().count;
+  if (thresholdCount === 0) {
+    const defaultThresholds = [
+      { check_type: 'cpu', field_path: 'usagePercent', operator: '>', threshold_value: 90, severity: 'critical', consecutive_required: 2 },
+      { check_type: 'cpu', field_path: 'usagePercent', operator: '>', threshold_value: 80, severity: 'warning', consecutive_required: 3 },
+      { check_type: 'memory', field_path: 'usagePercent', operator: '>', threshold_value: 95, severity: 'critical', consecutive_required: 2 },
+      { check_type: 'memory', field_path: 'usagePercent', operator: '>', threshold_value: 85, severity: 'warning', consecutive_required: 3 },
+      { check_type: 'disk', field_path: 'drives.0.usagePercent', operator: '>', threshold_value: 95, severity: 'critical', consecutive_required: 1 },
+      { check_type: 'disk', field_path: 'drives.0.usagePercent', operator: '>', threshold_value: 85, severity: 'warning', consecutive_required: 1 },
+      { check_type: 'event_log', field_path: 'criticals', operator: '>', threshold_value: 0, severity: 'critical', consecutive_required: 1 },
+      { check_type: 'services', field_path: 'stoppedAutoServices.length', operator: '>', threshold_value: 0, severity: 'warning', consecutive_required: 2 },
+    ];
+    const insertThreshold = db.prepare(
+      'INSERT INTO alert_thresholds (check_type, field_path, operator, threshold_value, severity, consecutive_required) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    for (const t of defaultThresholds) {
+      insertThreshold.run(t.check_type, t.field_path, t.operator, t.threshold_value, t.severity, t.consecutive_required);
+    }
+  }
+
   return db;
 }
 

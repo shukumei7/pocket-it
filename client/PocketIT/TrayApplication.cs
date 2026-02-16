@@ -21,6 +21,7 @@ public class TrayApplication : ApplicationContext
     private readonly EnrollmentFlow _enrollmentFlow;
     private readonly DiagnosticsEngine _diagnosticsEngine;
     private readonly RemediationEngine _remediationEngine;
+    private readonly ScheduledCheckService _scheduledChecks;
     private readonly IConfiguration _config;
     private readonly SynchronizationContext _uiContext;
     private readonly LocalDatabase _localDb;
@@ -60,6 +61,14 @@ public class TrayApplication : ApplicationContext
         _serverConnection = new ServerConnection(serverUrl, deviceId, deviceSecret);
         _diagnosticsEngine = new DiagnosticsEngine();
         _remediationEngine = new RemediationEngine();
+
+        // Read monitoring interval from config (default 15 minutes)
+        int monitoringInterval = 15;
+        if (int.TryParse(_config["Monitoring:IntervalMinutes"], out int configInterval) && configInterval > 0)
+        {
+            monitoringInterval = configInterval;
+        }
+        _scheduledChecks = new ScheduledCheckService(_diagnosticsEngine, _serverConnection, monitoringInterval);
 
         // Wire server connection events
         _serverConnection.OnChatResponse += OnServerChatResponse;
@@ -165,6 +174,9 @@ public class TrayApplication : ApplicationContext
 
             // Connect to server
             await _serverConnection.ConnectAsync();
+
+            // Start scheduled diagnostic monitoring
+            _scheduledChecks.Start();
 
             // Purge old offline messages
             try
@@ -480,6 +492,7 @@ public class TrayApplication : ApplicationContext
     {
         _trayIcon.Visible = false;
         _chatWindow?.Close();
+        _scheduledChecks?.Stop();
         Application.Exit();
     }
 
@@ -489,6 +502,7 @@ public class TrayApplication : ApplicationContext
         {
             _trayIcon.Dispose();
             _chatWindow?.Dispose();
+            _scheduledChecks?.Dispose();
             _serverConnection?.Dispose();
             _localDb?.Dispose();
         }

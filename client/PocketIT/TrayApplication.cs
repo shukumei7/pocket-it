@@ -84,7 +84,7 @@ public class TrayApplication : ApplicationContext
             Visible = true,
             ContextMenuStrip = contextMenu
         };
-        _trayIcon.DoubleClick += OnOpenChat;
+        _trayIcon.Click += OnOpenChat;
 
         if (!ValidateConfig()) return;
 

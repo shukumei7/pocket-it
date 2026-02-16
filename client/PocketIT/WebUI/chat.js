@@ -62,6 +62,77 @@
             .replace(/\n/g, '<br>');
     }
 
+    function createProcessTable(processes) {
+        if (!processes || !processes.length) return '';
+        let html = '<table class="process-table"><thead><tr><th>Name</th><th>PID</th><th>CPU %</th><th>Memory</th></tr></thead><tbody>';
+        processes.forEach(p => {
+            const isWarn = p.cpuPercent > 50 || p.memoryMB > 2048;
+            html += `<tr class="${isWarn ? 'warn-row' : ''}">`;
+            html += `<td>${escapeHtml(p.name)}</td>`;
+            html += `<td>${p.pid}</td>`;
+            html += `<td>${p.cpuPercent.toFixed(1)}%</td>`;
+            html += `<td>${p.memoryMB.toFixed(0)} MB</td>`;
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        return html;
+    }
+
+    function createEventLogList(entries) {
+        if (!entries || !entries.length) return '<div class="event-log-empty">No errors found</div>';
+        let html = '<div class="event-log-list">';
+        entries.forEach(e => {
+            const badgeClass = e.level === 'Critical' ? 'critical' : 'error';
+            html += '<div class="event-log-entry">';
+            html += `<span class="event-timestamp">${escapeHtml(e.timestamp || '')}</span> `;
+            html += `<span class="level-badge ${badgeClass}">${escapeHtml(e.level)}</span> `;
+            html += `<span class="event-source">${escapeHtml(e.source || '')}</span>: `;
+            html += `<span class="event-message">${escapeHtml(e.message || '')}</span>`;
+            html += '</div>';
+        });
+        html += '</div>';
+        return html;
+    }
+
+    function createSoftwareList(programs) {
+        if (!programs || !programs.length) return '';
+        let html = '<div class="software-list">';
+        html += '<input type="text" class="software-filter" placeholder="Filter software..." oninput="window._filterSoftwareList(this)">';
+        html += '<div class="software-items">';
+        programs.forEach(p => {
+            html += '<div class="software-item">';
+            html += `<span class="software-name">${escapeHtml(p.name)}</span>`;
+            if (p.version) html += ` <span class="software-version">${escapeHtml(p.version)}</span>`;
+            if (p.publisher) html += ` <span class="software-publisher">— ${escapeHtml(p.publisher)}</span>`;
+            html += '</div>';
+        });
+        html += '</div></div>';
+        return html;
+    }
+
+    window._filterSoftwareList = function(input) {
+        const filter = input.value.toLowerCase();
+        const items = input.parentElement.querySelectorAll('.software-item');
+        items.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = text.includes(filter) ? '' : 'none';
+        });
+    };
+
+    function createServicesList(stoppedServices) {
+        if (!stoppedServices || !stoppedServices.length) return '<div class="services-ok">All auto-start services running</div>';
+        let html = '<div class="services-list">';
+        stoppedServices.forEach(s => {
+            html += '<div class="service-stopped-item">';
+            html += `<span class="service-status-badge stopped">STOPPED</span> `;
+            html += `<span class="service-name">${escapeHtml(s.displayName || s.name)}</span>`;
+            html += ` <span class="service-id">(${escapeHtml(s.name)})</span>`;
+            html += '</div>';
+        });
+        html += '</div>';
+        return html;
+    }
+
     function createDiagnosticCard(results) {
         const card = document.createElement('div');
         card.className = 'diagnostic-card';
@@ -97,6 +168,31 @@
 
                 card.appendChild(row);
             });
+        }
+
+        // Render detail panels for specific check types
+        const detailSource = Array.isArray(results) ? null : results;
+        if (detailSource) {
+            if (detailSource.processes) {
+                const div = document.createElement('div');
+                div.innerHTML = createProcessTable(detailSource.processes);
+                card.appendChild(div);
+            }
+            if (detailSource.entries) {
+                const div = document.createElement('div');
+                div.innerHTML = createEventLogList(detailSource.entries);
+                card.appendChild(div);
+            }
+            if (detailSource.programs) {
+                const div = document.createElement('div');
+                div.innerHTML = createSoftwareList(detailSource.programs);
+                card.appendChild(div);
+            }
+            if (detailSource.stoppedAutoServices) {
+                const div = document.createElement('div');
+                div.innerHTML = createServicesList(detailSource.stoppedAutoServices);
+                card.appendChild(div);
+            }
         }
 
         return card;

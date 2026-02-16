@@ -10,6 +10,11 @@ public class DiagnosticsEngine
         _checks.Add(new Checks.MemoryCheck());
         _checks.Add(new Checks.DiskCheck());
         _checks.Add(new Checks.NetworkCheck());
+        _checks.Add(new Checks.TopProcessesCheck());
+        _checks.Add(new Checks.EventLogCheck());
+        _checks.Add(new Checks.WindowsUpdateCheck());
+        _checks.Add(new Checks.InstalledSoftwareCheck());
+        _checks.Add(new Checks.ServicesCheck());
     }
 
     public async Task<List<DiagnosticResult>> RunAllAsync()

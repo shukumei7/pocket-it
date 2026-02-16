@@ -202,3 +202,147 @@ body {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.6; }
 }
+
+/* Process Table */
+.process-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 8px;
+}
+.process-table th {
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid #444;
+    color: #aaa;
+    font-weight: 600;
+}
+.process-table td {
+    padding: 3px 8px;
+    border-bottom: 1px solid #2a2a3e;
+}
+.process-table tr:nth-child(even) {
+    background: rgba(255,255,255,0.03);
+}
+.warn-row {
+    background: rgba(255, 170, 0, 0.15) !important;
+    color: #ffaa00;
+}
+
+/* Event Log */
+.event-log-list {
+    margin-top: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.event-log-entry {
+    padding: 4px 0;
+    border-bottom: 1px solid #2a2a3e;
+    font-size: 12px;
+    line-height: 1.4;
+}
+.event-timestamp {
+    color: #888;
+    font-size: 11px;
+}
+.level-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.level-badge.critical {
+    background: #ff2d2d;
+    color: #fff;
+}
+.level-badge.error {
+    background: #cc4400;
+    color: #fff;
+}
+.event-source {
+    color: #7eb8da;
+    font-weight: 600;
+}
+.event-message {
+    color: #ccc;
+}
+.event-log-empty {
+    color: #6a6;
+    padding: 8px 0;
+    font-size: 13px;
+}
+
+/* Software List */
+.software-list {
+    margin-top: 8px;
+}
+.software-filter {
+    width: 100%;
+    padding: 6px 10px;
+    background: #1a1a2e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #eee;
+    font-size: 12px;
+    margin-bottom: 6px;
+    box-sizing: border-box;
+}
+.software-filter::placeholder {
+    color: #666;
+}
+.software-items {
+    max-height: 250px;
+    overflow-y: auto;
+}
+.software-item {
+    padding: 3px 0;
+    border-bottom: 1px solid #2a2a3e;
+    font-size: 12px;
+}
+.software-name {
+    color: #eee;
+    font-weight: 500;
+}
+.software-version {
+    color: #888;
+    font-size: 11px;
+}
+.software-publisher {
+    color: #666;
+    font-size: 11px;
+}
+
+/* Services */
+.services-list {
+    margin-top: 8px;
+}
+.service-stopped-item {
+    padding: 4px 0;
+    border-bottom: 1px solid #2a2a3e;
+    font-size: 12px;
+}
+.service-status-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+}
+.service-status-badge.stopped {
+    background: #cc4400;
+    color: #fff;
+}
+.service-name {
+    color: #eee;
+}
+.service-id {
+    color: #666;
+    font-size: 11px;
+}
+.services-ok {
+    color: #6a6;
+    padding: 8px 0;
+    font-size: 13px;
+}

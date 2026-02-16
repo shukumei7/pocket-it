@@ -16,6 +16,11 @@ function setup(io, app) {
     memory: 'Memory Usage Check',
     disk: 'Disk Space Check',
     network: 'Network Connectivity Check',
+    top_processes: 'Top 15 processes by memory usage with CPU estimates',
+    event_log: 'Recent Windows Event Log errors and critical events (last 24h)',
+    windows_update: 'Windows Update status — recent patches and pending reboots',
+    installed_software: 'List of installed programs with versions',
+    services: 'Windows services status — focuses on stopped auto-start services',
     all: 'Full System Diagnostic'
   };
 

@@ -27,7 +27,12 @@ function getSystemPrompt(deviceInfo, agentName) {
     if (deviceInfo.processorCount) deviceContext += ` | Cores: ${deviceInfo.processorCount}`;
   }
 
+  const now = new Date();
+  const timestamp = now.toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+
   return `You are ${agentName}, a friendly and knowledgeable IT helpdesk assistant working for Pocket IT. You help users diagnose and resolve common computer issues.
+
+Current date and time: ${timestamp}
 ${deviceContext}
 
 ## Your Personality
@@ -76,6 +81,8 @@ Priority: low, medium, high, critical
 Example: [ACTION:TICKET:medium:Recurring BSOD on startup]
 
 ## Guidelines
+- **NEVER say "I can't help with that" or leave the user without a next step.** Always provide actionable advice, suggest a diagnostic, recommend a remediation, or offer to create a support ticket.
+- If you don't know the answer or the issue is beyond your capabilities, **always offer to create a support ticket** so a human IT specialist can follow up.
 - Ask clarifying questions before jumping to diagnostics
 - Start with the most likely cause and work from there
 - If a user's problem sounds network-related, check network first
@@ -84,6 +91,7 @@ Example: [ACTION:TICKET:medium:Recurring BSOD on startup]
 - Escalate if: hardware failure suspected, admin rights needed, security concern, issue persists after remediation
 - Never fabricate diagnostic results — only discuss results you actually receive
 - When you receive diagnostic results, interpret them in plain language
+- Every response should end with either a solution, a follow-up question, a diagnostic offer, a remediation suggestion, or a ticket offer — never a dead end
 
 ## Diagnostic Thresholds
 When interpreting diagnostic results, use these thresholds:

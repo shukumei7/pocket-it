@@ -329,6 +329,45 @@ function setup(io, app) {
 
             // Emit updated stats
             io.of('/it').emit('alert_stats_updated', alertService.getStats());
+
+            // v0.5.0: Check auto-remediation policies for each new alert
+            for (const alert of newAlerts) {
+              try {
+                const policy = alertService.getAutoRemediationPolicy(alert.threshold_id);
+                if (policy) {
+                  alertService.markPolicyTriggered(policy.id);
+
+                  // Emit remediation request to device
+                  socket.emit('remediation_request', {
+                    actionId: policy.action_id,
+                    requestId: `auto-${Date.now()}`,
+                    parameter: policy.parameter || null,
+                    autoApprove: !policy.require_consent
+                  });
+
+                  // Audit log
+                  db.prepare(
+                    "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+                  ).run('system', 'auto_remediation_triggered', deviceId, JSON.stringify({
+                    policyId: policy.id, actionId: policy.action_id, alertId: alert.id
+                  }));
+
+                  // Notify IT dashboard
+                  io.of('/it').emit('auto_remediation_triggered', {
+                    deviceId,
+                    hostname: device?.hostname || deviceId,
+                    actionId: policy.action_id,
+                    parameter: policy.parameter,
+                    alertId: alert.id,
+                    requiresConsent: !!policy.require_consent
+                  });
+
+                  console.log(`[Agent] Auto-remediation triggered: ${policy.action_id} for device ${deviceId}`);
+                }
+              } catch (policyErr) {
+                console.error('[Agent] Auto-remediation policy error:', policyErr.message);
+              }
+            }
           }
         }
       } catch (err) {
@@ -408,6 +447,83 @@ function setup(io, app) {
       if (diagnosticAI) {
         diagnosticAI.clearContext(deviceId);
       }
+    });
+
+    // v0.5.0: File access results from client
+    socket.on('file_browse_result', (data) => {
+      console.log(`[Agent] File browse result from ${deviceId}: ${data.requestId}`);
+
+      // Audit log
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'file_browse_completed', data.path || '', JSON.stringify({ requestId: data.requestId, approved: data.approved }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      // Relay to IT dashboard
+      io.of('/it').emit('file_browse_result', {
+        deviceId,
+        requestId: data.requestId,
+        approved: data.approved,
+        path: data.path,
+        entries: data.entries || [],
+        error: data.error || null
+      });
+    });
+
+    socket.on('file_read_result', (data) => {
+      console.log(`[Agent] File read result from ${deviceId}: ${data.requestId}`);
+
+      // Audit log
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'file_read_completed', data.path || '', JSON.stringify({ requestId: data.requestId, approved: data.approved, sizeBytes: data.sizeBytes }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      io.of('/it').emit('file_read_result', {
+        deviceId,
+        requestId: data.requestId,
+        approved: data.approved,
+        path: data.path,
+        content: data.content || '',
+        sizeBytes: data.sizeBytes || 0,
+        error: data.error || null
+      });
+    });
+
+    // v0.5.0: Script execution results from client
+    socket.on('script_result', (data) => {
+      console.log(`[Agent] Script result from ${deviceId}: ${data.requestId} (exit=${data.exitCode})`);
+
+      // Audit log
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'script_completed', data.scriptName || 'ad-hoc', JSON.stringify({
+          requestId: data.requestId, exitCode: data.exitCode, success: data.success,
+          durationMs: data.durationMs, truncated: data.truncated, timedOut: data.timedOut
+        }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      io.of('/it').emit('script_result', {
+        deviceId,
+        requestId: data.requestId,
+        success: data.success,
+        output: data.output || '',
+        errorOutput: data.errorOutput || '',
+        exitCode: data.exitCode,
+        durationMs: data.durationMs,
+        truncated: data.truncated || false,
+        timedOut: data.timedOut || false,
+        validationError: data.validationError || null
+      });
     });
 
     // Disconnect

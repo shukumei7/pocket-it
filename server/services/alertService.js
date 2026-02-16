@@ -159,6 +159,29 @@ class AlertService {
     const warning = this.db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status IN ('active', 'acknowledged') AND severity = 'warning'").get().count;
     return { activeCount: active + acknowledged, criticalCount: critical, warningCount: warning };
   }
+
+  getAutoRemediationPolicy(thresholdId) {
+    if (!thresholdId) return null;
+    const policy = this.db.prepare(
+      'SELECT * FROM auto_remediation_policies WHERE threshold_id = ? AND enabled = 1'
+    ).get(thresholdId);
+    if (!policy) return null;
+
+    // Check cooldown
+    if (policy.last_triggered_at) {
+      const lastTriggered = new Date(policy.last_triggered_at + 'Z').getTime();
+      const cooldownMs = policy.cooldown_minutes * 60 * 1000;
+      if (Date.now() - lastTriggered < cooldownMs) return null;
+    }
+
+    return policy;
+  }
+
+  markPolicyTriggered(policyId) {
+    this.db.prepare(
+      "UPDATE auto_remediation_policies SET last_triggered_at = datetime('now') WHERE id = ?"
+    ).run(policyId);
+  }
 }
 
 module.exports = AlertService;

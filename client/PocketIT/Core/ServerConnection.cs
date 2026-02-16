@@ -22,10 +22,13 @@ public class ServerConnection : IDisposable
 
     public event Action<string>? OnChatResponse;
     public event Action<string, string>? OnDiagnosticRequest; // checkType, requestId
-    public event Action<string, string, string?>? OnRemediationRequest; // actionId, requestId, parameter
+    public event Action<string, string, string?, bool>? OnRemediationRequest; // actionId, requestId, parameter, autoApprove
     public event Action<bool>? OnConnectionChanged;
     public event Action<string>? OnChatHistory;
     public event Action? OnConnectedReady;
+    public event Action<string, string>? OnFileBrowseRequest; // requestId, path
+    public event Action<string, string>? OnFileReadRequest; // requestId, path
+    public event Action<string, string, string, bool, int>? OnScriptRequest; // requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -104,13 +107,50 @@ public class ServerConnection : IDisposable
             var actionId = data.GetProperty("actionId").GetString() ?? "";
             var requestId = data.GetProperty("requestId").GetString() ?? "";
             var parameter = data.TryGetProperty("parameter", out var paramProp) ? paramProp.GetString() : null;
-            OnRemediationRequest?.Invoke(actionId, requestId, parameter);
+            bool autoApprove = false;
+            if (data.TryGetProperty("autoApprove", out var autoApproveProp) && autoApproveProp.ValueKind == JsonValueKind.True)
+                autoApprove = true;
+            OnRemediationRequest?.Invoke(actionId, requestId, parameter, autoApprove);
         });
 
         _socket.On("chat_history", response =>
         {
             var data = response.GetValue<JsonElement>();
             OnChatHistory?.Invoke(data.GetRawText());
+        });
+
+        _socket.On("file_browse_request", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            var path = json.GetProperty("path").GetString() ?? "";
+            Logger.Info($"File browse request: {path} (requestId: {requestId})");
+            OnFileBrowseRequest?.Invoke(requestId, path);
+        });
+
+        _socket.On("file_read_request", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            var path = json.GetProperty("path").GetString() ?? "";
+            Logger.Info($"File read request: {path} (requestId: {requestId})");
+            OnFileReadRequest?.Invoke(requestId, path);
+        });
+
+        _socket.On("script_request", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            var scriptName = json.GetProperty("scriptName").GetString() ?? "";
+            var scriptContent = json.GetProperty("scriptContent").GetString() ?? "";
+            bool requiresElevation = false;
+            if (json.TryGetProperty("requiresElevation", out var elevProp) && elevProp.ValueKind == JsonValueKind.True)
+                requiresElevation = true;
+            int timeoutSeconds = 60;
+            if (json.TryGetProperty("timeoutSeconds", out var toProp))
+                timeoutSeconds = toProp.GetInt32();
+            Logger.Info($"Script request: {scriptName} (requestId: {requestId}, elevation: {requiresElevation})");
+            OnScriptRequest?.Invoke(requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds);
         });
 
         try
@@ -190,6 +230,33 @@ public class ServerConnection : IDisposable
         if (_isConnected && _socket != null)
         {
             await _socket.EmitAsync("clear_context", new { deviceId = _deviceId });
+        }
+    }
+
+    public async Task SendFileBrowseResult(string requestId, string path, bool approved, object? entries = null, string? error = null)
+    {
+        await EmitAsync("file_browse_result", new { requestId, path, approved, entries, error });
+    }
+
+    public async Task SendFileReadResult(string requestId, string path, bool approved, string? content = null, long sizeBytes = 0, string? error = null)
+    {
+        await EmitAsync("file_read_result", new { requestId, path, approved, content, sizeBytes, error });
+    }
+
+    public async Task SendScriptResult(string requestId, string? scriptName, bool success, string output = "", string errorOutput = "", int exitCode = -1, long durationMs = 0, bool truncated = false, bool timedOut = false, string? validationError = null)
+    {
+        await EmitAsync("script_result", new { requestId, scriptName, success, output, errorOutput, exitCode, durationMs, truncated, timedOut, validationError });
+    }
+
+    private async Task EmitAsync(string eventName, object data)
+    {
+        if (_isConnected && _socket != null)
+        {
+            await _socket.EmitAsync(eventName, data);
+        }
+        else
+        {
+            _offlineQueue.Enqueue(new { type = eventName, data });
         }
     }
 

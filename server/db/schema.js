@@ -158,6 +158,32 @@ function initDatabase(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_alerts_device_status ON alerts(device_id, status);
     CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status);
     CREATE INDEX IF NOT EXISTS idx_alert_thresholds_check_type ON alert_thresholds(check_type);
+
+    CREATE TABLE IF NOT EXISTS auto_remediation_policies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      threshold_id INTEGER REFERENCES alert_thresholds(id),
+      action_id TEXT NOT NULL,
+      parameter TEXT,
+      cooldown_minutes INTEGER DEFAULT 30,
+      require_consent INTEGER DEFAULT 1,
+      enabled INTEGER DEFAULT 1,
+      last_triggered_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS script_library (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      script_content TEXT NOT NULL,
+      category TEXT DEFAULT 'general',
+      requires_elevation INTEGER DEFAULT 0,
+      timeout_seconds INTEGER DEFAULT 60,
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_auto_remediation_threshold ON auto_remediation_policies(threshold_id);
   `);
 
   // Seed default alert thresholds (only if table is empty)
@@ -178,6 +204,59 @@ function initDatabase(dbPath) {
     );
     for (const t of defaultThresholds) {
       insertThreshold.run(t.check_type, t.field_path, t.operator, t.threshold_value, t.severity, t.consecutive_required);
+    }
+  }
+
+  // Seed default scripts (only if table is empty)
+  const scriptCount = db.prepare('SELECT COUNT(*) as count FROM script_library').get().count;
+  if (scriptCount === 0) {
+    const defaultScripts = [
+      {
+        name: 'System Information',
+        description: 'Detailed system information including OS, hardware, and network config',
+        script_content: 'systeminfo /fo csv',
+        category: 'info',
+        requires_elevation: 0,
+        timeout_seconds: 30
+      },
+      {
+        name: 'Recent Crash Events',
+        description: 'Last 10 application crash events from Windows Event Log',
+        script_content: "Get-WinEvent -FilterHashtable @{LogName='Application';Id=1000,1001,1002} -MaxEvents 10 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, Message | ConvertTo-Json",
+        category: 'diagnostics',
+        requires_elevation: 0,
+        timeout_seconds: 30
+      },
+      {
+        name: 'Disk Health (SMART)',
+        description: 'Physical disk health status via SMART data',
+        script_content: 'Get-PhysicalDisk | Select-Object FriendlyName, MediaType, OperationalStatus, HealthStatus, @{N="SizeGB";E={[math]::Round($_.Size/1GB,1)}} | ConvertTo-Json',
+        category: 'diagnostics',
+        requires_elevation: 0,
+        timeout_seconds: 15
+      },
+      {
+        name: 'Startup Programs',
+        description: 'Programs configured to run at system startup',
+        script_content: 'Get-CimInstance Win32_StartupCommand | Select-Object Name, Command, Location | ConvertTo-Json',
+        category: 'info',
+        requires_elevation: 0,
+        timeout_seconds: 15
+      },
+      {
+        name: 'Network Configuration',
+        description: 'Active network adapter configuration including IP, gateway, DNS',
+        script_content: 'Get-NetIPConfiguration | Select-Object InterfaceAlias, @{N="IPv4";E={$_.IPv4Address.IPAddress}}, @{N="Gateway";E={$_.IPv4DefaultGateway.NextHop}}, @{N="DNS";E={($_.DNSServer.ServerAddresses) -join ","}} | ConvertTo-Json',
+        category: 'network',
+        requires_elevation: 0,
+        timeout_seconds: 15
+      }
+    ];
+    const insertScript = db.prepare(
+      'INSERT INTO script_library (name, description, script_content, category, requires_elevation, timeout_seconds) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    for (const s of defaultScripts) {
+      insertScript.run(s.name, s.description, s.script_content, s.category, s.requires_elevation, s.timeout_seconds);
     }
   }
 

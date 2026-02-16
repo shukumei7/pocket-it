@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-02-16
+
+### Added
+- Scheduled client-side diagnostics with configurable interval (default 15 minutes)
+- Alert threshold system with configurable check_type, field_path, operator, threshold_value, severity
+- Consecutive hit tracking for alert thresholds (reduces false positives)
+- Auto-resolve alerts when conditions clear
+- Uptime monitoring via heartbeat timeout detection (5-minute threshold)
+- Webhook, Slack, and Teams notification channels with retry logic
+- REST API for alert thresholds, alerts, and notification channel CRUD
+- Dashboard Alerts tab with real-time updates, acknowledge/resolve actions
+- Threshold configuration management in dashboard
+- Notification channel management with test functionality
+- Alert count badge in navigation bar
+- 8 default alert thresholds seeded on first run (CPU, memory, disk, event log, services)
+
+### Changed
+- Health score now computed from all 8 check types (was 4)
+- Fleet stats include active alert count
+- Database schema adds 3 tables: alert_thresholds, alerts, notification_channels
+
+## [0.3.0] - 2026-02-16
+
+### Added
+- 5 new diagnostic checks: top_processes (CPU/memory per process), event_log (Windows errors/criticals), windows_update (patch status), installed_software (registry scan), services (auto-start service health)
+- Parameterized remediation support: IRemediationAction interface extended with RequiresParameter, ParameterLabel, ExecuteAsync(string)
+- kill_process remediation action with safety blocklist (csrss, lsass, svchost, etc.) and Session 0 protection
+- restart_service remediation action with service whitelist (spooler, wuauserv, bits, dnscache, etc.)
+- Process table renderer in chat UI with CPU/memory highlighting
+- Event log renderer with color-coded severity badges
+- Software list renderer with search/filter
+- Services list renderer focusing on stopped auto-start services
+
+### Changed
+- Decision engine regex now supports optional parameter: `[ACTION:REMEDIATE:action:param]`
+- Server connection passes optional parameter through remediation request pipeline
+- AI system prompt updated with new check types and safety guidelines
+
 ## [0.2.1] - 2026-02-15
 
 ### Fixed
@@ -122,7 +160,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/example/pocket-it/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/example/pocket-it/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/example/pocket-it/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/example/pocket-it/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/example/pocket-it/compare/v0.1.3...v0.1.4

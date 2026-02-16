@@ -25,6 +25,8 @@ public class TrayApplication : ApplicationContext
     private readonly IConfiguration _config;
     private readonly SynchronizationContext _uiContext;
     private readonly LocalDatabase _localDb;
+    private readonly FileAccess.FileAccessService _fileAccess = new();
+    private readonly Scripts.ScriptExecutionService _scriptExecution = new();
     private bool _isEnrolled;
     private bool _wasConnected;
 
@@ -77,6 +79,9 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnDiagnosticRequest += OnServerDiagnosticRequest;
         _serverConnection.OnRemediationRequest += OnServerRemediationRequest;
         _serverConnection.OnConnectedReady += OnServerConnectedReady;
+        _serverConnection.OnFileBrowseRequest += OnServerFileBrowseRequest;
+        _serverConnection.OnFileReadRequest += OnServerFileReadRequest;
+        _serverConnection.OnScriptRequest += OnServerScriptRequest;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -314,20 +319,86 @@ public class TrayApplication : ApplicationContext
         _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
     }
 
-    private void OnServerRemediationRequest(string actionId, string requestId, string? parameter)
+    private void OnServerRemediationRequest(string actionId, string requestId, string? parameter, bool autoApprove)
     {
+        // v0.5.0: Auto-approve for low-risk actions when policy allows
+        if (autoApprove)
+        {
+            var info = _remediationEngine.GetActionInfo(actionId);
+            if (info != null && info.CanAutoApprove)
+            {
+                Logger.Info($"Auto-remediation executing: {actionId} (parameter: {parameter})");
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var result = await _remediationEngine.ExecuteAsync(actionId, parameter);
+                        await _serverConnection.SendRemediationResult(requestId, result.Success, result.Message);
+                        Logger.Info($"Auto-remediation completed: {actionId} - {(result.Success ? "success" : "failed")}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"Auto-remediation failed: {actionId}", ex);
+                    }
+                });
+                return;
+            }
+            Logger.Warn($"Auto-approve denied for {actionId}: not a low-risk action");
+        }
+
         // Forward to chat window for user approval
-        var info = _remediationEngine.GetActionInfo(actionId);
+        var info2 = _remediationEngine.GetActionInfo(actionId);
         var msg = JsonSerializer.Serialize(new
         {
             type = "remediation_request",
             actionId,
             requestId,
             parameter,
-            description = info?.Description ?? actionId,
+            description = info2?.Description ?? actionId,
             requiresApproval = true
         });
         _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
+    }
+
+    private void OnServerFileBrowseRequest(string requestId, string path)
+    {
+        Logger.Info($"File browse request: {path}");
+        var bridgeData = new
+        {
+            type = "file_access_request",
+            operation = "browse",
+            path,
+            requestId
+        };
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
+    }
+
+    private void OnServerFileReadRequest(string requestId, string path)
+    {
+        Logger.Info($"File read request: {path}");
+        var bridgeData = new
+        {
+            type = "file_access_request",
+            operation = "read",
+            path,
+            requestId
+        };
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
+    }
+
+    private void OnServerScriptRequest(string requestId, string scriptName, string scriptContent, bool requiresElevation, int timeoutSeconds)
+    {
+        Logger.Info($"Script request: {scriptName} (elevation: {requiresElevation})");
+        var bridgeData = new
+        {
+            type = "script_request",
+            requestId,
+            scriptName,
+            scriptContent,
+            requiresElevation,
+            timeoutSeconds
+        };
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
     }
 
     private async void OnServerConnectedReady()
@@ -407,6 +478,100 @@ public class TrayApplication : ApplicationContext
                 case "clear_chat":
                     await _serverConnection.SendClearContext();
                     break;
+
+                case "approve_file_access":
+                {
+                    var requestId = root.GetProperty("requestId").GetString() ?? "";
+                    var operation = root.GetProperty("operation").GetString() ?? "";
+                    var path = root.GetProperty("path").GetString() ?? "";
+                    Logger.Info($"File access approved: {operation} {path}");
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            if (operation == "browse")
+                            {
+                                var entries = _fileAccess.Browse(path);
+                                await _serverConnection.SendFileBrowseResult(requestId, path, true, entries);
+                            }
+                            else if (operation == "read")
+                            {
+                                var result = _fileAccess.ReadFile(path);
+                                if (result.Success)
+                                    await _serverConnection.SendFileReadResult(requestId, path, true, result.Content, result.SizeBytes);
+                                else
+                                    await _serverConnection.SendFileReadResult(requestId, path, true, error: result.Error);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"File access failed: {operation} {path}", ex);
+                            if (operation == "browse")
+                                await _serverConnection.SendFileBrowseResult(requestId, path, true, error: ex.Message);
+                            else
+                                await _serverConnection.SendFileReadResult(requestId, path, true, error: ex.Message);
+                        }
+                    });
+                    break;
+                }
+
+                case "deny_file_access":
+                {
+                    var requestId = root.GetProperty("requestId").GetString() ?? "";
+                    var operation = root.GetProperty("operation").GetString() ?? "";
+                    var path = root.GetProperty("path").GetString() ?? "";
+                    Logger.Info($"File access denied: {operation} {path}");
+
+                    _ = Task.Run(async () =>
+                    {
+                        if (operation == "browse")
+                            await _serverConnection.SendFileBrowseResult(requestId, path, false, error: "Access denied by user");
+                        else
+                            await _serverConnection.SendFileReadResult(requestId, path, false, error: "Access denied by user");
+                    });
+                    break;
+                }
+
+                case "approve_script":
+                {
+                    var requestId = root.GetProperty("requestId").GetString() ?? "";
+                    var scriptName = root.TryGetProperty("scriptName", out var snProp) ? snProp.GetString() : "script";
+                    var scriptContent = root.GetProperty("scriptContent").GetString() ?? "";
+                    bool requiresElevation = root.TryGetProperty("requiresElevation", out var eProp) && eProp.ValueKind == JsonValueKind.True;
+                    int timeoutSeconds = root.TryGetProperty("timeoutSeconds", out var tProp) ? tProp.GetInt32() : 60;
+                    Logger.Info($"Script approved: {scriptName}");
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var result = await _scriptExecution.ExecuteAsync(scriptContent, timeoutSeconds, requiresElevation);
+                            await _serverConnection.SendScriptResult(requestId, scriptName, result.Success,
+                                result.Output, result.ErrorOutput, result.ExitCode, result.DurationMs,
+                                result.Truncated, result.TimedOut, result.ValidationError);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"Script execution failed: {scriptName}", ex);
+                            await _serverConnection.SendScriptResult(requestId, scriptName, false, errorOutput: ex.Message);
+                        }
+                    });
+                    break;
+                }
+
+                case "deny_script":
+                {
+                    var requestId = root.GetProperty("requestId").GetString() ?? "";
+                    var scriptName = root.TryGetProperty("scriptName", out var snProp) ? snProp.GetString() : "script";
+                    Logger.Info($"Script denied: {scriptName}");
+
+                    _ = Task.Run(async () =>
+                    {
+                        await _serverConnection.SendScriptResult(requestId, scriptName, false, errorOutput: "Script execution denied by user");
+                    });
+                    break;
+                }
 
                 case "enroll":
                     var token = root.GetProperty("token").GetString() ?? "";

@@ -564,27 +564,30 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.2.0)
+## Current Status (v0.4.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
 - Device enrollment with one-time tokens
 - Device secret authentication on Socket.IO connections (required, no legacy null secrets allowed)
-- 4 diagnostic checks (CPU, memory, disk, network)
-- 5 whitelisted remediation actions (flush DNS, clear temp, restart spooler, repair network, clear browser cache)
+- 10 diagnostic checks (CPU, memory, disk, network, top_processes, event_log, windows_update, installed_software, services, system profile)
+- 7 whitelisted remediation actions (flush DNS, clear temp, restart spooler, repair network, clear browser cache, kill process, restart service)
 - **Real device diagnostics**: auto-collect system profile (CPU model, RAM, disk, cores) on connect
-- **Health scoring system**: 0-100 score computed from diagnostic results (ok=100, warning=50, error=0)
+- **Health scoring system**: 0-100 score computed from all 8 check types (ok=100, warning=50, error=0)
 - **Health dashboard**: colored health bars, hardware info display, average health stats
 - **AI hardware context**: diagnostics include CPU/RAM/disk specs for better recommendations
+- **Proactive monitoring**: scheduled diagnostics (15-minute interval), alert thresholds with consecutive hit tracking
+- **Notification channels**: webhook, Slack, and Teams notifications with retry logic
+- **Dashboard Alerts tab**: real-time alert updates, acknowledge/resolve actions, threshold configuration, notification channel management
 - Support ticket system with IT staff escalation
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
-- IT staff dashboard (Fleet, Tickets, Enrollment) with login overlay for remote access
+- IT staff dashboard (Fleet, Tickets, Enrollment, Alerts) with login overlay for remote access
 - Security hardening: JWT required, rate limiting, account lockout, CORS whitelist, input validation, prompt injection defense, server-side action whitelist, XSS prevention, Socket.IO chat rate limiting
 - Device removal with cascade delete (chat messages, diagnostics)
 - Chat history on reconnect (last 20 messages)
 - Full ticket detail view with comments and status/priority editing
-- 50 tests total (34 security unit tests + 16 E2E smoke tests)
+- 50+ tests (34 security unit tests + 16 E2E smoke tests)
 
 ### Setup
 
@@ -623,14 +626,27 @@ dotnet run
 - Device online/offline status tracking
 - Localhost authentication bypass for development
 
-**Phase 2 roadmap:**
-- Remote IT staff access with JWT authentication
-- Device certificate authentication (mTLS)
-- Additional remediation actions (restart services, update drivers)
-- Proactive monitoring and alerting
-- Knowledge base integration
-- Multi-language support
-- Mobile app for IT staff
+## Roadmap
+
+### Delivered
+| Version | Theme | Highlights |
+|---------|-------|------------|
+| v0.1.0 | Core MVP | AI chat, device enrollment, basic diagnostics, 2 remediation actions |
+| v0.1.4 | Dashboard & Actions | IT dashboard login, ticket detail views, 3 more remediation actions |
+| v0.2.0 | Real Diagnostics | System profiling, health scoring, auto-diagnostics on connect |
+| v0.2.1 | Reliability | File-based logger, config validation, elevation checks |
+| v0.3.0 | Expanded Capabilities | 5 new diagnostic checks, parameterized remediation, kill_process, restart_service |
+| v0.4.0 | Proactive Monitoring | Scheduled diagnostics, alert thresholds, notifications (webhook/Slack/Teams), dashboard alerts tab |
+
+### Planned
+| Version | Theme | Key Capabilities |
+|---------|-------|-----------------|
+| v0.5.0 | Remote Execution & File Access | Auto-remediation policies, IT-admin file browser, remote PowerShell script execution |
+| v0.6.0 | Reporting & Analytics | Trend charts, health history, CSV/PDF export, scheduled reports |
+| v0.7.0 | Patch & Software Management | Trigger Windows Update, remote install/uninstall, compliance policies |
+| v0.8.0 | Knowledge Base | Searchable KB, AI references KB in responses, IT staff curated solutions |
+| v0.9.0 | Multi-tenant & RBAC | Organizations, role-based permissions, IT team management |
+| v1.0.0 | Production Ready | mTLS device certs, audit compliance, MSI installer packaging |
 
 ## Development
 

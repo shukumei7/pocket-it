@@ -131,6 +131,12 @@ app.use('/api/llm', createLLMRouter(llmService));
 const createAlertsRouter = require('./routes/alerts');
 app.use('/api/alerts', createAlertsRouter(alertService, notificationService));
 
+const createPoliciesRouter = require('./routes/policies');
+app.use('/api/alerts/policies', createPoliciesRouter(alertService));
+
+const createScriptsRouter = require('./routes/scripts');
+app.use('/api/scripts', createScriptsRouter());
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (req, res) => {

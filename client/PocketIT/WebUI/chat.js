@@ -45,6 +45,11 @@
         return div;
     }
 
+    function appendToChat(element) {
+        messagesEl.appendChild(element);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
@@ -239,6 +244,99 @@
         return container;
     }
 
+    function createFileAccessPrompt(operation, path, requestId) {
+        const card = document.createElement('div');
+        card.className = 'action-card';
+
+        const icon = operation === 'browse' ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+        const opLabel = operation === 'browse' ? 'Browse Directory' : 'Read File';
+
+        card.innerHTML = `
+            <div class="action-header">
+                <strong>${icon} File Access Request</strong>
+            </div>
+            <div class="action-body" style="margin: 8px 0;">
+                <div style="font-size: 13px; color: #8f98a0;">Operation: <strong>${opLabel}</strong></div>
+                <div style="font-size: 13px; color: #66c0f4; font-family: monospace; word-break: break-all; margin-top: 4px;">${escapeHtml(path)}</div>
+                <div style="font-size: 11px; color: #8f98a0; margin-top: 4px;">IT staff is requesting access to this ${operation === 'browse' ? 'directory' : 'file'}.</div>
+            </div>
+        `;
+
+        const btnRow = document.createElement('div');
+        btnRow.className = 'action-buttons';
+
+        const approveBtn = document.createElement('button');
+        approveBtn.className = 'btn-approve';
+        approveBtn.textContent = 'Allow';
+        approveBtn.onclick = () => {
+            sendBridgeMessage('approve_file_access', { requestId, operation, path });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #66bb6a; font-size: 12px;">Allowed</span>';
+        };
+
+        const denyBtn = document.createElement('button');
+        denyBtn.className = 'btn-deny';
+        denyBtn.textContent = 'Deny';
+        denyBtn.onclick = () => {
+            sendBridgeMessage('deny_file_access', { requestId, operation, path });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #ef5350; font-size: 12px;">Denied</span>';
+        };
+
+        btnRow.appendChild(approveBtn);
+        btnRow.appendChild(denyBtn);
+        card.appendChild(btnRow);
+        return card;
+    }
+
+    function createScriptPrompt(scriptName, scriptContent, requiresElevation, timeoutSeconds, requestId) {
+        const card = document.createElement('div');
+        card.className = 'action-card';
+
+        card.innerHTML = `
+            <div class="action-header">
+                <strong>\uD83D\uDCDC Script Execution Request</strong>
+                ${requiresElevation ? '<span style="background:#4a1919; color:#ef5350; font-size:10px; padding:2px 6px; border-radius:4px; margin-left:8px;">ADMIN</span>' : ''}
+            </div>
+            <div class="action-body" style="margin: 8px 0;">
+                <div style="font-size: 13px; color: #8f98a0;">Script: <strong style="color: #c7d5e0;">${escapeHtml(scriptName)}</strong></div>
+                <div style="font-size: 11px; color: #8f98a0; margin-top: 2px;">Timeout: ${timeoutSeconds}s</div>
+                <pre style="background: #0a0f14; border: 1px solid #2a475e; border-radius: 4px; padding: 8px; margin-top: 8px; font-size: 11px; max-height: 200px; overflow: auto; white-space: pre-wrap; color: #a8b4c0;">${escapeHtml(scriptContent)}</pre>
+                <div style="font-size: 11px; color: #ffa726; margin-top: 4px;">IT staff wants to run this script on your computer. Review the content before approving.</div>
+            </div>
+        `;
+
+        const btnRow = document.createElement('div');
+        btnRow.className = 'action-buttons';
+
+        const approveBtn = document.createElement('button');
+        approveBtn.className = 'btn-approve';
+        approveBtn.textContent = 'Run Script';
+        approveBtn.onclick = () => {
+            sendBridgeMessage('approve_script', { requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #66bb6a; font-size: 12px;">Running...</span>';
+        };
+
+        const denyBtn = document.createElement('button');
+        denyBtn.className = 'btn-deny';
+        denyBtn.textContent = 'Deny';
+        denyBtn.onclick = () => {
+            sendBridgeMessage('deny_script', { requestId, scriptName });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #ef5350; font-size: 12px;">Denied</span>';
+        };
+
+        btnRow.appendChild(approveBtn);
+        btnRow.appendChild(denyBtn);
+        card.appendChild(btnRow);
+        return card;
+    }
+
     // ---- Typing indicator ----
 
     let typingEl = null;
@@ -408,6 +506,16 @@
                     addMessage(`${agentName} wants to run: **${data.description || data.checkType}**`, 'ai', {
                         action: { type: 'diagnostic', checkType: data.checkType, requestId: data.requestId }
                     });
+                    break;
+
+                case 'file_access_request':
+                    const fileCard = createFileAccessPrompt(data.operation, data.path, data.requestId);
+                    appendToChat(fileCard);
+                    break;
+
+                case 'script_request':
+                    const scriptCard = createScriptPrompt(data.scriptName, data.scriptContent, data.requiresElevation, data.timeoutSeconds, data.requestId);
+                    appendToChat(scriptCard);
                     break;
 
                 case 'remediation_result':

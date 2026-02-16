@@ -118,6 +118,143 @@ function setup(io, app) {
       }
     });
 
+    // v0.5.0: File access requests from IT dashboard
+    socket.on('request_file_browse', (data) => {
+      const { deviceId, path: browsePath } = data;
+      console.log(`[IT] File browse request for ${deviceId}: ${browsePath}`);
+
+      // Audit log
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'file_browse_requested', deviceId, JSON.stringify({ path: browsePath }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `fb-${Date.now()}`;
+          deviceSocket.emit('file_browse_request', {
+            requestId,
+            path: browsePath
+          });
+          socket.emit('file_browse_requested', { deviceId, requestId, path: browsePath });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('request_file_read', (data) => {
+      const { deviceId, path: filePath } = data;
+      console.log(`[IT] File read request for ${deviceId}: ${filePath}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'file_read_requested', deviceId, JSON.stringify({ path: filePath }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `fr-${Date.now()}`;
+          deviceSocket.emit('file_read_request', {
+            requestId,
+            path: filePath
+          });
+          socket.emit('file_read_requested', { deviceId, requestId, path: filePath });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    // v0.5.0: Script execution from IT dashboard
+    socket.on('execute_script', (data) => {
+      const { deviceId, scriptName, scriptContent, requiresElevation, timeoutSeconds } = data;
+      console.log(`[IT] Script execution request for ${deviceId}: ${scriptName || 'ad-hoc'}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'script_requested', deviceId, JSON.stringify({
+          scriptName: scriptName || 'ad-hoc',
+          scriptLength: (scriptContent || '').length,
+          requiresElevation: !!requiresElevation
+        }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `sc-${Date.now()}`;
+          deviceSocket.emit('script_request', {
+            requestId,
+            scriptName: scriptName || 'Ad-hoc Script',
+            scriptContent,
+            requiresElevation: !!requiresElevation,
+            timeoutSeconds: timeoutSeconds || 60
+          });
+          socket.emit('script_requested', { deviceId, requestId, scriptName });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('execute_library_script', (data) => {
+      const { deviceId, scriptId } = data;
+      console.log(`[IT] Library script execution for ${deviceId}: scriptId=${scriptId}`);
+
+      const db = app.locals.db;
+      const script = db.prepare('SELECT * FROM script_library WHERE id = ?').get(scriptId);
+      if (!script) {
+        socket.emit('error_message', { message: 'Script not found in library' });
+        return;
+      }
+
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'script_requested', deviceId, JSON.stringify({
+          scriptId, scriptName: script.name, requiresElevation: !!script.requires_elevation
+        }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `sc-${Date.now()}`;
+          deviceSocket.emit('script_request', {
+            requestId,
+            scriptName: script.name,
+            scriptContent: script.script_content,
+            requiresElevation: !!script.requires_elevation,
+            timeoutSeconds: script.timeout_seconds || 60
+          });
+          socket.emit('script_requested', { deviceId, requestId, scriptName: script.name });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`[IT] Dashboard disconnected: ${socket.id}`);
       watchers.delete(socket.id);

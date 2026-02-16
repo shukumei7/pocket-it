@@ -361,6 +361,135 @@
             font-size: 13px;
         }
         .alert-filter-btn.active { background: #2a475e; color: #c7d5e0; border-color: #66c0f4; }
+
+        /* File browser */
+        .file-browser {
+            background: #0f1923;
+            border: 1px solid #2a475e;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 12px;
+        }
+        .file-breadcrumb {
+            font-size: 12px;
+            color: #8f98a0;
+            margin-bottom: 8px;
+            font-family: monospace;
+        }
+        .file-breadcrumb span { cursor: pointer; color: #66c0f4; }
+        .file-breadcrumb span:hover { text-decoration: underline; }
+        .file-list { list-style: none; max-height: 300px; overflow-y: auto; }
+        .file-list li {
+            padding: 6px 8px;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .file-list li:hover { background: #1b2838; }
+        .file-list .file-icon { width: 16px; text-align: center; }
+        .file-list .file-name { flex: 1; }
+        .file-list .file-size { font-size: 11px; color: #8f98a0; }
+        .file-viewer {
+            background: #0a0f14;
+            border: 1px solid #2a475e;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 12px;
+            max-height: 400px;
+            overflow: auto;
+        }
+        .file-viewer pre {
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin: 0;
+            color: #a8b4c0;
+        }
+        .file-viewer .file-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #8f98a0;
+        }
+
+        /* Script execution */
+        .script-panel { margin-top: 12px; }
+        .script-select {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .script-select select, .script-select button {
+            background: #0f1923;
+            border: 1px solid #2a475e;
+            color: #c7d5e0;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .script-select select { flex: 1; }
+        .script-select button { cursor: pointer; }
+        .script-select button:hover { background: #1b2838; }
+        .script-textarea {
+            width: 100%;
+            background: #0a0f14;
+            border: 1px solid #2a475e;
+            color: #a8b4c0;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            min-height: 80px;
+            resize: vertical;
+        }
+        .script-output {
+            background: #0a0f14;
+            border: 1px solid #2a475e;
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 8px;
+            max-height: 400px;
+            overflow: auto;
+        }
+        .script-output pre {
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin: 0;
+        }
+        .script-output .stdout { color: #a8b4c0; }
+        .script-output .stderr { color: #ef5350; }
+        .script-output .meta {
+            font-size: 11px;
+            color: #8f98a0;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #1a2535;
+        }
+        .script-spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid #2a475e;
+            border-top-color: #66c0f4;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Policy table */
+        .policy-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .policy-table th {
+            text-align: left; padding: 8px;
+            border-bottom: 1px solid #2a475e; color: #8f98a0; font-weight: 500;
+        }
+        .policy-table td { padding: 8px; border-bottom: 1px solid #1a2535; }
     </style>
 </head>
 <body>
@@ -447,6 +576,40 @@
                     <button class="diag-btn" onclick="requestDiag('network')">Network</button>
                 </div>
                 <div id="detail-diagnostics" style="margin-top: 12px;"></div>
+
+                <h4 style="margin: 16px 0 8px;">File Browser</h4>
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                    <input type="text" id="file-browse-path" placeholder="Path to browse..." style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px; font-family:monospace;" />
+                    <button class="diag-btn" onclick="browseFiles()">Browse</button>
+                </div>
+                <div id="file-browser-area"></div>
+
+                <h4 style="margin: 16px 0 8px;">Remote Scripts</h4>
+                <div class="script-panel">
+                    <div class="script-select">
+                        <select id="script-library-select">
+                            <option value="">-- Select from library --</option>
+                        </select>
+                        <button onclick="runLibraryScript()">Run</button>
+                    </div>
+                    <details style="margin-top:8px;">
+                        <summary style="cursor:pointer; font-size:13px; color:#8f98a0;">Ad-hoc Script</summary>
+                        <div style="margin-top:8px;">
+                            <textarea id="adhoc-script" class="script-textarea" placeholder="Enter PowerShell script..."></textarea>
+                            <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+                                <label style="font-size:12px; color:#8f98a0; display:flex; align-items:center; gap:4px;">
+                                    <input type="checkbox" id="adhoc-elevation" /> Admin
+                                </label>
+                                <input type="number" id="adhoc-timeout" value="60" min="5" max="300" style="width:60px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:4px 6px; border-radius:4px; font-size:12px;" />
+                                <span style="font-size:11px; color:#8f98a0;">sec</span>
+                                <span style="flex:1;"></span>
+                                <button class="diag-btn" onclick="runAdhocScript()">Execute</button>
+                            </div>
+                        </div>
+                    </details>
+                    <div id="script-output-area"></div>
+                </div>
+
                 <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #2a475e;">
                     <button class="diag-btn" onclick="removeDevice()" style="background: #4a1919; color: #ef5350;">Remove Device</button>
                     <span style="font-size: 12px; color: #8f98a0; margin-left: 8px;">Removes device and all its data. Device must re-enroll.</span>
@@ -583,6 +746,52 @@
                         <div style="display: flex; gap: 8px;">
                             <button class="diag-btn" onclick="addChannel()">Save</button>
                             <button class="diag-btn" onclick="hideAddChannelForm()">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px;">
+                <h2 class="section-title">Auto-Remediation Policies</h2>
+                <div class="alert-section">
+                    <p style="font-size: 12px; color: #8f98a0; margin-bottom: 12px;">When an alert threshold is triggered, auto-remediation can automatically execute a fix action.</p>
+                    <table class="policy-table" id="policy-table">
+                        <thead>
+                            <tr>
+                                <th>Threshold</th>
+                                <th>Action</th>
+                                <th>Parameter</th>
+                                <th>Cooldown</th>
+                                <th>Consent</th>
+                                <th>Enabled</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="policy-tbody"></tbody>
+                    </table>
+                    <button class="diag-btn" onclick="showAddPolicyForm()" style="margin-top: 12px;">Add Policy</button>
+                    <div id="add-policy-form" style="display:none; margin-top:12px; background:#0f1923; border:1px solid #2a475e; border-radius:6px; padding:16px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                            <select id="policy-threshold" style="background:#1b2838; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-size:13px;"></select>
+                            <select id="policy-action" style="background:#1b2838; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-size:13px;">
+                                <option value="flush_dns">Flush DNS</option>
+                                <option value="clear_temp">Clear Temp Files</option>
+                                <option value="clear_browser_cache">Clear Browser Cache</option>
+                                <option value="restart_spooler">Restart Spooler</option>
+                                <option value="repair_network">Repair Network</option>
+                                <option value="restart_service">Restart Service</option>
+                            </select>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:8px;">
+                            <input type="text" id="policy-parameter" placeholder="Parameter (optional)" style="background:#1b2838; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-size:13px;" />
+                            <input type="number" id="policy-cooldown" placeholder="Cooldown (min)" value="30" style="background:#1b2838; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-size:13px;" />
+                            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#c7d5e0;">
+                                <input type="checkbox" id="policy-consent" checked /> Require consent
+                            </label>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button class="diag-btn" onclick="addPolicy()">Save</button>
+                            <button class="diag-btn" onclick="hideAddPolicyForm()">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -740,6 +949,22 @@
                 document.getElementById('alert-stat-active').textContent = data.activeCount || 0;
                 document.getElementById('alert-stat-critical').textContent = data.criticalCount || 0;
                 document.getElementById('alert-stat-warning').textContent = data.warningCount || 0;
+            });
+
+            socket.on('file_browse_result', (data) => {
+                if (data.deviceId === currentDeviceId) renderFileBrowser(data);
+            });
+
+            socket.on('file_read_result', (data) => {
+                if (data.deviceId === currentDeviceId) renderFileContent(data);
+            });
+
+            socket.on('script_result', (data) => {
+                if (data.deviceId === currentDeviceId) renderScriptResult(data);
+            });
+
+            socket.on('auto_remediation_triggered', () => {
+                loadAlerts();
             });
         }
 
@@ -937,6 +1162,11 @@
             if (socket) {
                 socket.emit('watch_device', { deviceId });
             }
+
+            loadScriptLibrary();
+            document.getElementById('file-browse-path').value = '';
+            document.getElementById('file-browser-area').innerHTML = '';
+            document.getElementById('script-output-area').innerHTML = '';
         }
 
         function closeDetail() {
@@ -1068,6 +1298,7 @@
                 await loadThresholds();
                 // Load channels
                 await loadChannels();
+                await loadPolicies();
             } catch (err) {
                 console.error('Failed to load alerts:', err);
             }
@@ -1244,6 +1475,273 @@
                 loadChannels();
             } catch (err) {
                 console.error('Failed to delete channel:', err);
+            }
+        }
+
+        // ---- File Browser ----
+        let currentBrowsePath = '';
+
+        function browseFiles() {
+            if (!currentDeviceId || !socket) return;
+            const pathInput = document.getElementById('file-browse-path');
+            const path = pathInput.value.trim();
+            if (!path) { alert('Enter a path to browse'); return; }
+            currentBrowsePath = path;
+            document.getElementById('file-browser-area').innerHTML = '<div style="font-size:13px; color:#8f98a0;">Requesting access...</div>';
+            socket.emit('request_file_browse', { deviceId: currentDeviceId, path });
+        }
+
+        function renderFileBrowser(data) {
+            const area = document.getElementById('file-browser-area');
+            if (!data.approved) {
+                area.innerHTML = `<div style="color:#ef5350; font-size:13px;">Access denied by user</div>`;
+                return;
+            }
+            if (data.error) {
+                area.innerHTML = `<div style="color:#ef5350; font-size:13px;">${escapeHtml(data.error)}</div>`;
+                return;
+            }
+
+            const entries = data.entries || [];
+            // Build breadcrumb
+            const parts = data.path.replace(/\\/g, '/').split('/').filter(Boolean);
+            let breadcrumb = '<div class="file-breadcrumb">';
+            let accumulated = '';
+            for (let i = 0; i < parts.length; i++) {
+                accumulated += parts[i] + '/';
+                const p = accumulated;
+                breadcrumb += `<span onclick="navigateToPath('${escapeHtml(p.replace(/'/g, "\\'"))}')">${escapeHtml(parts[i])}</span>/`;
+            }
+            breadcrumb += '</div>';
+
+            let html = `<div class="file-browser">${breadcrumb}<ul class="file-list">`;
+            if (entries.length === 0) {
+                html += '<li style="color:#8f98a0;">Directory is empty</li>';
+            }
+            for (const entry of entries) {
+                const icon = entry.Type === 'dir' ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
+                const size = entry.Type === 'file' ? formatFileSize(entry.SizeBytes) : '';
+                const fullPath = data.path.replace(/\\/g, '/').replace(/\/$/, '') + '/' + entry.Name;
+                if (entry.Type === 'dir') {
+                    html += `<li onclick="navigateToPath('${escapeHtml(fullPath.replace(/'/g, "\\'"))}')">
+                        <span class="file-icon">${icon}</span>
+                        <span class="file-name">${escapeHtml(entry.Name)}</span>
+                    </li>`;
+                } else {
+                    html += `<li onclick="requestFileRead('${escapeHtml(fullPath.replace(/'/g, "\\'"))}')">
+                        <span class="file-icon">${icon}</span>
+                        <span class="file-name">${escapeHtml(entry.Name)}</span>
+                        <span class="file-size">${size}</span>
+                    </li>`;
+                }
+            }
+            html += '</ul></div>';
+            area.innerHTML = html;
+        }
+
+        function navigateToPath(path) {
+            if (!currentDeviceId || !socket) return;
+            document.getElementById('file-browse-path').value = path;
+            currentBrowsePath = path;
+            document.getElementById('file-browser-area').innerHTML = '<div style="font-size:13px; color:#8f98a0;">Requesting access...</div>';
+            socket.emit('request_file_browse', { deviceId: currentDeviceId, path });
+        }
+
+        function requestFileRead(path) {
+            if (!currentDeviceId || !socket) return;
+            document.getElementById('file-browser-area').innerHTML += '<div style="font-size:13px; color:#8f98a0; margin-top:8px;">Requesting file access...</div>';
+            socket.emit('request_file_read', { deviceId: currentDeviceId, path });
+        }
+
+        function renderFileContent(data) {
+            const area = document.getElementById('file-browser-area');
+            if (!data.approved) {
+                area.innerHTML += `<div style="color:#ef5350; font-size:13px; margin-top:8px;">File read denied by user</div>`;
+                return;
+            }
+            if (data.error) {
+                area.innerHTML += `<div style="color:#ef5350; font-size:13px; margin-top:8px;">${escapeHtml(data.error)}</div>`;
+                return;
+            }
+            const fileName = data.path.split(/[/\\]/).pop();
+            const viewer = `<div class="file-viewer">
+                <div class="file-header">
+                    <span>${escapeHtml(fileName)} (${formatFileSize(data.sizeBytes)})</span>
+                    <button class="diag-btn" onclick="copyFileContent()" style="font-size:11px; padding:3px 8px;">Copy</button>
+                </div>
+                <pre id="file-content-pre">${escapeHtml(data.content)}</pre>
+            </div>`;
+            // Append viewer below the file list
+            area.innerHTML += viewer;
+        }
+
+        function copyFileContent() {
+            const pre = document.getElementById('file-content-pre');
+            if (pre) navigator.clipboard.writeText(pre.textContent);
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes) return '';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        // ---- Remote Scripts ----
+        let scriptLibraryData = [];
+
+        async function loadScriptLibrary() {
+            try {
+                const res = await fetchWithAuth(`${API}/api/scripts`);
+                scriptLibraryData = await res.json();
+                const sel = document.getElementById('script-library-select');
+                sel.innerHTML = '<option value="">-- Select from library --</option>' +
+                    scriptLibraryData.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.category)})</option>`).join('');
+            } catch (err) {
+                console.error('Failed to load scripts:', err);
+            }
+        }
+
+        function runLibraryScript() {
+            if (!currentDeviceId || !socket) return;
+            const sel = document.getElementById('script-library-select');
+            const scriptId = parseInt(sel.value);
+            if (!scriptId) { alert('Select a script from the library'); return; }
+            showScriptRunning();
+            socket.emit('execute_library_script', { deviceId: currentDeviceId, scriptId });
+        }
+
+        function runAdhocScript() {
+            if (!currentDeviceId || !socket) return;
+            const content = document.getElementById('adhoc-script').value.trim();
+            if (!content) { alert('Enter a script to execute'); return; }
+            const elevation = document.getElementById('adhoc-elevation').checked;
+            const timeout = parseInt(document.getElementById('adhoc-timeout').value) || 60;
+            showScriptRunning();
+            socket.emit('execute_script', {
+                deviceId: currentDeviceId,
+                scriptName: 'Ad-hoc Script',
+                scriptContent: content,
+                requiresElevation: elevation,
+                timeoutSeconds: timeout
+            });
+        }
+
+        function showScriptRunning() {
+            document.getElementById('script-output-area').innerHTML = '<div style="font-size:13px; color:#8f98a0; margin-top:8px;"><span class="script-spinner"></span>Waiting for user approval and execution...</div>';
+        }
+
+        function renderScriptResult(data) {
+            const area = document.getElementById('script-output-area');
+            let statusBadge = data.success
+                ? '<span style="color:#66bb6a;">Success</span>'
+                : '<span style="color:#ef5350;">Failed</span>';
+            if (data.timedOut) statusBadge = '<span style="color:#ffa726;">Timed Out</span>';
+            if (data.validationError) statusBadge = '<span style="color:#ef5350;">Blocked</span>';
+
+            let html = `<div class="script-output">
+                <div class="meta">
+                    Status: ${statusBadge} | Exit Code: ${data.exitCode ?? '—'} | Duration: ${data.durationMs ?? 0}ms
+                    ${data.truncated ? ' | <span style="color:#ffa726;">Output truncated</span>' : ''}
+                </div>`;
+
+            if (data.validationError) {
+                html += `<pre class="stderr">${escapeHtml(data.validationError)}</pre>`;
+            } else {
+                if (data.output) html += `<pre class="stdout">${escapeHtml(data.output)}</pre>`;
+                if (data.errorOutput) html += `<pre class="stderr">${escapeHtml(data.errorOutput)}</pre>`;
+                if (!data.output && !data.errorOutput) html += `<pre class="stdout">(no output)</pre>`;
+            }
+
+            html += '</div>';
+            area.innerHTML = html;
+        }
+
+        // ---- Auto-Remediation Policies ----
+        async function loadPolicies() {
+            try {
+                const res = await fetchWithAuth(`${API}/api/alerts/policies`);
+                const policies = await res.json();
+                const tbody = document.getElementById('policy-tbody');
+                if (policies.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="color:#8f98a0; text-align:center;">No auto-remediation policies configured.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = policies.map(p => `
+                    <tr>
+                        <td>${escapeHtml(p.check_type)} ${escapeHtml(p.operator)}${p.threshold_value} (${p.severity})</td>
+                        <td>${escapeHtml(p.action_id)}</td>
+                        <td>${p.parameter ? escapeHtml(p.parameter) : '<span style="color:#8f98a0">—</span>'}</td>
+                        <td>${p.cooldown_minutes}min</td>
+                        <td>${p.require_consent ? 'Yes' : '<span style="color:#ffa726">No</span>'}</td>
+                        <td>
+                            <button class="toggle-btn ${p.enabled ? 'active' : ''}"
+                                onclick="togglePolicy(${p.id}, ${p.enabled ? 0 : 1})">
+                                ${p.enabled ? 'ON' : 'OFF'}
+                            </button>
+                        </td>
+                        <td><button class="toggle-btn" onclick="deletePolicy(${p.id})">Delete</button></td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load policies:', err);
+            }
+        }
+
+        function showAddPolicyForm() {
+            document.getElementById('add-policy-form').style.display = 'block';
+            // Populate threshold dropdown
+            fetchWithAuth(`${API}/api/alerts/thresholds`).then(r => r.json()).then(thresholds => {
+                const sel = document.getElementById('policy-threshold');
+                sel.innerHTML = thresholds.map(t =>
+                    `<option value="${t.id}">${escapeHtml(t.check_type)} ${escapeHtml(t.operator)} ${t.threshold_value} (${t.severity})</option>`
+                ).join('');
+            });
+        }
+
+        function hideAddPolicyForm() {
+            document.getElementById('add-policy-form').style.display = 'none';
+        }
+
+        async function addPolicy() {
+            const threshold_id = parseInt(document.getElementById('policy-threshold').value);
+            const action_id = document.getElementById('policy-action').value;
+            const parameter = document.getElementById('policy-parameter').value.trim() || null;
+            const cooldown_minutes = parseInt(document.getElementById('policy-cooldown').value) || 30;
+            const require_consent = document.getElementById('policy-consent').checked ? 1 : 0;
+            try {
+                await fetchWithAuth(`${API}/api/alerts/policies`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ threshold_id, action_id, parameter, cooldown_minutes, require_consent })
+                });
+                hideAddPolicyForm();
+                loadPolicies();
+            } catch (err) {
+                console.error('Failed to add policy:', err);
+            }
+        }
+
+        async function togglePolicy(id, enabled) {
+            try {
+                await fetchWithAuth(`${API}/api/alerts/policies/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                loadPolicies();
+            } catch (err) {
+                console.error('Failed to toggle policy:', err);
+            }
+        }
+
+        async function deletePolicy(id) {
+            if (!confirm('Delete this policy?')) return;
+            try {
+                await fetchWithAuth(`${API}/api/alerts/policies/${id}`, { method: 'DELETE' });
+                loadPolicies();
+            } catch (err) {
+                console.error('Failed to delete policy:', err);
             }
         }
 

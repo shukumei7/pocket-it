@@ -1,6 +1,6 @@
 namespace PocketIT.Remediation;
 
-public record RemediationInfo(string ActionId, string Name, string Description, string Risk);
+public record RemediationInfo(string ActionId, string Name, string Description, string Risk, bool CanAutoApprove = false);
 
 public static class ActionWhitelist
 {
@@ -10,13 +10,15 @@ public static class ActionWhitelist
             "flush_dns",
             "Flush DNS Cache",
             "Clears the local DNS resolver cache. This can fix issues where websites aren't loading due to stale DNS entries.",
-            "Low"
+            "Low",
+            CanAutoApprove: true
         ),
         ["clear_temp"] = new RemediationInfo(
             "clear_temp",
             "Clear Temporary Files",
             "Removes temporary files from your user temp folder to free up disk space.",
-            "Low"
+            "Low",
+            CanAutoApprove: true
         ),
         ["restart_spooler"] = new RemediationInfo(
             "restart_spooler",
@@ -34,7 +36,8 @@ public static class ActionWhitelist
             "clear_browser_cache",
             "Clear Browser Cache",
             "Removes cached files from Chrome, Edge, and Firefox. Fixes stale page loads and some website errors.",
-            "Low"
+            "Low",
+            CanAutoApprove: true
         ),
         ["kill_process"] = new RemediationInfo(
             "kill_process",

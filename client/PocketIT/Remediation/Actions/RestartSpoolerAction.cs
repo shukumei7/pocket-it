@@ -5,6 +5,7 @@ namespace PocketIT.Remediation.Actions;
 public class RestartSpoolerAction : IRemediationAction
 {
     public string ActionId => "restart_spooler";
+    public bool RequiresElevation => true;
 
     public async Task<RemediationResult> ExecuteAsync()
     {

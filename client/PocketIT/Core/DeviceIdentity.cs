@@ -53,7 +53,10 @@ public static class DeviceIdentity
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.Warn($"System profile: CPU model query failed: {ex.Message}");
+        }
         profile["cpuModel"] = cpuModel;
 
         // Get total RAM via wmic
@@ -81,7 +84,10 @@ public static class DeviceIdentity
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.Warn($"System profile: RAM query failed: {ex.Message}");
+        }
         profile["totalRamGB"] = totalRamGB;
 
         // Get total disk space from all fixed drives
@@ -95,7 +101,10 @@ public static class DeviceIdentity
                 1
             );
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.Warn($"System profile: Disk query failed: {ex.Message}");
+        }
         profile["totalDiskGB"] = totalDiskGB;
 
         return profile;

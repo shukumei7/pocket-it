@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using PocketIT.Core;
 
 namespace PocketIT.Diagnostics.Checks;
 
@@ -33,9 +34,9 @@ public class CpuCheck : IDiagnosticCheck
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback: use Process.GetCurrentProcess
+            Logger.Warn($"CPU check wmic failed: {ex.Message}");
             cpuUsage = -1;
         }
 

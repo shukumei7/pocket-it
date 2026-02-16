@@ -11,4 +11,5 @@ public interface IRemediationAction
 {
     string ActionId { get; }
     Task<RemediationResult> ExecuteAsync();
+    bool RequiresElevation => false;
 }

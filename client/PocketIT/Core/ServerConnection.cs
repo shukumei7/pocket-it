@@ -44,6 +44,14 @@ public class ServerConnection : IDisposable
 
     public async Task ConnectAsync()
     {
+        // Dispose existing socket if any (reconnect scenario)
+        if (_socket != null)
+        {
+            try { await _socket.DisconnectAsync(); } catch { }
+            _socket.Dispose();
+            _socket = null;
+        }
+
         _socket = new SocketIOClient.SocketIO($"{_serverUrl}/agent", new SocketIOOptions
         {
             Query = new List<KeyValuePair<string, string>>
@@ -101,7 +109,18 @@ public class ServerConnection : IDisposable
             OnChatHistory?.Invoke(data.GetRawText());
         });
 
-        await _socket.ConnectAsync();
+        try
+        {
+            await _socket.ConnectAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Socket connection failed", ex);
+            _socket.Dispose();
+            _socket = null;
+            _isConnected = false;
+            throw;
+        }
     }
 
     public async Task SendChatMessage(string message)
@@ -123,6 +142,10 @@ public class ServerConnection : IDisposable
         {
             await _socket.EmitAsync("diagnostic_result", result);
         }
+        else
+        {
+            _offlineQueue.Enqueue(new { type = "diagnostic_result", data = result });
+        }
     }
 
     public async Task SendRemediationResult(string requestId, bool success, string message)
@@ -132,6 +155,10 @@ public class ServerConnection : IDisposable
         {
             await _socket.EmitAsync("remediation_result", payload);
         }
+        else
+        {
+            _offlineQueue.Enqueue(new { type = "remediation_result", data = payload });
+        }
     }
 
     public async Task SendSystemProfile(Dictionary<string, object> profile)
@@ -139,6 +166,10 @@ public class ServerConnection : IDisposable
         if (_isConnected && _socket != null)
         {
             await _socket.EmitAsync("system_profile", profile);
+        }
+        else
+        {
+            _offlineQueue.Enqueue(new { type = "system_profile", data = profile });
         }
     }
 

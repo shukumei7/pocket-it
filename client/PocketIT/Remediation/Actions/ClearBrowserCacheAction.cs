@@ -1,3 +1,5 @@
+using PocketIT.Core;
+
 namespace PocketIT.Remediation.Actions;
 
 public class ClearBrowserCacheAction : IRemediationAction
@@ -43,7 +45,11 @@ public class ClearBrowserCacheAction : IRemediationAction
                         }
                     }
                 }
-                catch { failedFiles++; }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"Clear browser cache: Firefox profile enumeration failed: {ex.Message}");
+                    failedFiles++;
+                }
                 continue;
             }
 
@@ -74,8 +80,9 @@ public class ClearBrowserCacheAction : IRemediationAction
             {
                 try
                 {
-                    freed += file.Length;
+                    var fileSize = file.Length;
                     file.Delete();
+                    freed += fileSize;
                     deleted++;
                 }
                 catch { failed++; }

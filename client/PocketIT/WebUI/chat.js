@@ -110,7 +110,7 @@
         approveBtn.className = 'action-button approve';
         approveBtn.textContent = 'Approve';
         approveBtn.onclick = () => {
-            sendBridgeMessage('approve_remediation', { actionId: action.actionId });
+            sendBridgeMessage('approve_remediation', { actionId: action.actionId, requestId: action.requestId });
             container.textContent = '';
             const span = document.createElement('span');
             span.style.cssText = 'color: #66bb6a; font-size: 13px;';
@@ -122,7 +122,7 @@
         denyBtn.className = 'action-button deny';
         denyBtn.textContent = 'Deny';
         denyBtn.onclick = () => {
-            sendBridgeMessage('deny_remediation', { actionId: action.actionId });
+            sendBridgeMessage('deny_remediation', { actionId: action.actionId, requestId: action.requestId });
             container.textContent = '';
             const span = document.createElement('span');
             span.style.cssText = 'color: #ef5350; font-size: 13px;';
@@ -276,6 +276,12 @@
                             addMessage(msg.content, msg.sender);
                         });
                     }
+                    break;
+
+                case 'remediation_request':
+                    addMessage(`${agentName} wants to run: **${data.description}**`, 'ai', {
+                        action: { type: 'remediate', actionId: data.actionId, requestId: data.requestId }
+                    });
                     break;
 
                 case 'remediation_result':

@@ -70,7 +70,7 @@ public class ChatWindow : Form
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Bridge message parse error: {ex.Message}");
+            Core.Logger.Warn($"Bridge message parse error: {ex.Message}");
         }
     }
 
@@ -80,6 +80,15 @@ public class ChatWindow : Form
         if (_webView.CoreWebView2 != null)
         {
             BeginInvoke(() => _webView.CoreWebView2.PostWebMessageAsString(jsonMessage));
+        }
+    }
+
+    public void NavigateTo(string page)
+    {
+        var uiPath = Path.Combine(AppContext.BaseDirectory, "WebUI", page);
+        if (_webView.CoreWebView2 != null && File.Exists(uiPath))
+        {
+            _webView.CoreWebView2.Navigate($"file:///{uiPath.Replace('\\', '/')}");
         }
     }
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using PocketIT.Core;
 
 namespace PocketIT.Diagnostics.Checks;
 
@@ -34,9 +35,9 @@ public class MemoryCheck : IDiagnosticCheck
                 if (totalMatch.Success) totalMemoryKB = long.Parse(totalMatch.Groups[1].Value);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback
+            Logger.Warn($"Memory check wmic failed: {ex.Message}");
         }
 
         double totalGB = totalMemoryKB / 1024.0 / 1024.0;

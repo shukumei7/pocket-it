@@ -1,3 +1,5 @@
+using PocketIT.Core;
+
 namespace PocketIT.Remediation;
 
 public class RemediationEngine
@@ -20,25 +22,15 @@ public class RemediationEngine
 
     public async Task<RemediationResult> ExecuteAsync(string actionId)
     {
-        // Verify against whitelist
-        if (!ActionWhitelist.IsAllowed(actionId))
-        {
-            return new RemediationResult
-            {
-                ActionId = actionId,
-                Success = false,
-                Message = $"Action '{actionId}' is not in the whitelist."
-            };
-        }
-
         if (!_actions.TryGetValue(actionId, out var action))
         {
-            return new RemediationResult
-            {
-                ActionId = actionId,
-                Success = false,
-                Message = $"Action '{actionId}' is whitelisted but has no implementation."
-            };
+            return new RemediationResult { ActionId = actionId, Success = false, Message = $"Action '{actionId}' is not registered." };
+        }
+
+        if (action.RequiresElevation && !IsRunningElevated())
+        {
+            Logger.Warn($"Action '{actionId}' requires elevation but app is not running as admin");
+            return new RemediationResult { ActionId = actionId, Success = false, Message = $"Action '{actionId}' requires administrator privileges. Please run Pocket IT as administrator." };
         }
 
         try
@@ -47,14 +39,19 @@ public class RemediationEngine
         }
         catch (Exception ex)
         {
-            return new RemediationResult
-            {
-                ActionId = actionId,
-                Success = false,
-                Message = $"Action failed: {ex.Message}"
-            };
+            Logger.Error($"Remediation '{actionId}' failed", ex);
+            return new RemediationResult { ActionId = actionId, Success = false, Message = $"Action failed: {ex.Message}" };
         }
     }
 
+    private static bool IsRunningElevated()
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        var principal = new System.Security.Principal.WindowsPrincipal(identity);
+        return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+    }
+
     public RemediationInfo? GetActionInfo(string actionId) => ActionWhitelist.GetInfo(actionId);
+
+    public bool IsRegistered(string actionId) => _actions.ContainsKey(actionId);
 }

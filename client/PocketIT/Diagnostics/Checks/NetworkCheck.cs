@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using PocketIT.Core;
 
 namespace PocketIT.Diagnostics.Checks;
 
@@ -24,7 +25,10 @@ public class NetworkCheck : IDiagnosticCheck
                 .ToList();
             adapterStatus = adapters.Count > 0 ? $"{adapters.Count} adapter(s) up" : "No active adapters";
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Network check (adapter): {ex.Message}");
+        }
 
         // Ping test
         try
@@ -37,7 +41,10 @@ public class NetworkCheck : IDiagnosticCheck
                 pingMs = reply.RoundtripTime;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Network check (ping): {ex.Message}");
+        }
 
         // DNS test
         try
@@ -45,7 +52,10 @@ public class NetworkCheck : IDiagnosticCheck
             var addresses = await System.Net.Dns.GetHostAddressesAsync("google.com");
             dnsWorking = addresses.Length > 0;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Network check (dns): {ex.Message}");
+        }
 
         string status;
         if (internetReachable && dnsWorking)

@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-02-15
+
+### Fixed
+- Enrollment UI now shows when device is not enrolled and no token is configured
+- `requestId` now correctly included in remediation approval/denial bridge messages
+- Remediation request handler added to chat UI for server-initiated remediation prompts
+- Offline queue now covers diagnostic results, remediation results, and system profile (previously only chat messages were queued)
+- Silent exception swallowing in CPU, memory, network diagnostics and DeviceIdentity replaced with proper logging
+- ClearBrowserCacheAction byte counting now counts after successful deletion, not before
+- ConnectAsync() now properly disposes existing socket before reconnecting
+
+### Added
+- File-based rolling logger (`%LOCALAPPDATA%/PocketIT/logs/pocket-it.log`) - 5MB max, 3 file rotation
+- Config validation on startup with user-friendly balloon tip errors
+- Elevation check for remediation actions requiring admin privileges (RestartSpooler, RepairNetwork)
+- "Run Diagnostics" tray menu now fully functional - opens chat, runs all checks, shows results
+- Tray tooltip shows "Connected" / "Disconnected" status with balloon notification on connection loss
+- DPI-aware chat window positioning on multi-monitor setups
+- LocalDatabase.PurgeSyncedMessages() with automatic cleanup after connection
+- RequiresElevation property on IRemediationAction interface
+
 ## [0.2.0] - 2026-02-15
 
 ### Added
@@ -101,7 +122,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/example/pocket-it/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/example/pocket-it/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/example/pocket-it/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/example/pocket-it/compare/v0.1.2...v0.1.3

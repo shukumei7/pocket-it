@@ -78,6 +78,14 @@ public class LocalDatabase : IDisposable
         return cmd.ExecuteScalar() as string;
     }
 
+    public int PurgeSyncedMessages(int olderThanDays = 7)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "DELETE FROM offline_messages WHERE synced = 1 AND created_at < datetime('now', @days)";
+        cmd.Parameters.AddWithValue("@days", $"-{olderThanDays} days");
+        return cmd.ExecuteNonQuery();
+    }
+
     public void Dispose()
     {
         _connection.Dispose();

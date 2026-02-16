@@ -5,6 +5,7 @@ namespace PocketIT.Remediation.Actions;
 public class RepairNetworkAction : IRemediationAction
 {
     public string ActionId => "repair_network";
+    public bool RequiresElevation => true;
 
     public async Task<RemediationResult> ExecuteAsync()
     {

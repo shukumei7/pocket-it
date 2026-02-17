@@ -37,6 +37,7 @@ public class ServerConnection : IDisposable
     public event Action<ushort, string>? OnDesktopKeyboardInput; // vkCode, action
     public event Action<string>? OnDesktopStopRequest;    // requestId
     public event Action<int, int, float>? OnDesktopQualityUpdate; // quality, fps, scale
+    public event Action<string, string, string>? OnSystemToolRequest; // requestId, tool, paramsJson
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -233,6 +234,16 @@ public class ServerConnection : IDisposable
             OnDesktopQualityUpdate?.Invoke(quality, fps, scale);
         });
 
+        _socket.On("system_tool_request", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            var tool = json.GetProperty("tool").GetString() ?? "";
+            var paramsValue = json.TryGetProperty("params", out var pp) ? pp.GetRawText() : null;
+            Logger.Info($"System tool request: {tool} (requestId: {requestId})");
+            OnSystemToolRequest?.Invoke(requestId, tool, paramsValue ?? "");
+        });
+
         try
         {
             await _socket.ConnectAsync();
@@ -367,6 +378,11 @@ public class ServerConnection : IDisposable
     public async Task SendDesktopDenied(string requestId)
     {
         await EmitAsync("desktop_denied", new { requestId });
+    }
+
+    public async Task SendSystemToolResult(string requestId, string tool, bool success, object? data, string? error)
+    {
+        await EmitAsync("system_tool_result", new { requestId, tool, success, data, error });
     }
 
     private async Task EmitAsync(string eventName, object data)

@@ -116,6 +116,29 @@ function initDatabase(dbPath) {
     }
   }
 
+  // v0.9.0: Enhanced system profile columns
+  const v09_columns = [
+    { name: 'os_edition', type: 'TEXT' },
+    { name: 'os_build', type: 'TEXT' },
+    { name: 'os_architecture', type: 'TEXT' },
+    { name: 'bios_manufacturer', type: 'TEXT' },
+    { name: 'bios_version', type: 'TEXT' },
+    { name: 'gpu_model', type: 'TEXT' },
+    { name: 'serial_number', type: 'TEXT' },
+    { name: 'domain', type: 'TEXT' },
+    { name: 'last_boot_time', type: 'TEXT' },
+    { name: 'uptime_hours', type: 'REAL' },
+    { name: 'logged_in_users', type: 'TEXT' },
+    { name: 'network_adapters', type: 'TEXT' }
+  ];
+  for (const col of v09_columns) {
+    try {
+      db.prepare(`ALTER TABLE devices ADD COLUMN ${col.name} ${col.type}`).run();
+    } catch (err) {
+      // Column already exists
+    }
+  }
+
   // v0.4.0: Alert monitoring tables
   db.exec(`
     CREATE TABLE IF NOT EXISTS alert_thresholds (

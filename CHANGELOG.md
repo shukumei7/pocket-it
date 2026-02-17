@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-02-17
+
+### Added
+- **System Tools Engine** — generic `system_tool_request`/`system_tool_result` socket event pattern for extensible remote management tools
+- **Process Manager** — view all processes with PID, name, CPU%, memory, user; kill processes with safety-blocked list
+- **Service Manager** — list all Windows services with status and start type; start/stop/restart services remotely
+- **Event Log Viewer** — query Windows Event Log with flexible filters (log name, level, time range, source)
+- **Enhanced Device Profile** — 12 new system fields: OS edition, build, architecture, BIOS manufacturer/version, GPU model, serial number, domain, last boot time, uptime, logged-in users, network adapters
+- **Dashboard System Tools tab** — tabbed interface (Processes, Services, Event Log) with inline controls
+- **Dashboard info cards expansion** — GPU, serial number, BIOS, domain, uptime, network adapters in device detail view
+- Auto-refresh for process list (10-second interval toggle)
+- Service filter by status (All/Running/Stopped) and local search
+- Event log preset buttons ("Errors 24h", "Critical 7d")
+
+### Changed
+- System profile handler now saves 12 additional columns to the devices table
+- Database schema includes v0.9.0 migration columns for enhanced device data
+
 ## [0.8.0] - 2026-02-16
 
 ### Added
@@ -221,7 +239,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/example/pocket-it/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/example/pocket-it/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/example/pocket-it/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/example/pocket-it/compare/v0.4.0...v0.6.0

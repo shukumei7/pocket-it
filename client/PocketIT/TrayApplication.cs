@@ -12,6 +12,7 @@ using PocketIT.Diagnostics;
 using PocketIT.Remediation;
 using PocketIT.Terminal;
 using PocketIT.Desktop;
+using PocketIT.SystemTools;
 
 namespace PocketIT;
 
@@ -31,6 +32,7 @@ public class TrayApplication : ApplicationContext
     private readonly Scripts.ScriptExecutionService _scriptExecution = new();
     private RemoteTerminalService? _remoteTerminal;
     private RemoteDesktopService? _remoteDesktop;
+    private readonly SystemToolsEngine _systemTools = new();
     private bool _isEnrolled;
     private bool _wasConnected;
 
@@ -94,6 +96,7 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnDesktopKeyboardInput += OnServerDesktopKeyboardInput;
         _serverConnection.OnDesktopStopRequest += OnServerDesktopStopRequest;
         _serverConnection.OnDesktopQualityUpdate += OnServerDesktopQualityUpdate;
+        _serverConnection.OnSystemToolRequest += OnServerSystemToolRequest;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -647,6 +650,24 @@ public class TrayApplication : ApplicationContext
         _remoteDesktop?.UpdateQuality(quality, fps, scale);
     }
 
+    private void OnServerSystemToolRequest(string requestId, string tool, string paramsJson)
+    {
+        Logger.Info($"System tool request: {tool} (requestId: {requestId})");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await _systemTools.ExecuteAsync(tool, string.IsNullOrEmpty(paramsJson) ? null : paramsJson);
+                await _serverConnection.SendSystemToolResult(requestId, tool, result.Success, result.Data, result.Error);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"System tool execution failed: {tool}", ex);
+                await _serverConnection.SendSystemToolResult(requestId, tool, false, null, ex.Message);
+            }
+        });
+    }
+
     private async void OnServerConnectedReady()
     {
         try
@@ -952,7 +973,7 @@ public class TrayApplication : ApplicationContext
 
     private void OnAbout(object? sender, EventArgs e)
     {
-        MessageBox.Show("Pocket IT v0.2.1\nAI-Powered IT Helpdesk", "About Pocket IT",
+        MessageBox.Show("Pocket IT v0.9.0\nAI-Powered IT Helpdesk", "About Pocket IT",
             MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 

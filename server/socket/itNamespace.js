@@ -413,6 +413,36 @@ function setup(io, app) {
       }
     });
 
+    // v0.9.0: System tools
+    socket.on('system_tool_request', (data) => {
+      const { deviceId, requestId, tool, params } = data;
+      console.log(`[IT] System tool request for ${deviceId}: ${tool}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'system_tool_requested', deviceId, JSON.stringify({ tool, requestId }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('system_tool_request', {
+            requestId: requestId || `st-${Date.now()}`,
+            tool,
+            params: params || null
+          });
+          socket.emit('system_tool_requested', { deviceId, requestId, tool });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`[IT] Dashboard disconnected: ${socket.id}`);
       watchers.delete(socket.id);

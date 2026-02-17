@@ -125,13 +125,30 @@ function setup(io, app) {
       console.log(`[Agent] System profile from ${deviceId}`);
       try {
         db.prepare(`
-          UPDATE devices SET cpu_model = ?, total_ram_gb = ?, total_disk_gb = ?, processor_count = ?
+          UPDATE devices SET
+            cpu_model = ?, total_ram_gb = ?, total_disk_gb = ?, processor_count = ?,
+            os_edition = ?, os_build = ?, os_architecture = ?,
+            bios_manufacturer = ?, bios_version = ?, gpu_model = ?,
+            serial_number = ?, domain = ?, last_boot_time = ?,
+            uptime_hours = ?, logged_in_users = ?, network_adapters = ?
           WHERE device_id = ?
         `).run(
           data.cpuModel || null,
           data.totalRamGB || null,
           data.totalDiskGB || null,
           data.processorCount || null,
+          data.osEdition || null,
+          data.osBuild || null,
+          data.osArchitecture || null,
+          data.biosManufacturer || null,
+          data.biosVersion || null,
+          data.gpuModel || null,
+          data.serialNumber || null,
+          data.domain || null,
+          data.lastBootTime || null,
+          data.uptimeHours || null,
+          data.loggedInUsers ? JSON.stringify(data.loggedInUsers) : null,
+          data.networkAdapters ? JSON.stringify(data.networkAdapters) : null,
           deviceId
         );
       } catch (err) {
@@ -656,6 +673,32 @@ function setup(io, app) {
       io.of('/it').emit('desktop_denied', {
         deviceId,
         requestId: data.requestId
+      });
+    });
+
+    // v0.9.0: System tool results from client
+    socket.on('system_tool_result', (data) => {
+      console.log(`[Agent] System tool result from ${deviceId}: ${data.tool} (${data.success ? 'success' : 'failed'})`);
+
+      // Audit log
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'system_tool_completed', data.tool || 'unknown', JSON.stringify({
+          requestId: data.requestId, success: data.success, error: data.error || null
+        }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      // Relay to IT dashboard
+      io.of('/it').emit('system_tool_result', {
+        deviceId,
+        requestId: data.requestId,
+        tool: data.tool,
+        success: data.success,
+        data: data.data || null,
+        error: data.error || null
       });
     });
 

@@ -353,6 +353,19 @@ All endpoints accept `localhost` without authentication for MVP development.
 ### Admin
 - `GET /api/admin/stats` — System statistics including average health and critical devices (admin auth)
 
+### Reports
+- `GET /api/reports/fleet/health-trend?days=7` — Fleet average health per day
+- `GET /api/reports/device/:id/metrics?check_type=cpu&days=30` — Device metric trend
+- `GET /api/reports/device/:id/health-history?days=30` — Device health over time
+- `GET /api/reports/alerts/summary?days=30` — Alert statistics
+- `GET /api/reports/tickets/summary?days=30` — Ticket statistics
+- `GET /api/reports/export?type=fleet_health&days=30&format=csv` — Export CSV/PDF
+- `GET /api/reports/schedules` — List scheduled reports
+- `POST /api/reports/schedules` — Create scheduled report
+- `PATCH /api/reports/schedules/:id` — Update schedule
+- `DELETE /api/reports/schedules/:id` — Delete schedule
+- `GET /api/reports/history` — Report generation history
+
 ## Socket.IO Namespaces
 
 ### /agent (Device Clients)
@@ -435,6 +448,30 @@ IT admins can open interactive PowerShell sessions on managed endpoints directly
 - PowerShell execution policy applies to all commands
 - Consent denial is logged and notifies the IT admin immediately
 - Session timeout prevents abandoned connections from remaining open
+
+## Reports & Analytics
+
+IT admins can generate comprehensive reports and analytics to track fleet health, alerts, and ticket trends over time. The dashboard provides interactive visualizations with drill-down capabilities.
+
+**Key features:**
+- **Fleet health trends** — Average health score over time (7, 30, 90 days)
+- **Device metrics** — Individual device performance trends (CPU, memory, disk, network)
+- **Alert summaries** — Alert counts by severity, status, and device
+- **Ticket summaries** — Ticket volume by status, priority, and category
+- **Export capabilities** — Download reports as CSV or PDF
+- **Scheduled reports** — Automated report generation with cron expressions
+- **Report history** — Track all generated reports with timestamps and parameters
+- **Chart.js visualizations** — Interactive line, bar, and pie charts in dashboard
+
+**Report types:**
+- `fleet_health` — Fleet average health score per day
+- `device_metrics` — Specific device metric trends (CPU/memory/disk/network)
+- `device_health_history` — Device health score over time
+- `alert_summary` — Alert statistics by severity and status
+- `ticket_summary` — Ticket statistics by status and priority
+
+**Scheduled reports:**
+Create recurring reports with cron expressions (e.g., `0 9 * * 1` for weekly Monday 9am reports). Reports are automatically generated and stored in history with export links.
 
 ## Whitelisted Remediation Actions
 
@@ -584,7 +621,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.6.0)
+## Current Status (v0.7.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -600,6 +637,7 @@ pocket-it/
 - **Notification channels**: webhook, Slack, and Teams notifications with retry logic
 - **Dashboard Alerts tab**: real-time alert updates, acknowledge/resolve actions, threshold configuration, notification channel management
 - **Remote terminal**: IT admins can open interactive PowerShell sessions with user consent, 15-minute idle timeout, Ctrl+C support
+- **Reports & Analytics**: fleet health trends, device metrics, alert/ticket summaries, CSV/PDF export, scheduled reports with cron
 - Support ticket system with IT staff escalation
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
@@ -659,13 +697,13 @@ dotnet run
 | v0.3.0 | Expanded Capabilities | 5 new diagnostic checks, parameterized remediation, kill_process, restart_service |
 | v0.4.0 | Proactive Monitoring | Scheduled diagnostics, alert thresholds, notifications (webhook/Slack/Teams), dashboard alerts tab |
 | v0.6.0 | Remote Terminal | Interactive PowerShell sessions, user consent flow, xterm.js UI, 15-minute timeout |
+| v0.7.0 | Reporting & Analytics | Fleet health trends, device metrics, alert/ticket summaries, CSV/PDF export, scheduled reports |
 
 ### Planned
 | Version | Theme | Key Capabilities |
 |---------|-------|-----------------|
 | v0.5.0 | Remote Execution & File Access | Auto-remediation policies, IT-admin file browser, remote PowerShell script execution |
-| v0.7.0 | Reporting & Analytics | Trend charts, health history, CSV/PDF export, scheduled reports |
-| v0.7.0 | Patch & Software Management | Trigger Windows Update, remote install/uninstall, compliance policies |
+| v0.8.0 | Patch & Software Management | Trigger Windows Update, remote install/uninstall, compliance policies |
 | v0.8.0 | Knowledge Base | Searchable KB, AI references KB in responses, IT staff curated solutions |
 | v0.9.0 | Multi-tenant & RBAC | Organizations, role-based permissions, IT team management |
 | v1.0.0 | Production Ready | mTLS device certs, audit compliance, MSI installer packaging |

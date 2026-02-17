@@ -137,6 +137,14 @@ app.use('/api/alerts/policies', createPoliciesRouter(alertService));
 const createScriptsRouter = require('./routes/scripts');
 app.use('/api/scripts', createScriptsRouter());
 
+const ReportService = require('./services/reportService');
+const ExportService = require('./services/exportService');
+const reportService = new ReportService(db);
+const exportService = new ExportService();
+
+const createReportsRouter = require('./routes/reports');
+app.use('/api/reports', createReportsRouter(reportService, exportService));
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/health', (req, res) => {
@@ -167,5 +175,9 @@ server.listen(PORT, () => {
   console.log(`Pocket IT server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });
+
+const SchedulerService = require('./services/schedulerService');
+const schedulerService = new SchedulerService(db, reportService, exportService, notificationService);
+schedulerService.start();
 
 module.exports = { app, server, io };

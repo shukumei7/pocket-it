@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-02-16
+
+### Added
+- Reports & Analytics dashboard tab with fleet health trends, alert summaries, ticket summaries, and device drill-down charts
+- CSV and PDF export for all report types
+- Scheduled reports with cron expressions via node-cron
+- Report history tracking
+- New API endpoints under `/api/reports/` (fleet health trend, device metrics, alert summary, ticket summary, export, schedules CRUD, history)
+- Performance indexes on `diagnostic_results`, `alerts`, and `tickets` tables
+- Chart.js integration for data visualization in dashboard
+
+### Technical
+- DEPS: Added `node-cron` (cron scheduling), `pdfkit` (PDF generation)
+- NEW: `server/routes/reports.js` — Reports API endpoints
+- NEW: `server/services/reportGenerator.js` — Report data aggregation and formatting
+- EDIT: `server/db/schema.js` — Added `report_schedules` and `report_history` tables
+- EDIT: `server/public/dashboard/index.html` — Reports & Analytics tab with Chart.js visualizations
+
 ## [0.6.0] - 2026-02-16
 
 ### Added
@@ -182,7 +200,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/example/pocket-it/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/example/pocket-it/compare/v0.4.0...v0.6.0
 [0.4.0]: https://github.com/example/pocket-it/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/example/pocket-it/compare/v0.2.1...v0.3.0

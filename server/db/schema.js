@@ -186,6 +186,39 @@ function initDatabase(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_auto_remediation_threshold ON auto_remediation_policies(threshold_id);
   `);
 
+  // v0.7.0: Reporting & Analytics indexes and tables
+  db.exec(`
+    -- v0.7.0: Reporting & Analytics indexes
+    CREATE INDEX IF NOT EXISTS idx_diag_device_type_time ON diagnostic_results(device_id, check_type, created_at);
+    CREATE INDEX IF NOT EXISTS idx_alerts_device_triggered ON alerts(device_id, triggered_at);
+    CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at);
+
+    -- v0.7.0: Report scheduling
+    CREATE TABLE IF NOT EXISTS report_schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      report_type TEXT NOT NULL CHECK(report_type IN ('fleet_health', 'device_metrics', 'alert_summary', 'ticket_summary')),
+      filters TEXT,
+      schedule TEXT NOT NULL,
+      format TEXT NOT NULL DEFAULT 'csv' CHECK(format IN ('csv', 'pdf')),
+      recipients TEXT,
+      enabled INTEGER DEFAULT 1,
+      last_run_at TEXT,
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS report_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      schedule_id INTEGER,
+      report_type TEXT NOT NULL,
+      filters TEXT,
+      format TEXT NOT NULL,
+      file_path TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // Seed default alert thresholds (only if table is empty)
   const thresholdCount = db.prepare('SELECT COUNT(*) as count FROM alert_thresholds').get().count;
   if (thresholdCount === 0) {

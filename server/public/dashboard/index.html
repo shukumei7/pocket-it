@@ -589,77 +589,102 @@
                 <div class="empty-state">No devices enrolled yet. Generate an enrollment token to get started.</div>
             </div>
 
-            <!-- Device detail panel -->
-            <div class="detail-panel" id="device-detail">
-                <div class="panel-header">
-                    <h3 id="detail-hostname">Device</h3>
-                    <button class="close-btn" onclick="closeDetail()">Close</button>
-                </div>
-                <div id="detail-info"></div>
-                <h4 style="margin: 16px 0 8px;">Live Chat</h4>
-                <div class="chat-area" id="detail-chat"></div>
-                <div class="chat-input-row">
-                    <input type="text" id="detail-chat-input" placeholder="Send message to user..." />
-                    <button onclick="sendChatToDevice()">Send</button>
-                </div>
-                <h4 style="margin: 16px 0 8px;">Diagnostics</h4>
-                <div class="diag-actions">
-                    <button class="diag-btn" onclick="requestDiag('all')">Run All</button>
-                    <button class="diag-btn" onclick="requestDiag('cpu')">CPU</button>
-                    <button class="diag-btn" onclick="requestDiag('memory')">Memory</button>
-                    <button class="diag-btn" onclick="requestDiag('disk')">Disk</button>
-                    <button class="diag-btn" onclick="requestDiag('network')">Network</button>
-                </div>
-                <div id="detail-diagnostics" style="margin-top: 12px;"></div>
+        </div>
 
-                <h4 style="margin: 16px 0 8px;">File Browser</h4>
+        <!-- Device detail page -->
+        <div class="page" id="page-device">
+          <!-- Back button + device header -->
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+            <button class="diag-btn" onclick="backToFleet()" style="font-size:18px; padding:4px 12px;">&larr;</button>
+            <h2 id="detail-hostname" style="margin:0; color:#c7d5e0;">Device</h2>
+            <span id="detail-status-dot" class="status-dot"></span>
+            <span id="detail-device-id" style="font-size:12px; color:#8f98a0; font-family:monospace;"></span>
+          </div>
+
+          <!-- Device info cards -->
+          <div id="detail-info" class="stats-row" style="margin-bottom:20px;"></div>
+
+          <!-- Two-column layout: tools + chat -->
+          <div style="display:grid; grid-template-columns:1fr 400px; gap:20px;">
+            <!-- Left column: Diagnostics, File Browser, Scripts -->
+            <div>
+              <h2 class="section-title">Diagnostics</h2>
+              <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
+                <div class="diag-actions" style="margin-bottom:12px;">
+                  <button class="diag-btn" onclick="requestDiag('all')">Run All</button>
+                  <button class="diag-btn" onclick="requestDiag('cpu')">CPU</button>
+                  <button class="diag-btn" onclick="requestDiag('memory')">Memory</button>
+                  <button class="diag-btn" onclick="requestDiag('disk')">Disk</button>
+                  <button class="diag-btn" onclick="requestDiag('network')">Network</button>
+                </div>
+                <div id="detail-diagnostics"></div>
+              </div>
+
+              <h2 class="section-title">File Browser</h2>
+              <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
                 <div style="display:flex; gap:8px; margin-bottom:8px;">
-                    <input type="text" id="file-browse-path" placeholder="Path to browse..." style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px; font-family:monospace;" />
-                    <button class="diag-btn" onclick="browseFiles()">Browse</button>
+                  <input type="text" id="file-browse-path" placeholder="C:\Users\..." style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px 12px; border-radius:4px; font-size:13px; font-family:monospace;" />
+                  <button class="diag-btn" onclick="browseFiles()">Browse</button>
                 </div>
                 <div id="file-browser-area"></div>
+              </div>
 
-                <h4 style="margin: 16px 0 8px;">Remote Scripts</h4>
-                <div class="script-panel">
-                    <div class="script-select">
-                        <select id="script-library-select">
-                            <option value="">-- Select from library --</option>
-                        </select>
-                        <button onclick="runLibraryScript()">Run</button>
+              <h2 class="section-title">Remote Scripts</h2>
+              <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
+                <div class="script-select" style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+                  <select id="script-library-select" style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px;">
+                    <option value="">-- Select from library --</option>
+                  </select>
+                  <button class="diag-btn" onclick="runLibraryScript()">Run</button>
+                </div>
+                <details style="margin-top:8px;">
+                  <summary style="cursor:pointer; font-size:13px; color:#8f98a0;">Ad-hoc Script</summary>
+                  <div style="margin-top:8px;">
+                    <textarea id="adhoc-script" class="script-textarea" placeholder="Enter PowerShell script..." style="width:100%; min-height:80px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-family:monospace; font-size:13px; resize:vertical; box-sizing:border-box;"></textarea>
+                    <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+                      <label style="font-size:12px; color:#8f98a0; display:flex; align-items:center; gap:4px;">
+                        <input type="checkbox" id="adhoc-elevation" /> Admin
+                      </label>
+                      <input type="number" id="adhoc-timeout" value="60" min="5" max="300" style="width:60px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:4px 6px; border-radius:4px; font-size:12px;" />
+                      <span style="font-size:11px; color:#8f98a0;">sec</span>
+                      <span style="flex:1;"></span>
+                      <button class="diag-btn" onclick="runAdhocScript()">Execute</button>
                     </div>
-                    <details style="margin-top:8px;">
-                        <summary style="cursor:pointer; font-size:13px; color:#8f98a0;">Ad-hoc Script</summary>
-                        <div style="margin-top:8px;">
-                            <textarea id="adhoc-script" class="script-textarea" placeholder="Enter PowerShell script..."></textarea>
-                            <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
-                                <label style="font-size:12px; color:#8f98a0; display:flex; align-items:center; gap:4px;">
-                                    <input type="checkbox" id="adhoc-elevation" /> Admin
-                                </label>
-                                <input type="number" id="adhoc-timeout" value="60" min="5" max="300" style="width:60px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:4px 6px; border-radius:4px; font-size:12px;" />
-                                <span style="font-size:11px; color:#8f98a0;">sec</span>
-                                <span style="flex:1;"></span>
-                                <button class="diag-btn" onclick="runAdhocScript()">Execute</button>
-                            </div>
-                        </div>
-                    </details>
-                    <div id="script-output-area"></div>
-                </div>
-
-                <h4 style="margin: 16px 0 8px;">Remote Terminal</h4>
-                <div id="terminal-section">
-                    <div id="terminal-controls" style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
-                        <button id="btn-start-terminal" class="diag-btn" onclick="startTerminal()">Open Terminal</button>
-                        <button id="btn-stop-terminal" class="diag-btn" onclick="stopTerminal()" disabled style="background: #4a1919; color: #ef5350;">Disconnect</button>
-                        <span id="terminal-status">Not connected</span>
-                    </div>
-                    <div id="terminal-container" style="display:none; height:400px;"></div>
-                </div>
-
-                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #2a475e;">
-                    <button class="diag-btn" onclick="removeDevice()" style="background: #4a1919; color: #ef5350;">Remove Device</button>
-                    <span style="font-size: 12px; color: #8f98a0; margin-left: 8px;">Removes device and all its data. Device must re-enroll.</span>
-                </div>
+                  </div>
+                </details>
+                <div id="script-output-area" style="margin-top:12px;"></div>
+              </div>
             </div>
+
+            <!-- Right column: Live Chat -->
+            <div>
+              <h2 class="section-title">Live Chat</h2>
+              <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; display:flex; flex-direction:column; height:500px;">
+                <div class="chat-area" id="detail-chat" style="flex:1; overflow-y:auto; margin-bottom:12px;"></div>
+                <div style="display:flex; gap:8px;">
+                  <input type="text" id="detail-chat-input" placeholder="Send message to user..." style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px 12px; border-radius:4px;" />
+                  <button class="diag-btn" onclick="sendChatToDevice()" style="background:#66c0f4; color:#1b2838; font-weight:600;">Send</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Full-width: Remote Terminal -->
+          <h2 class="section-title" style="margin-top:20px;">Remote Terminal</h2>
+          <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
+            <div id="terminal-controls" style="margin-bottom:10px; display:flex; align-items:center; gap:10px;">
+              <button id="btn-start-terminal" class="diag-btn" onclick="startTerminal()">Open Terminal</button>
+              <button id="btn-stop-terminal" class="diag-btn" onclick="stopTerminal()" disabled style="background:#4a1919; color:#ef5350;">Disconnect</button>
+              <span id="terminal-status" style="color:#8f98a0; font-size:13px;">Not connected</span>
+            </div>
+            <div id="terminal-container" style="display:none; height:400px;"></div>
+          </div>
+
+          <!-- Danger zone -->
+          <div style="padding-top:16px; border-top:1px solid #2a475e;">
+            <button class="diag-btn" onclick="removeDevice()" style="background:#4a1919; color:#ef5350;">Remove Device</button>
+            <span style="font-size:12px; color:#8f98a0; margin-left:8px;">Removes device and all its data. Device must re-enroll.</span>
+          </div>
         </div>
 
         <!-- Tickets page -->
@@ -1375,28 +1400,34 @@
         function openDevice(deviceId) {
             cleanupTerminal();
             currentDeviceId = deviceId;
-            const panel = document.getElementById('device-detail');
-            panel.classList.add('active');
+
+            // Switch to device page (same as nav page switching)
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-device').classList.add('active');
+
             document.getElementById('detail-hostname').textContent = 'Loading...';
+            document.getElementById('detail-device-id').textContent = '';
             document.getElementById('detail-chat').innerHTML = '';
             document.getElementById('detail-diagnostics').innerHTML = '';
 
             fetchWithAuth(`${API}/api/devices/${deviceId}`).then(r => r.json()).then(d => {
                 document.getElementById('detail-hostname').textContent = d.hostname || deviceId;
-                document.getElementById('detail-info').innerHTML = `
-                    <div style="font-size: 13px; color: #8f98a0; margin-bottom: 8px;">
-                        ID: <code>${escapeHtml(d.device_id)}</code> |
-                        OS: ${escapeHtml(d.os_version || 'Unknown')} |
-                        Status: <span class="status-dot ${d.status}"></span> ${d.status}
-                    </div>
-                    ${d.cpu_model || d.total_ram_gb || d.total_disk_gb ? `
-                    <div style="font-size: 13px; color: #8f98a0; background: #0f1923; border: 1px solid #2a475e; border-radius: 6px; padding: 10px; margin-bottom: 8px;">
-                        ${d.cpu_model ? '<div>CPU: ' + escapeHtml(d.cpu_model) + (d.processor_count ? ' (' + d.processor_count + ' cores)' : '') + '</div>' : ''}
-                        ${d.total_ram_gb ? '<div>RAM: ' + d.total_ram_gb + ' GB</div>' : ''}
-                        ${d.total_disk_gb ? '<div>Disk: ' + d.total_disk_gb + ' GB</div>' : ''}
-                        ${d.health_score !== null && d.health_score !== undefined ? '<div>Health Score: <strong style="color:' + (d.health_score >= 75 ? '#66bb6a' : d.health_score >= 40 ? '#ffa726' : '#ef5350') + '">' + d.health_score + '%</strong></div>' : ''}
-                    </div>` : ''}
-                `;
+                document.getElementById('detail-device-id').textContent = d.device_id;
+                const statusDot = document.getElementById('detail-status-dot');
+                statusDot.className = 'status-dot ' + (d.status || 'offline');
+
+                // Render info as stat cards
+                const infoHtml = [];
+                if (d.os_version) infoHtml.push(`<div class="stat-card"><div class="value" style="font-size:16px;">${escapeHtml(d.os_version)}</div><div class="label">OS</div></div>`);
+                if (d.cpu_model) infoHtml.push(`<div class="stat-card"><div class="value" style="font-size:16px;">${escapeHtml(d.cpu_model)}${d.processor_count ? ' (' + d.processor_count + ' cores)' : ''}</div><div class="label">CPU</div></div>`);
+                if (d.total_ram_gb) infoHtml.push(`<div class="stat-card"><div class="value">${d.total_ram_gb} GB</div><div class="label">RAM</div></div>`);
+                if (d.total_disk_gb) infoHtml.push(`<div class="stat-card"><div class="value">${d.total_disk_gb} GB</div><div class="label">Disk</div></div>`);
+                if (d.health_score !== null && d.health_score !== undefined) {
+                    const color = d.health_score >= 75 ? '#66bb6a' : d.health_score >= 40 ? '#ffa726' : '#ef5350';
+                    infoHtml.push(`<div class="stat-card"><div class="value" style="color:${color};">${d.health_score}%</div><div class="label">Health Score</div></div>`);
+                }
+                document.getElementById('detail-info').innerHTML = infoHtml.join('');
             });
 
             if (socket) {
@@ -1409,15 +1440,21 @@
             document.getElementById('script-output-area').innerHTML = '';
         }
 
-        function closeDetail() {
-            const panel = document.getElementById('device-detail');
-            panel.classList.remove('active');
+        function backToFleet() {
             cleanupTerminal();
             if (socket && currentDeviceId) {
                 socket.emit('unwatch_device', { deviceId: currentDeviceId });
             }
             currentDeviceId = null;
+            // Switch back to fleet page
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelector('[data-page="fleet"]').classList.add('active');
+            document.getElementById('page-fleet').classList.add('active');
+            loadFleet();
         }
+
+        function closeDetail() { backToFleet(); }
 
         function startTerminal() {
             if (!currentDeviceId || !socket) return;

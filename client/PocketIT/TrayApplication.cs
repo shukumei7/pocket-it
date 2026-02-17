@@ -94,6 +94,17 @@ public class TrayApplication : ApplicationContext
         contextMenu.Items.Add("Run Diagnostics", null, OnRunDiagnostics);
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("About", null, OnAbout);
+        var startupItem = new ToolStripMenuItem("Start with Windows")
+        {
+            Checked = StartupManager.IsRegistered(),
+            CheckOnClick = true
+        };
+        startupItem.Click += (s, e) =>
+        {
+            StartupManager.Toggle();
+            startupItem.Checked = StartupManager.IsRegistered();
+        };
+        contextMenu.Items.Add(startupItem);
         contextMenu.Items.Add("Exit", null, OnExit);
 
         _trayIcon = new NotifyIcon
@@ -104,6 +115,12 @@ public class TrayApplication : ApplicationContext
             ContextMenuStrip = contextMenu
         };
         _trayIcon.MouseClick += OnTrayMouseClick;
+
+        // Auto-register for Windows startup on first run
+        if (!StartupManager.IsRegistered())
+        {
+            StartupManager.Register();
+        }
 
         if (!ValidateConfig()) return;
 

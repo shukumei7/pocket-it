@@ -11,6 +11,7 @@ using PocketIT.Enrollment;
 using PocketIT.Diagnostics;
 using PocketIT.Remediation;
 using PocketIT.Terminal;
+using PocketIT.Desktop;
 
 namespace PocketIT;
 
@@ -29,6 +30,7 @@ public class TrayApplication : ApplicationContext
     private readonly FileAccess.FileAccessService _fileAccess = new();
     private readonly Scripts.ScriptExecutionService _scriptExecution = new();
     private RemoteTerminalService? _remoteTerminal;
+    private RemoteDesktopService? _remoteDesktop;
     private bool _isEnrolled;
     private bool _wasConnected;
 
@@ -87,6 +89,11 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnTerminalStartRequest += OnServerTerminalStartRequest;
         _serverConnection.OnTerminalInput += OnServerTerminalInput;
         _serverConnection.OnTerminalStopRequest += OnServerTerminalStopRequest;
+        _serverConnection.OnDesktopStartRequest += OnServerDesktopStartRequest;
+        _serverConnection.OnDesktopMouseInput += OnServerDesktopMouseInput;
+        _serverConnection.OnDesktopKeyboardInput += OnServerDesktopKeyboardInput;
+        _serverConnection.OnDesktopStopRequest += OnServerDesktopStopRequest;
+        _serverConnection.OnDesktopQualityUpdate += OnServerDesktopQualityUpdate;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -329,6 +336,12 @@ public class TrayApplication : ApplicationContext
                     _remoteTerminal.StopSession();
                     _remoteTerminal.Dispose();
                     _remoteTerminal = null;
+                }
+                if (_remoteDesktop != null)
+                {
+                    _remoteDesktop.StopSession();
+                    _remoteDesktop.Dispose();
+                    _remoteDesktop = null;
                 }
             }
             _wasConnected = connected;
@@ -578,6 +591,60 @@ public class TrayApplication : ApplicationContext
         _remoteTerminal?.StopSession();
         _remoteTerminal?.Dispose();
         _remoteTerminal = null;
+    }
+
+    private void OnServerDesktopStartRequest(string requestId, bool itInitiated)
+    {
+        Logger.Info($"Desktop start request: {requestId}");
+
+        if (itInitiated)
+        {
+            Logger.Info($"IT-initiated desktop session (requestId: {requestId})");
+            _remoteDesktop?.Dispose();
+            _remoteDesktop = new RemoteDesktopService();
+
+            _remoteDesktop.OnFrame += (base64, width, height) =>
+            {
+                _ = _serverConnection.SendDesktopFrame(base64, width, height);
+            };
+
+            _remoteDesktop.OnSessionEnded += () =>
+            {
+                _ = _serverConnection.SendDesktopStopped(requestId, "session_ended");
+                _remoteDesktop?.Dispose();
+                _remoteDesktop = null;
+            };
+
+            _remoteDesktop.StartSession();
+            _ = _serverConnection.SendDesktopStarted(requestId);
+            return;
+        }
+
+        // Non-IT-initiated: would need user approval (future)
+        _ = _serverConnection.SendDesktopDenied(requestId);
+    }
+
+    private void OnServerDesktopMouseInput(double x, double y, string button, string action)
+    {
+        _remoteDesktop?.HandleMouseInput(x, y, button, action);
+    }
+
+    private void OnServerDesktopKeyboardInput(ushort vkCode, string action)
+    {
+        _remoteDesktop?.HandleKeyboardInput(vkCode, action);
+    }
+
+    private void OnServerDesktopStopRequest(string requestId)
+    {
+        Logger.Info($"Desktop stop request: {requestId}");
+        _remoteDesktop?.StopSession();
+        _remoteDesktop?.Dispose();
+        _remoteDesktop = null;
+    }
+
+    private void OnServerDesktopQualityUpdate(int quality, int fps, float scale)
+    {
+        _remoteDesktop?.UpdateQuality(quality, fps, scale);
     }
 
     private async void OnServerConnectedReady()
@@ -895,6 +962,7 @@ public class TrayApplication : ApplicationContext
         {
             _trayIcon.Dispose();
             _chatWindow?.Dispose();
+            _remoteDesktop?.Dispose();
             _remoteTerminal?.Dispose();
             _scheduledChecks?.Dispose();
             _serverConnection?.Dispose();

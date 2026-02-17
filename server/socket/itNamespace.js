@@ -327,6 +327,92 @@ function setup(io, app) {
       }
     });
 
+    // v0.8.0: Remote desktop
+    socket.on('start_desktop', (data) => {
+      const { deviceId } = data;
+      console.log(`[IT] Desktop start request for ${deviceId}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'desktop_requested', deviceId, JSON.stringify({}));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `desk-${Date.now()}`;
+          deviceSocket.emit('desktop_start_request', { requestId, itInitiated: true });
+          socket.emit('desktop_requested', { deviceId, requestId });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('desktop_mouse', (data) => {
+      const { deviceId, x, y, button, action } = data;
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('desktop_mouse_input', { x, y, button, action });
+        }
+      }
+    });
+
+    socket.on('desktop_keyboard', (data) => {
+      const { deviceId, vkCode, action } = data;
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('desktop_keyboard_input', { vkCode, action });
+        }
+      }
+    });
+
+    socket.on('desktop_quality', (data) => {
+      const { deviceId, quality, fps, scale } = data;
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('desktop_quality_update', { quality, fps, scale });
+        }
+      }
+    });
+
+    socket.on('stop_desktop', (data) => {
+      const { deviceId } = data;
+      console.log(`[IT] Desktop stop request for ${deviceId}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'desktop_stop_requested', deviceId, JSON.stringify({}));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `desk-${Date.now()}`;
+          deviceSocket.emit('desktop_stop_request', { requestId });
+          socket.emit('desktop_stop_requested', { deviceId, requestId });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`[IT] Dashboard disconnected: ${socket.id}`);
       watchers.delete(socket.id);

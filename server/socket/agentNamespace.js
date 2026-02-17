@@ -589,6 +589,72 @@ function setup(io, app) {
       });
     });
 
+    // v0.8.0: Remote desktop events from client
+    socket.on('desktop_started', (data) => {
+      console.log(`[Agent] Desktop session started on ${deviceId}: ${data.requestId}`);
+
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'desktop_session_started', deviceId, JSON.stringify({ requestId: data.requestId }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      io.of('/it').emit('desktop_started', {
+        deviceId,
+        requestId: data.requestId
+      });
+    });
+
+    socket.on('desktop_frame', (data) => {
+      // High-frequency: no logging, relay directly
+      io.of('/it').emit('desktop_frame', {
+        deviceId,
+        frame: data.frame,
+        width: data.width,
+        height: data.height,
+        timestamp: data.timestamp
+      });
+    });
+
+    socket.on('desktop_stopped', (data) => {
+      console.log(`[Agent] Desktop session stopped on ${deviceId}: ${data.requestId} (${data.reason})`);
+
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'desktop_session_ended', deviceId, JSON.stringify({
+          requestId: data.requestId, reason: data.reason
+        }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      io.of('/it').emit('desktop_stopped', {
+        deviceId,
+        requestId: data.requestId,
+        reason: data.reason
+      });
+    });
+
+    socket.on('desktop_denied', (data) => {
+      console.log(`[Agent] Desktop denied on ${deviceId}: ${data.requestId}`);
+
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'desktop_denied', deviceId, JSON.stringify({ requestId: data.requestId }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      io.of('/it').emit('desktop_denied', {
+        deviceId,
+        requestId: data.requestId
+      });
+    });
+
     // Disconnect
     socket.on('disconnect', () => {
       console.log(`[Agent] Device disconnected: ${deviceId}`);

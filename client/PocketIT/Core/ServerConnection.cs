@@ -32,6 +32,11 @@ public class ServerConnection : IDisposable
     public event Action<string, bool>? OnTerminalStartRequest;  // requestId, itInitiated
     public event Action<string>? OnTerminalInput;          // input text
     public event Action<string>? OnTerminalStopRequest;    // requestId
+    public event Action<string, bool>? OnDesktopStartRequest;  // requestId, itInitiated
+    public event Action<double, double, string, string>? OnDesktopMouseInput; // x, y, button, action
+    public event Action<ushort, string>? OnDesktopKeyboardInput; // vkCode, action
+    public event Action<string>? OnDesktopStopRequest;    // requestId
+    public event Action<int, int, float>? OnDesktopQualityUpdate; // quality, fps, scale
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -184,6 +189,50 @@ public class ServerConnection : IDisposable
             OnTerminalStopRequest?.Invoke(requestId);
         });
 
+        _socket.On("desktop_start_request", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            bool itInitiated = json.TryGetProperty("itInitiated", out var itProp) && itProp.ValueKind == JsonValueKind.True;
+            Logger.Info($"Desktop start request (requestId: {requestId})");
+            OnDesktopStartRequest?.Invoke(requestId, itInitiated);
+        });
+
+        _socket.On("desktop_mouse_input", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            double x = json.GetProperty("x").GetDouble();
+            double y = json.GetProperty("y").GetDouble();
+            string button = json.TryGetProperty("button", out var bp) ? bp.GetString() ?? "left" : "left";
+            string action = json.GetProperty("action").GetString() ?? "click";
+            OnDesktopMouseInput?.Invoke(x, y, button, action);
+        });
+
+        _socket.On("desktop_keyboard_input", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            ushort vkCode = (ushort)json.GetProperty("vkCode").GetInt32();
+            string action = json.GetProperty("action").GetString() ?? "press";
+            OnDesktopKeyboardInput?.Invoke(vkCode, action);
+        });
+
+        _socket.On("desktop_stop_request", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            Logger.Info($"Desktop stop request (requestId: {requestId})");
+            OnDesktopStopRequest?.Invoke(requestId);
+        });
+
+        _socket.On("desktop_quality_update", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            int quality = json.TryGetProperty("quality", out var qp) ? qp.GetInt32() : 50;
+            int fps = json.TryGetProperty("fps", out var fp) ? fp.GetInt32() : 10;
+            float scale = json.TryGetProperty("scale", out var sp) ? (float)sp.GetDouble() : 0.5f;
+            OnDesktopQualityUpdate?.Invoke(quality, fps, scale);
+        });
+
         try
         {
             await _socket.ConnectAsync();
@@ -297,6 +346,26 @@ public class ServerConnection : IDisposable
     public async Task SendTerminalDenied(string requestId)
     {
         await EmitAsync("terminal_denied", new { requestId });
+    }
+
+    public async Task SendDesktopFrame(string base64, int width, int height)
+    {
+        await EmitAsync("desktop_frame", new { frame = base64, width, height, timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() });
+    }
+
+    public async Task SendDesktopStarted(string requestId)
+    {
+        await EmitAsync("desktop_started", new { requestId });
+    }
+
+    public async Task SendDesktopStopped(string requestId, string reason)
+    {
+        await EmitAsync("desktop_stopped", new { requestId, reason });
+    }
+
+    public async Task SendDesktopDenied(string requestId)
+    {
+        await EmitAsync("desktop_denied", new { requestId });
     }
 
     private async Task EmitAsync(string eventName, object data)

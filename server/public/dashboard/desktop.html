@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Desktop — Pocket IT</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0f1923;
+            color: #c7d5e0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .toolbar {
+            background: #1b2838;
+            border-bottom: 1px solid #2a475e;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+        .toolbar .device-name {
+            font-weight: 600;
+            font-size: 15px;
+            color: #66c0f4;
+        }
+        .toolbar .status {
+            font-size: 13px;
+            color: #8f98a0;
+        }
+        .toolbar .spacer { flex: 1; }
+        .toolbar label {
+            font-size: 12px;
+            color: #8f98a0;
+        }
+        .toolbar select {
+            background: #0f1923;
+            border: 1px solid #2a475e;
+            color: #c7d5e0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .toolbar button {
+            background: #2a475e;
+            color: #c7d5e0;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .toolbar button:hover {
+            background: #3d6580;
+        }
+        .toolbar .btn-disconnect {
+            background: #4a1919;
+            color: #ef5350;
+        }
+        .toolbar .btn-disconnect:hover {
+            background: #6a2222;
+        }
+        .viewer {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            cursor: crosshair;
+            position: relative;
+        }
+        .viewer canvas {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+        .viewer .overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #8f98a0;
+            font-size: 16px;
+        }
+        .viewer .overlay.hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <span class="device-name" id="device-name">Connecting...</span>
+        <span class="status" id="status">Initializing</span>
+        <span class="spacer"></span>
+        <label>Quality:</label>
+        <select id="quality" onchange="updateQuality()">
+            <option value="30">Low</option>
+            <option value="50" selected>Medium</option>
+            <option value="75">High</option>
+        </select>
+        <label>FPS:</label>
+        <select id="fps" onchange="updateQuality()">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+            <option value="24">24</option>
+        </select>
+        <label>Scale:</label>
+        <select id="scale" onchange="updateQuality()">
+            <option value="0.25">25%</option>
+            <option value="0.5" selected>50%</option>
+            <option value="0.75">75%</option>
+            <option value="1.0">100%</option>
+        </select>
+        <button class="btn-disconnect" onclick="disconnect()">Disconnect</button>
+    </div>
+    <div class="viewer" id="viewer" tabindex="0">
+        <canvas id="canvas"></canvas>
+        <div class="overlay" id="overlay">Connecting to device...</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js"></script>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const deviceId = params.get('deviceId');
+        const deviceName = params.get('name') || deviceId || 'Unknown';
+
+        if (!deviceId) {
+            document.getElementById('overlay').textContent = 'Error: No deviceId specified';
+            throw new Error('No deviceId');
+        }
+
+        document.getElementById('device-name').textContent = deviceName;
+        document.title = `Remote Desktop \u2014 ${deviceName}`;
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        const statusEl = document.getElementById('status');
+        const viewer = document.getElementById('viewer');
+        const img = new Image();
+        let socket = null;
+        let active = false;
+
+        async function init() {
+            try {
+                const resp = await fetch('/api/admin/auto-login', { method: 'POST' });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    connectSocket(data.token);
+                    return;
+                }
+            } catch (e) {}
+
+            connectSocket(null);
+        }
+
+        function connectSocket(token) {
+            const opts = {};
+            if (token) opts.auth = { token };
+            socket = io('/it', opts);
+
+            socket.on('connect', () => {
+                statusEl.textContent = 'Connected to server, starting desktop...';
+                statusEl.style.color = '#ffa726';
+                socket.emit('start_desktop', { deviceId });
+            });
+
+            socket.on('desktop_started', (data) => {
+                if (data.deviceId !== deviceId) return;
+                active = true;
+                overlay.classList.add('hidden');
+                statusEl.textContent = 'Live';
+                statusEl.style.color = '#66bb6a';
+            });
+
+            socket.on('desktop_frame', (data) => {
+                if (data.deviceId !== deviceId || !active) return;
+                img.onload = function() {
+                    if (canvas.width !== data.width || canvas.height !== data.height) {
+                        canvas.width = data.width;
+                        canvas.height = data.height;
+                    }
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = 'data:image/jpeg;base64,' + data.frame;
+            });
+
+            socket.on('desktop_stopped', (data) => {
+                if (data.deviceId !== deviceId) return;
+                active = false;
+                overlay.textContent = 'Session ended: ' + (data.reason || 'disconnected');
+                overlay.classList.remove('hidden');
+                statusEl.textContent = 'Disconnected';
+                statusEl.style.color = '#ef5350';
+            });
+
+            socket.on('desktop_denied', (data) => {
+                if (data.deviceId !== deviceId) return;
+                overlay.textContent = 'Desktop access denied by device';
+                overlay.classList.remove('hidden');
+                statusEl.textContent = 'Denied';
+                statusEl.style.color = '#ef5350';
+            });
+
+            socket.on('error_message', (data) => {
+                overlay.textContent = 'Error: ' + (data.message || 'Unknown error');
+                overlay.classList.remove('hidden');
+                statusEl.textContent = 'Error';
+                statusEl.style.color = '#ef5350';
+            });
+
+            socket.on('disconnect', () => {
+                if (active) {
+                    overlay.textContent = 'Connection lost';
+                    overlay.classList.remove('hidden');
+                    statusEl.textContent = 'Disconnected';
+                    statusEl.style.color = '#ef5350';
+                    active = false;
+                }
+            });
+        }
+
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: (e.clientX - rect.left) / rect.width,
+                y: (e.clientY - rect.top) / rect.height
+            };
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (!active || !socket) return;
+            e.preventDefault();
+            viewer.focus();
+            const pos = getCanvasCoords(e);
+            const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+            socket.emit('desktop_mouse', { deviceId, x: pos.x, y: pos.y, button: btn, action: 'down' });
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (!active || !socket) return;
+            e.preventDefault();
+            const pos = getCanvasCoords(e);
+            const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+            socket.emit('desktop_mouse', { deviceId, x: pos.x, y: pos.y, button: btn, action: 'up' });
+        });
+
+        let lastMove = 0;
+        canvas.addEventListener('mousemove', (e) => {
+            if (!active || !socket) return;
+            const now = Date.now();
+            if (now - lastMove < 33) return;
+            lastMove = now;
+            const pos = getCanvasCoords(e);
+            socket.emit('desktop_mouse', { deviceId, x: pos.x, y: pos.y, button: 'left', action: 'move' });
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            if (!active || !socket) return;
+            e.preventDefault();
+            const pos = getCanvasCoords(e);
+            socket.emit('desktop_mouse', { deviceId, x: pos.x, y: pos.y, button: e.deltaY < 0 ? 'up' : 'down', action: 'scroll' });
+        }, { passive: false });
+
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        viewer.addEventListener('keydown', (e) => {
+            if (!active || !socket) return;
+            e.preventDefault();
+            socket.emit('desktop_keyboard', { deviceId, vkCode: e.keyCode, action: 'down' });
+        });
+
+        viewer.addEventListener('keyup', (e) => {
+            if (!active || !socket) return;
+            e.preventDefault();
+            socket.emit('desktop_keyboard', { deviceId, vkCode: e.keyCode, action: 'up' });
+        });
+
+        function updateQuality() {
+            if (!active || !socket) return;
+            socket.emit('desktop_quality', {
+                deviceId,
+                quality: parseInt(document.getElementById('quality').value),
+                fps: parseInt(document.getElementById('fps').value),
+                scale: parseFloat(document.getElementById('scale').value)
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.emit('stop_desktop', { deviceId });
+                active = false;
+                overlay.textContent = 'Disconnected';
+                overlay.classList.remove('hidden');
+                statusEl.textContent = 'Disconnected';
+                statusEl.style.color = '#ef5350';
+            }
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (active && socket) {
+                socket.emit('stop_desktop', { deviceId });
+            }
+        });
+
+        init();
+    </script>
+</body>
+</html>

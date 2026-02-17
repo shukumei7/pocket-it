@@ -675,6 +675,41 @@
             </div>
           </div>
 
+          <!-- Full-width: Remote Desktop -->
+          <h2 class="section-title" style="margin-top:20px;">Remote Desktop</h2>
+          <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
+            <div id="desktop-controls" style="margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <button id="btn-start-desktop" class="diag-btn" onclick="startDesktop()">Connect</button>
+              <button id="btn-stop-desktop" class="diag-btn" onclick="stopDesktop()" disabled style="background:#4a1919; color:#ef5350;">Disconnect</button>
+              <button class="diag-btn" onclick="popOutDesktop()" title="Open in new tab">&#8599; New Tab</button>
+              <span id="desktop-status" style="color:#8f98a0; font-size:13px;">Not connected</span>
+              <span style="flex:1;"></span>
+              <label style="font-size:12px; color:#8f98a0;">Quality:</label>
+              <select id="desktop-quality" onchange="updateDesktopQuality()" style="background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:4px 8px; border-radius:4px; font-size:12px;">
+                <option value="30">Low</option>
+                <option value="50" selected>Medium</option>
+                <option value="75">High</option>
+              </select>
+              <label style="font-size:12px; color:#8f98a0;">FPS:</label>
+              <select id="desktop-fps" onchange="updateDesktopQuality()" style="background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:4px 8px; border-radius:4px; font-size:12px;">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="15">15</option>
+                <option value="24">24</option>
+              </select>
+              <label style="font-size:12px; color:#8f98a0;">Scale:</label>
+              <select id="desktop-scale" onchange="updateDesktopQuality()" style="background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:4px 8px; border-radius:4px; font-size:12px;">
+                <option value="0.25">25%</option>
+                <option value="0.5" selected>50%</option>
+                <option value="0.75">75%</option>
+                <option value="1.0">100%</option>
+              </select>
+            </div>
+            <div id="desktop-viewer" style="display:none; position:relative; background:#000; border-radius:4px; overflow:hidden; cursor:crosshair;">
+              <canvas id="desktop-canvas" style="width:100%; display:block;"></canvas>
+            </div>
+          </div>
+
           <!-- Full-width: Remote Terminal -->
           <h2 class="section-title" style="margin-top:20px;">Remote Terminal</h2>
           <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
@@ -1000,6 +1035,11 @@
         let fitAddon = null;
         let terminalDeviceId = null;
         let terminalLineBuffer = '';
+        let desktopDeviceId = null;
+        let desktopActive = false;
+        let desktopCanvas = null;
+        let desktopCtx = null;
+        let desktopImg = new Image();
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -1240,6 +1280,45 @@
                 document.getElementById('btn-stop-terminal').disabled = true;
                 terminalDeviceId = null;
             });
+
+            socket.on('desktop_started', (data) => {
+                if (data.deviceId !== desktopDeviceId) return;
+                desktopActive = true;
+                desktopCanvas = document.getElementById('desktop-canvas');
+                desktopCtx = desktopCanvas.getContext('2d');
+                document.getElementById('desktop-viewer').style.display = 'block';
+                document.getElementById('desktop-status').textContent = 'Connected';
+                document.getElementById('desktop-status').style.color = '#66bb6a';
+                document.getElementById('btn-start-desktop').disabled = true;
+                document.getElementById('btn-stop-desktop').disabled = false;
+            });
+
+            socket.on('desktop_frame', (data) => {
+                if (data.deviceId !== desktopDeviceId || !desktopActive) return;
+                desktopImg.onload = function() {
+                    if (!desktopCanvas) return;
+                    // Set canvas internal resolution to match frame
+                    if (desktopCanvas.width !== data.width || desktopCanvas.height !== data.height) {
+                        desktopCanvas.width = data.width;
+                        desktopCanvas.height = data.height;
+                    }
+                    desktopCtx.drawImage(desktopImg, 0, 0);
+                };
+                desktopImg.src = 'data:image/jpeg;base64,' + data.frame;
+            });
+
+            socket.on('desktop_stopped', (data) => {
+                if (data.deviceId !== desktopDeviceId) return;
+                cleanupDesktop();
+                document.getElementById('desktop-status').textContent = 'Disconnected: ' + (data.reason || 'session ended');
+            });
+
+            socket.on('desktop_denied', (data) => {
+                if (data.deviceId !== desktopDeviceId) return;
+                cleanupDesktop();
+                document.getElementById('desktop-status').textContent = 'Denied by device';
+                document.getElementById('desktop-status').style.color = '#ef5350';
+            });
         }
 
         // ---- Fleet ----
@@ -1452,6 +1531,7 @@
 
         function backToFleet() {
             cleanupTerminal();
+            cleanupDesktop();
             if (socket && currentDeviceId) {
                 socket.emit('unwatch_device', { deviceId: currentDeviceId });
             }
@@ -1502,6 +1582,111 @@
         window.addEventListener('resize', () => {
             if (fitAddon) fitAddon.fit();
         });
+
+        function startDesktop() {
+            if (!currentDeviceId || !socket) return;
+            desktopDeviceId = currentDeviceId;
+            const statusEl = document.getElementById('desktop-status');
+            statusEl.textContent = 'Connecting...';
+            statusEl.style.color = '#ffa726';
+            socket.emit('start_desktop', { deviceId: desktopDeviceId });
+        }
+
+        function stopDesktop() {
+            if (!desktopDeviceId || !socket) return;
+            socket.emit('stop_desktop', { deviceId: desktopDeviceId });
+            cleanupDesktop();
+        }
+
+        function cleanupDesktop() {
+            desktopActive = false;
+            desktopDeviceId = null;
+            desktopCanvas = null;
+            desktopCtx = null;
+            document.getElementById('desktop-viewer').style.display = 'none';
+            document.getElementById('btn-start-desktop').disabled = false;
+            document.getElementById('btn-stop-desktop').disabled = true;
+            document.getElementById('desktop-status').textContent = 'Not connected';
+            document.getElementById('desktop-status').style.color = '#8f98a0';
+        }
+
+        function popOutDesktop() {
+            if (!currentDeviceId) return;
+            const nameEl = document.getElementById('detail-hostname');
+            const name = nameEl ? encodeURIComponent(nameEl.textContent) : '';
+            window.open('/dashboard/desktop.html?deviceId=' + encodeURIComponent(currentDeviceId) + '&name=' + name, '_blank');
+        }
+
+        function updateDesktopQuality() {
+            if (!desktopDeviceId || !socket || !desktopActive) return;
+            const quality = parseInt(document.getElementById('desktop-quality').value);
+            const fps = parseInt(document.getElementById('desktop-fps').value);
+            const scale = parseFloat(document.getElementById('desktop-scale').value);
+            socket.emit('desktop_quality', { deviceId: desktopDeviceId, quality, fps, scale });
+        }
+
+        // Desktop mouse/keyboard event handlers
+        function setupDesktopInput() {
+            const canvas = document.getElementById('desktop-canvas');
+            const viewer = document.getElementById('desktop-viewer');
+
+            function getCanvasCoords(e) {
+                const rect = canvas.getBoundingClientRect();
+                return {
+                    x: (e.clientX - rect.left) / rect.width,
+                    y: (e.clientY - rect.top) / rect.height
+                };
+            }
+
+            canvas.addEventListener('mousedown', (e) => {
+                if (!desktopActive || !socket) return;
+                e.preventDefault();
+                const pos = getCanvasCoords(e);
+                const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+                socket.emit('desktop_mouse', { deviceId: desktopDeviceId, x: pos.x, y: pos.y, button: btn, action: 'down' });
+            });
+
+            canvas.addEventListener('mouseup', (e) => {
+                if (!desktopActive || !socket) return;
+                e.preventDefault();
+                const pos = getCanvasCoords(e);
+                const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+                socket.emit('desktop_mouse', { deviceId: desktopDeviceId, x: pos.x, y: pos.y, button: btn, action: 'up' });
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!desktopActive || !socket) return;
+                // Throttle mouse moves to ~30 per second
+                if (!canvas._lastMove || Date.now() - canvas._lastMove > 33) {
+                    canvas._lastMove = Date.now();
+                    const pos = getCanvasCoords(e);
+                    socket.emit('desktop_mouse', { deviceId: desktopDeviceId, x: pos.x, y: pos.y, button: 'left', action: 'move' });
+                }
+            });
+
+            canvas.addEventListener('wheel', (e) => {
+                if (!desktopActive || !socket) return;
+                e.preventDefault();
+                const pos = getCanvasCoords(e);
+                socket.emit('desktop_mouse', { deviceId: desktopDeviceId, x: pos.x, y: pos.y, button: e.deltaY < 0 ? 'up' : 'down', action: 'scroll' });
+            }, { passive: false });
+
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            // Keyboard (only when desktop viewer is focused)
+            viewer.setAttribute('tabindex', '0');
+            viewer.addEventListener('keydown', (e) => {
+                if (!desktopActive || !socket) return;
+                e.preventDefault();
+                socket.emit('desktop_keyboard', { deviceId: desktopDeviceId, vkCode: e.keyCode, action: 'down' });
+            });
+
+            viewer.addEventListener('keyup', (e) => {
+                if (!desktopActive || !socket) return;
+                e.preventDefault();
+                socket.emit('desktop_keyboard', { deviceId: desktopDeviceId, vkCode: e.keyCode, action: 'up' });
+            });
+        }
 
         function appendChatMessage(sender, content) {
             const chatEl = document.getElementById('detail-chat');
@@ -2082,6 +2267,7 @@
                         sessionStorage.setItem('pocket_it_token', authToken);
                         hideLogin();
                         initSocket();
+                        setupDesktopInput();
                         loadFleet();
                         return;
                     }
@@ -2091,6 +2277,7 @@
                 if (res.ok) {
                     hideLogin();
                     initSocket();
+                    setupDesktopInput();
                     loadFleet();
                 } else {
                     showLogin();

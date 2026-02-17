@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-02-16
+
+### Added
+- Remote Desktop — IT staff can view and control a device's desktop remotely from the dashboard
+- Screen capture via GDI+ CopyFromScreen with configurable quality (Low/Medium/High), scale (25%/50%/75%/100%), and frame rate (5/10/15/24 FPS)
+- HTML5 Canvas viewer in dashboard with live frame rendering
+- Mouse input relay: click, right-click, middle-click, move, and scroll events forwarded to client
+- Keyboard input relay: key down/up events mapped to Windows virtual key codes via SendInput
+- 15-minute idle timeout with automatic session teardown on client
+- IT-initiated session (starts without user consent, consistent with terminal feature)
+
+### Technical
+- NEW: `client/PocketIT/Desktop/ScreenCaptureService.cs` — GDI+ screen capture with configurable quality and scale
+- NEW: `client/PocketIT/Desktop/InputInjectionService.cs` — Win32 SendInput P/Invoke for mouse and keyboard injection
+- NEW: `client/PocketIT/Desktop/RemoteDesktopService.cs` — capture loop orchestrator and session lifecycle management
+- EDIT: `client/PocketIT/Core/ServerConnection.cs` — desktop socket event wiring
+- EDIT: `client/PocketIT/TrayApplication.cs` — desktop event handlers
+- EDIT: `server/socket/agentNamespace.js` — relay desktop frames from /agent to /it namespace
+- EDIT: `server/socket/itNamespace.js` — relay desktop control events from /it to /agent namespace
+- EDIT: `server/public/dashboard/index.html` — Remote Desktop viewer section with Canvas, quality/FPS/scale controls
+
 ## [0.7.0] - 2026-02-16
 
 ### Added
@@ -200,7 +221,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/example/pocket-it/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/example/pocket-it/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/example/pocket-it/compare/v0.4.0...v0.6.0
 [0.4.0]: https://github.com/example/pocket-it/compare/v0.3.0...v0.4.0

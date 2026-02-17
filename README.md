@@ -375,6 +375,10 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `diagnostic_result` — Diagnostic check results: `{ checkType, status, results }`
 - `remediation_result` — Remediation action result: `{ actionId, success, message }`
 - `heartbeat` — Keep-alive ping
+- `desktop_started` — Confirms desktop session is active
+- `desktop_frame` — Encoded screen frame: `{ frame: base64 JPEG }`
+- `desktop_stopped` — Desktop session ended
+- `desktop_denied` — Desktop access denied by client
 
 **Server events:**
 - `agent_info` — Assigned agent name (sent on connect and with each chat response): `{ agentName: string }`
@@ -382,6 +386,11 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `chat_response` — AI response: `{ text, sender, agentName, action }`
 - `diagnostic_request` — Request diagnostic check: `{ checkType, requestId }`
 - `remediation_request` — Request remediation approval: `{ actionId, requestId }`
+- `start_desktop` — Start desktop capture session: `{ quality, fps, scale }`
+- `desktop_mouse` — Mouse input event: `{ type, x, y, button, delta }`
+- `desktop_keyboard` — Keyboard input event: `{ type, keyCode }`
+- `desktop_quality` — Adjust capture settings: `{ quality, fps, scale }`
+- `stop_desktop` — Stop desktop capture session
 
 ### /it (IT Staff Dashboard)
 
@@ -390,6 +399,11 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `unwatch_device` — Unsubscribe: `{ deviceId }`
 - `chat_to_device` — IT sends message to device: `{ deviceId, content }`
 - `request_diagnostic` — Request diagnostic from device: `{ deviceId, checkType }`
+- `start_desktop` — Start remote desktop session: `{ deviceId, quality, fps, scale }`
+- `desktop_mouse` — Send mouse input to device: `{ deviceId, type, x, y, button, delta }`
+- `desktop_keyboard` — Send keyboard input to device: `{ deviceId, type, keyCode }`
+- `desktop_quality` — Change capture quality/FPS/scale: `{ deviceId, quality, fps, scale }`
+- `stop_desktop` — Stop remote desktop session: `{ deviceId }`
 
 **Server events:**
 - `device_status` — Device status update: `{ deviceId, status, ... }`
@@ -399,6 +413,10 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `device_remediation_update` — Remediation completed: `{ deviceId, success, message }`
 - `device_status_changed` — Device online/offline: `{ deviceId, status }`
 - `ticket_created` — New ticket: `{ id, deviceId, title, priority }`
+- `desktop_started` — Desktop session active: `{ deviceId }`
+- `desktop_frame` — Screen frame relay: `{ deviceId, frame: base64 JPEG }`
+- `desktop_stopped` — Desktop session ended: `{ deviceId }`
+- `desktop_denied` — Device denied desktop access: `{ deviceId }`
 
 ## Database Schema
 
@@ -621,7 +639,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.7.0)
+## Current Status (v0.8.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -637,6 +655,7 @@ pocket-it/
 - **Notification channels**: webhook, Slack, and Teams notifications with retry logic
 - **Dashboard Alerts tab**: real-time alert updates, acknowledge/resolve actions, threshold configuration, notification channel management
 - **Remote terminal**: IT admins can open interactive PowerShell sessions with user consent, 15-minute idle timeout, Ctrl+C support
+- **Remote desktop**: IT admins can view and control device screens in real time via GDI+ frame streaming to an HTML5 Canvas viewer, with mouse and keyboard relay
 - **Reports & Analytics**: fleet health trends, device metrics, alert/ticket summaries, CSV/PDF export, scheduled reports with cron
 - Support ticket system with IT staff escalation
 - Offline message queueing with IT contact fallback
@@ -698,14 +717,15 @@ dotnet run
 | v0.4.0 | Proactive Monitoring | Scheduled diagnostics, alert thresholds, notifications (webhook/Slack/Teams), dashboard alerts tab |
 | v0.6.0 | Remote Terminal | Interactive PowerShell sessions, user consent flow, xterm.js UI, 15-minute timeout |
 | v0.7.0 | Reporting & Analytics | Fleet health trends, device metrics, alert/ticket summaries, CSV/PDF export, scheduled reports |
+| v0.8.0 | Remote Desktop | Real-time screen view and control, GDI+ frame streaming, mouse/keyboard relay, configurable quality/FPS/scale |
 
 ### Planned
 | Version | Theme | Key Capabilities |
 |---------|-------|-----------------|
 | v0.5.0 | Remote Execution & File Access | Auto-remediation policies, IT-admin file browser, remote PowerShell script execution |
-| v0.8.0 | Patch & Software Management | Trigger Windows Update, remote install/uninstall, compliance policies |
-| v0.8.0 | Knowledge Base | Searchable KB, AI references KB in responses, IT staff curated solutions |
-| v0.9.0 | Multi-tenant & RBAC | Organizations, role-based permissions, IT team management |
+| v0.9.0 | Patch & Software Management | Trigger Windows Update, remote install/uninstall, compliance policies |
+| v0.9.0 | Knowledge Base | Searchable KB, AI references KB in responses, IT staff curated solutions |
+| v0.10.0 | Multi-tenant & RBAC | Organizations, role-based permissions, IT team management |
 | v1.0.0 | Production Ready | mTLS device certs, audit compliance, MSI installer packaging |
 
 ## Development

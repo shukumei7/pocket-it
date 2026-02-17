@@ -260,7 +260,7 @@ public class ServerConnection : IDisposable
         }
     }
 
-    public async Task SendDiagnosticResult(DiagnosticResult result)
+    public async Task SendDiagnosticResult(DiagnosticResult result, bool silent = false)
     {
         var payload = new
         {
@@ -268,7 +268,8 @@ public class ServerConnection : IDisposable
             status = result.Status,
             results = result.Details,
             label = result.Label,
-            value = result.Value
+            value = result.Value,
+            silent = silent
         };
         if (_isConnected && _socket != null)
         {

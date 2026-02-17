@@ -377,15 +377,19 @@ function setup(io, app) {
       // Buffer diagnostic results — debounce 2s so "all" checks produce one AI response
       let buffer = diagnosticBuffers.get(deviceId);
       if (!buffer) {
-        buffer = { results: {}, timer: null };
+        buffer = { results: {}, timer: null, silent: false };
         diagnosticBuffers.set(deviceId, buffer);
       }
       buffer.results[data.checkType] = data.results;
+      if (data.silent) buffer.silent = true;
 
       if (buffer.timer) clearTimeout(buffer.timer);
       buffer.timer = setTimeout(async () => {
         const bufferedResults = buffer.results;
+        const wasSilent = buffer.silent;
         diagnosticBuffers.delete(deviceId);
+
+        if (wasSilent) return; // Skip AI chat for silent diagnostics
 
         const diagnosticAI = app.locals.diagnosticAI;
         if (!diagnosticAI) return;

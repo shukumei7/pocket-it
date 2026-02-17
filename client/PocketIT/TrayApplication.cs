@@ -655,15 +655,23 @@ public class TrayApplication : ApplicationContext
             var profile = await DeviceIdentity.GetSystemProfileAsync();
             await _serverConnection.SendSystemProfile(profile);
 
-            // Request consent for auto-diagnostics via chat UI
-            var diagMsg = JsonSerializer.Serialize(new
+            // Run diagnostics silently on connect (no chat UI, just collect data)
+            _ = Task.Run(async () =>
             {
-                type = "diagnostic_request",
-                checkType = "all",
-                requestId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(),
-                description = "Full System Diagnostic (auto check-up)"
+                try
+                {
+                    var results = await _diagnosticsEngine.RunAllAsync();
+                    foreach (var result in results)
+                    {
+                        await _serverConnection.SendDiagnosticResult(result, silent: true);
+                    }
+                    Logger.Info($"Auto-connect diagnostics: {results.Count()} checks completed silently");
+                }
+                catch (Exception ex2)
+                {
+                    Logger.Error("Auto-connect diagnostics failed", ex2);
+                }
             });
-            _uiContext.Post(_ => _chatWindow?.SendToWebView(diagMsg), null);
         }
         catch (Exception ex)
         {

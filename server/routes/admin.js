@@ -1,5 +1,5 @@
 const express = require('express');
-const { requireAdmin, requireIT } = require('../auth/middleware');
+const { requireAdmin, requireIT, isLocalhost } = require('../auth/middleware');
 const { generateToken, hashPassword, comparePassword } = require('../auth/userAuth');
 
 const router = express.Router();
@@ -137,6 +137,35 @@ router.get('/stats', requireIT, (req, res) => {
     totalTickets: tickets.getTotalCount(),
     averageHealth: healthSummary.avgScore,
     criticalDevices: healthSummary.breakdown.critical
+  });
+});
+
+// Auto-login for localhost — no credentials needed
+router.post('/auto-login', async (req, res) => {
+  if (!isLocalhost(req)) {
+    return res.status(403).json({ error: 'Auto-login only available from localhost' });
+  }
+
+  const db = req.app.locals.db;
+  let user = db.prepare('SELECT * FROM it_users WHERE username = ?').get('admin');
+
+  if (!user) {
+    const passwordHash = await hashPassword('admin');
+    db.prepare(
+      'INSERT INTO it_users (username, password_hash, display_name, role, created_at) VALUES (?, ?, ?, ?, ?)'
+    ).run('admin', passwordHash, 'Administrator', 'admin', new Date().toISOString());
+    user = db.prepare('SELECT * FROM it_users WHERE username = ?').get('admin');
+  }
+
+  const jwtSecret = process.env.POCKET_IT_JWT_SECRET;
+  if (!jwtSecret) {
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
+
+  const token = generateToken(user, jwtSecret);
+  res.json({
+    token,
+    user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role }
   });
 });
 

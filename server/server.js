@@ -17,7 +17,19 @@ const fs = require('fs');
 const { initDatabase } = require('./db/schema');
 
 const app = express();
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      connectSrc: ["'self'", "ws:", "wss:", "https://cdn.jsdelivr.net"],
+      imgSrc: ["'self'", "data:"],
+      fontSrc: ["'self'", "data:"]
+    }
+  }
+}));
 
 // Trust proxy only if explicitly configured
 // Do NOT set trust proxy to true blindly — it enables X-Forwarded-For which can be spoofed
@@ -146,6 +158,7 @@ const createReportsRouter = require('./routes/reports');
 app.use('/api/reports', createReportsRouter(reportService, exportService));
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'pocket-it' });

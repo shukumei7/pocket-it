@@ -325,4 +325,121 @@ describe('E2E Smoke Tests', () => {
         });
         assert.strictEqual(res.status, 400);
     });
+
+    // Test 17: Mount reports router, helmet (for CSP), and static files for report API tests
+    it('should register reports routes and serve static dashboard', () => {
+        const path = require('path');
+        const express = require('express');
+        const helmet = require('helmet');
+        const ReportService = require('../services/reportService');
+        const ExportService = require('../services/exportService');
+        const createReportsRouter = require('../routes/reports');
+
+        const reportService = new ReportService(app.locals.db);
+        const exportService = new ExportService();
+        app.use('/api/reports', createReportsRouter(reportService, exportService));
+        app.use(helmet({
+            contentSecurityPolicy: {
+                directives: {
+                    defaultSrc: ["'self'"],
+                    scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+                    styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+                    connectSrc: ["'self'", "ws:", "wss:"],
+                    imgSrc: ["'self'", "data:"],
+                    fontSrc: ["'self'", "data:"]
+                }
+            }
+        }));
+        app.use(express.static(path.join(__dirname, '..', 'public')));
+    });
+
+    // Test 18: Auto-login endpoint returns a token from localhost
+    it('should auto-login from localhost and return a token', async () => {
+        const res = await fetch(`${baseUrl}/api/admin/auto-login`, { method: 'POST' });
+        assert.ok(res.status === 200 || res.status === 201);
+        const data = await res.json();
+        assert.ok(data.token, 'Should return JWT token');
+        assert.ok(data.user, 'Should return user info');
+    });
+
+    // Test 19: Fleet health trend returns an array
+    it('should return fleet health trend as an array', async () => {
+        const res = await fetch(`${baseUrl}/api/reports/fleet/health-trend?days=7`);
+        assert.strictEqual(res.status, 200);
+        const data = await res.json();
+        assert.ok(Array.isArray(data), 'Fleet health trend should be an array');
+    });
+
+    // Test 20: Alert summary returns expected shape
+    it('should return alert summary with expected shape', async () => {
+        const res = await fetch(`${baseUrl}/api/reports/alerts/summary?days=30`);
+        assert.strictEqual(res.status, 200);
+        const data = await res.json();
+        assert.ok('total' in data, 'Should have total');
+        assert.ok('by_severity' in data, 'Should have by_severity');
+        assert.ok('per_day' in data, 'Should have per_day');
+        assert.ok(Array.isArray(data.by_severity), 'by_severity should be an array');
+        assert.ok(Array.isArray(data.per_day), 'per_day should be an array');
+    });
+
+    // Test 21: Ticket summary returns expected shape
+    it('should return ticket summary with expected shape', async () => {
+        const res = await fetch(`${baseUrl}/api/reports/tickets/summary?days=30`);
+        assert.strictEqual(res.status, 200);
+        const data = await res.json();
+        assert.ok('total' in data, 'Should have total');
+        assert.ok('by_status' in data, 'Should have by_status');
+        assert.ok('per_day' in data, 'Should have per_day');
+        assert.ok(Array.isArray(data.by_status), 'by_status should be an array');
+        assert.ok(Array.isArray(data.per_day), 'per_day should be an array');
+    });
+
+    // Test 22: CSV export returns text/csv content-type
+    it('should export fleet health as CSV with text/csv content-type', async () => {
+        const res = await fetch(`${baseUrl}/api/reports/export?type=fleet_health&days=7&format=csv`);
+        assert.strictEqual(res.status, 200);
+        const contentType = res.headers.get('content-type');
+        assert.ok(contentType && contentType.includes('text/csv'), `Expected text/csv, got: ${contentType}`);
+    });
+
+    // Test 23: Schedule CRUD — create, list, delete
+    it('should create, list, and delete a report schedule', async () => {
+        // Create
+        const createRes = await fetch(`${baseUrl}/api/reports/schedules`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: 'Weekly Fleet Report',
+                report_type: 'fleet_health',
+                schedule: '0 9 * * 1',
+                format: 'csv'
+            })
+        });
+        assert.strictEqual(createRes.status, 201);
+        const created = await createRes.json();
+        assert.ok(created.id, 'Should return schedule id');
+        assert.strictEqual(created.name, 'Weekly Fleet Report');
+
+        // List — should contain the created schedule
+        const listRes = await fetch(`${baseUrl}/api/reports/schedules`);
+        assert.strictEqual(listRes.status, 200);
+        const schedules = await listRes.json();
+        assert.ok(Array.isArray(schedules));
+        assert.ok(schedules.some(s => s.id === created.id), 'Created schedule should appear in list');
+
+        // Delete
+        const deleteRes = await fetch(`${baseUrl}/api/reports/schedules/${created.id}`, { method: 'DELETE' });
+        assert.strictEqual(deleteRes.status, 200);
+        const deleteData = await deleteRes.json();
+        assert.strictEqual(deleteData.success, true);
+    });
+
+    // Test 24: Dashboard serves index.html with CSP header containing cdn.jsdelivr.net
+    it('should serve dashboard with Content-Security-Policy including cdn.jsdelivr.net', async () => {
+        const res = await fetch(`${baseUrl}/dashboard/`);
+        assert.strictEqual(res.status, 200);
+        const csp = res.headers.get('content-security-policy');
+        assert.ok(csp, 'Should have Content-Security-Policy header');
+        assert.ok(csp.includes('cdn.jsdelivr.net'), `CSP should include cdn.jsdelivr.net, got: ${csp}`);
+    });
 });

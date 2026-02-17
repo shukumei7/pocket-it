@@ -528,7 +528,7 @@
 </head>
 <body>
     <!-- Login overlay -->
-    <div id="login-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:#0f1923; z-index:1000; display:flex; align-items:center; justify-content:center;">
+    <div id="login-overlay" style="position:fixed; top:0; left:0; right:0; bottom:0; background:#0f1923; z-index:1000; display:flex; align-items:center; justify-content:center;">
         <div style="background:#1b2838; border:1px solid #2a475e; border-radius:12px; padding:40px; width:360px; text-align:center;">
             <div style="font-size:24px; font-weight:700; color:#66c0f4; margin-bottom:8px;">Pocket IT</div>
             <div style="font-size:13px; color:#8f98a0; margin-bottom:24px;">IT Dashboard Login</div>
@@ -2026,6 +2026,20 @@
         // ---- Init ----
         async function init() {
             try {
+                // Auto-login on localhost — skip the login screen
+                if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+                    const autoRes = await fetch(`${API}/api/admin/auto-login`, { method: 'POST' });
+                    if (autoRes.ok) {
+                        const data = await autoRes.json();
+                        authToken = data.token;
+                        sessionStorage.setItem('pocket_it_token', authToken);
+                        hideLogin();
+                        initSocket();
+                        loadFleet();
+                        return;
+                    }
+                }
+                // Normal auth check (remote or auto-login failed)
                 const res = await fetchWithAuth(`${API}/api/admin/stats`);
                 if (res.ok) {
                     hideLogin();

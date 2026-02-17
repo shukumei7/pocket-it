@@ -72,6 +72,7 @@ function requireAdmin(req, res, next) {
 }
 
 module.exports = {
+  isLocalhost,
   requireDevice,
   requireIT,
   requireAdmin

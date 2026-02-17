@@ -45,6 +45,16 @@ client/PocketIT/
 │       ├── DiskCheck.cs         # Disk space on all drives
 │       └── NetworkCheck.cs      # Network adapters, connectivity, DNS
 │
+├── SystemTools/
+│   ├── ISystemTool.cs           # Interface + SystemToolResult record
+│   ├── SystemToolsEngine.cs     # Tool registry and dispatch
+│   └── Tools/
+│       ├── ProcessListTool.cs   # All processes via WMI with owner info
+│       ├── ProcessKillTool.cs   # Kill by PID (blocked-process safety)
+│       ├── ServiceListTool.cs   # Windows services with filter support
+│       ├── ServiceActionTool.cs # Start/Stop/Restart a named service
+│       └── EventLogQueryTool.cs # Flexible Windows Event Log query
+│
 ├── Remediation/
 │   ├── IRemediationAction.cs    # Interface for remediation actions
 │   ├── ActionWhitelist.cs       # Hardcoded whitelist
@@ -615,7 +625,11 @@ curl -X POST http://localhost:9100/api/enrollment/enroll \
 <PackageReference Include="SocketIOClient" Version="3.1.1" />
 <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
 <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
+<PackageReference Include="System.Management" Version="8.0.0" />
+<PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
 ```
+
+`System.Management` provides WMI access for the System Tools process and service enumeration. `System.ServiceProcess.ServiceController` is required for the service_list and service_action tools.
 
 **To update dependencies:**
 ```bash

@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.1.4 (MVP)
+Version: 0.9.0
 
 ## System Architecture
 
@@ -179,14 +179,28 @@ User sends a message to AI.
 ```
 
 #### `system_profile`
-Client sends device hardware information.
+Client sends device hardware information. Extended fields were added in v0.9.0.
 
 ```json
 {
   "cpuModel": "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz",
   "totalRamGB": 16,
   "totalDiskGB": 512,
-  "processorCount": 8
+  "processorCount": 8,
+  "osEdition": "Professional",
+  "osBuild": "22621.3007",
+  "osArchitecture": "64-bit",
+  "biosManufacturer": "American Megatrends Inc.",
+  "biosVersion": "F16",
+  "gpuModel": "NVIDIA GeForce RTX 3080",
+  "serialNumber": "SN-1234567890",
+  "domain": "CORP",
+  "lastBootTime": "2024-01-15T08:00:00Z",
+  "uptimeHours": 6.5,
+  "loggedInUsers": ["CORP\\jsmith", "CORP\\admin"],
+  "networkAdapters": [
+    { "name": "Ethernet", "macAddress": "00:1A:2B:3C:4D:5E", "ipAddress": "192.168.1.100", "speed": "1 Gbps" }
+  ]
 }
 ```
 
@@ -224,6 +238,21 @@ Keep-alive ping (sent every 30 seconds).
 
 ```json
 {}
+```
+
+#### `system_tool_result`
+Client sends the result of a system tool execution requested by the server.
+
+```json
+{
+  "requestId": "req_1707857234789",
+  "tool": "process_list",
+  "success": true,
+  "data": [
+    { "pid": 1234, "name": "chrome.exe", "owner": "DOMAIN\\user", "cpuPercent": 3.2, "memoryMB": 412 }
+  ],
+  "error": null
+}
 ```
 
 **Server → Client Events:**
@@ -300,6 +329,24 @@ Request user approval for remediation action.
 }
 ```
 
+#### `system_tool_request`
+Request client to execute a system tool and return results.
+
+```json
+{
+  "requestId": "req_1707857234789",
+  "tool": "process_list",
+  "params": {}
+}
+```
+
+**Available tools and their params:**
+- `process_list` — `{}` — Returns all running processes with PID, name, owner, CPU%, memory MB
+- `process_kill` — `{ "pid": 1234 }` — Terminates process by PID (blocked-process safety check applied)
+- `service_list` — `{ "filter": "running" }` — Returns Windows services; filter: `"all"` | `"running"` | `"stopped"`
+- `service_action` — `{ "name": "Spooler", "action": "restart" }` — Performs start/stop/restart on named service
+- `event_log_query` — `{ "log": "System", "level": "Error", "count": 50, "source": "" }` — Queries Windows Event Log
+
 ### Namespace: `/it` (IT Staff Dashboard)
 
 **Connection authentication:**
@@ -346,6 +393,18 @@ IT staff requests diagnostic check from device.
 {
   "deviceId": "abc123",
   "checkType": "network"
+}
+```
+
+#### `system_tool_request`
+IT staff requests execution of a system tool on a specific device. The server forwards the request to the device via the `/agent` namespace.
+
+```json
+{
+  "deviceId": "abc123",
+  "requestId": "req_1707857234789",
+  "tool": "process_list",
+  "params": {}
 }
 ```
 
@@ -448,6 +507,22 @@ New ticket created by AI.
 }
 ```
 
+#### `system_tool_result`
+System tool execution result relayed from device back to the requesting IT dashboard client.
+
+```json
+{
+  "deviceId": "abc123",
+  "requestId": "req_1707857234789",
+  "tool": "process_list",
+  "success": true,
+  "data": [
+    { "pid": 1234, "name": "chrome.exe", "owner": "DOMAIN\\user", "cpuPercent": 3.2, "memoryMB": 412 }
+  ],
+  "error": null
+}
+```
+
 ## Database Schema
 
 ### Table: `devices`
@@ -467,7 +542,20 @@ CREATE TABLE devices (
   health_score INTEGER,                        -- 0-100 computed health score
   certificate_fingerprint TEXT,                -- For future mTLS
   enrolled_at TEXT,                            -- ISO 8601 timestamp
-  last_seen TEXT                               -- ISO 8601 timestamp
+  last_seen TEXT,                              -- ISO 8601 timestamp
+  -- Extended profile fields (v0.9.0)
+  os_edition TEXT,                             -- e.g. "Professional", "Home"
+  os_build TEXT,                               -- e.g. "22621.3007"
+  os_architecture TEXT,                        -- e.g. "64-bit"
+  bios_manufacturer TEXT,                      -- e.g. "American Megatrends Inc."
+  bios_version TEXT,                           -- e.g. "F16"
+  gpu_model TEXT,                              -- e.g. "NVIDIA GeForce RTX 3080"
+  serial_number TEXT,                          -- System serial number
+  domain TEXT,                                 -- Domain or workgroup name
+  last_boot_time TEXT,                         -- ISO 8601 timestamp of last boot
+  uptime_hours REAL,                           -- Hours since last boot
+  logged_in_users TEXT,                        -- JSON array of logged-in usernames
+  network_adapters TEXT                        -- JSON array of adapter objects
 );
 ```
 
@@ -1245,6 +1333,38 @@ Portal: **https://helpdesk.example.com**
 
 4. Update server `systemPrompt.js` to document new action
 
+### Adding New System Tools
+
+System tools follow the `ISystemTool` interface. Each tool receives a `params` dictionary and returns a `SystemToolResult`.
+
+1. Create new tool class implementing `ISystemTool`:
+   ```csharp
+   public class MyTool : ISystemTool
+   {
+       public string ToolName => "my_tool";
+
+       public async Task<SystemToolResult> ExecuteAsync(Dictionary<string, object> params)
+       {
+           try
+           {
+               var data = new { /* collected data */ };
+               return SystemToolResult.Ok(data);
+           }
+           catch (Exception ex)
+           {
+               return SystemToolResult.Fail(ex.Message);
+           }
+       }
+   }
+   ```
+
+2. Register in `SystemToolsEngine.cs`:
+   ```csharp
+   RegisterTool(new MyTool());
+   ```
+
+3. The tool becomes available immediately via the `system_tool_request` socket event pattern. No server changes are required — the server routes requests by `tool` name and relays results.
+
 ### Adding New LLM Providers
 
 1. Add new provider case in `llmService.js`:
@@ -1345,6 +1465,15 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut
 
 ## Version History
+
+**0.9.0**
+- System Tools Engine: generic `system_tool_request`/`system_tool_result` socket event pattern on both `/agent` and `/it` namespaces
+- 5 system tools: process_list (WMI process enumeration with owner), process_kill (by PID, blocked-process safety), service_list (all Windows services with filter), service_action (start/stop/restart), event_log_query (flexible Windows Event Log query)
+- Enhanced device profile: 12 new fields on `devices` table (os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users JSON, network_adapters JSON)
+- `system_profile` event extended: client sends all 12 new fields on connect
+- Dashboard System Tools tab: tabbed interface (Processes, Services, Event Log) for live system inspection from IT dashboard
+- Expanded device info cards in dashboard: GPU, serial number, BIOS, domain, uptime, logged-in users, network adapters
+- New client packages: System.Management (WMI access) and System.ServiceProcess.ServiceController
 
 **0.2.0**
 - Real device diagnostics: client auto-collects system profile (CPU model, RAM, disk, cores) on connect

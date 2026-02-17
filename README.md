@@ -374,6 +374,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `chat_message` — User sends message: `{ content: string }`
 - `diagnostic_result` — Diagnostic check results: `{ checkType, status, results }`
 - `remediation_result` — Remediation action result: `{ actionId, success, message }`
+- `system_tool_result` — System tool execution result: `{ requestId, tool, success, data, error }`
 - `heartbeat` — Keep-alive ping
 - `desktop_started` — Confirms desktop session is active
 - `desktop_frame` — Encoded screen frame: `{ frame: base64 JPEG }`
@@ -391,6 +392,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `desktop_keyboard` — Keyboard input event: `{ type, keyCode }`
 - `desktop_quality` — Adjust capture settings: `{ quality, fps, scale }`
 - `stop_desktop` — Stop desktop capture session
+- `system_tool_request` — Request system tool execution: `{ requestId, tool, params }`
 
 ### /it (IT Staff Dashboard)
 
@@ -404,6 +406,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `desktop_keyboard` — Send keyboard input to device: `{ deviceId, type, keyCode }`
 - `desktop_quality` — Change capture quality/FPS/scale: `{ deviceId, quality, fps, scale }`
 - `stop_desktop` — Stop remote desktop session: `{ deviceId }`
+- `system_tool_request` — Forward tool request to a device: `{ deviceId, requestId, tool, params }`
 
 **Server events:**
 - `device_status` — Device status update: `{ deviceId, status, ... }`
@@ -417,6 +420,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `desktop_frame` — Screen frame relay: `{ deviceId, frame: base64 JPEG }`
 - `desktop_stopped` — Desktop session ended: `{ deviceId }`
 - `desktop_denied` — Device denied desktop access: `{ deviceId }`
+- `system_tool_result` — Tool result relayed from device: `{ deviceId, requestId, tool, success, data, error }`
 
 ## Database Schema
 
@@ -424,7 +428,7 @@ The server uses SQLite with 8 tables:
 
 | Table | Purpose |
 |-------|---------|
-| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, enrolled_at, last_seen) |
+| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, enrolled_at, last_seen, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters) |
 | `enrollment_tokens` | One-time enrollment tokens (token, expires_at, status, used_by_device) |
 | `it_users` | IT staff accounts (username, password_hash, role, last_login) |
 | `chat_messages` | Chat history (device_id, sender, content, message_type, metadata) |
@@ -623,6 +627,15 @@ pocket-it/
         │       ├── MemoryCheck.cs
         │       ├── DiskCheck.cs
         │       └── NetworkCheck.cs
+        ├── SystemTools/
+        │   ├── ISystemTool.cs            # Interface + SystemToolResult
+        │   ├── SystemToolsEngine.cs      # Tool registry + dispatch
+        │   └── Tools/
+        │       ├── ProcessListTool.cs    # All processes via WMI with owner
+        │       ├── ProcessKillTool.cs    # Kill by PID with safety checks
+        │       ├── ServiceListTool.cs    # All Windows services with filter
+        │       ├── ServiceActionTool.cs  # Start/Stop/Restart services
+        │       └── EventLogQueryTool.cs  # Flexible event log query
         ├── Remediation/
         │   ├── RemediationEngine.cs      # Execute whitelisted actions
         │   ├── IRemediationAction.cs     # Action interface
@@ -639,7 +652,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.8.0)
+## Current Status (v0.9.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -657,10 +670,13 @@ pocket-it/
 - **Remote terminal**: IT admins can open interactive PowerShell sessions with user consent, 15-minute idle timeout, Ctrl+C support
 - **Remote desktop**: IT admins can view and control device screens in real time via GDI+ frame streaming to an HTML5 Canvas viewer, with mouse and keyboard relay
 - **Reports & Analytics**: fleet health trends, device metrics, alert/ticket summaries, CSV/PDF export, scheduled reports with cron
+- **System Tools Engine**: generic `system_tool_request`/`system_tool_result` socket event pattern with 5 tools: process_list, process_kill, service_list, service_action, event_log_query
+- **Enhanced Device Profile**: 12 new fields collected on connect — GPU, serial number, BIOS, OS edition/build/architecture, domain, uptime, logged-in users, network adapters
+- **Dashboard System Tools tab**: tabbed UI (Processes, Services, Event Log) for live system inspection from the IT dashboard
 - Support ticket system with IT staff escalation
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
-- IT staff dashboard (Fleet, Tickets, Enrollment, Alerts) with login overlay for remote access
+- IT staff dashboard (Fleet, Tickets, Enrollment, Alerts, System Tools) with login overlay for remote access
 - Security hardening: JWT required, rate limiting, account lockout, CORS whitelist, input validation, prompt injection defense, server-side action whitelist, XSS prevention, Socket.IO chat rate limiting
 - Device removal with cascade delete (chat messages, diagnostics)
 - Chat history on reconnect (last 20 messages)
@@ -718,15 +734,16 @@ dotnet run
 | v0.6.0 | Remote Terminal | Interactive PowerShell sessions, user consent flow, xterm.js UI, 15-minute timeout |
 | v0.7.0 | Reporting & Analytics | Fleet health trends, device metrics, alert/ticket summaries, CSV/PDF export, scheduled reports |
 | v0.8.0 | Remote Desktop | Real-time screen view and control, GDI+ frame streaming, mouse/keyboard relay, configurable quality/FPS/scale |
+| v0.9.0 | System Tools & Enhanced Device Info | System Tools Engine (process_list, process_kill, service_list, service_action, event_log_query), 12 new device profile fields, dashboard System Tools tab |
 
 ### Planned
 | Version | Theme | Key Capabilities |
 |---------|-------|-----------------|
 | v0.5.0 | Remote Execution & File Access | Auto-remediation policies, IT-admin file browser, remote PowerShell script execution |
-| v0.9.0 | Patch & Software Management | Trigger Windows Update, remote install/uninstall, compliance policies |
-| v0.9.0 | Knowledge Base | Searchable KB, AI references KB in responses, IT staff curated solutions |
-| v0.10.0 | Multi-tenant & RBAC | Organizations, role-based permissions, IT team management |
-| v1.0.0 | Production Ready | mTLS device certs, audit compliance, MSI installer packaging |
+| v1.0.0 | Patch & Software Management | Trigger Windows Update, remote install/uninstall, compliance policies |
+| v1.1.0 | Knowledge Base | Searchable KB, AI references KB in responses, IT staff curated solutions |
+| v1.2.0 | Multi-tenant & RBAC | Organizations, role-based permissions, IT team management |
+| v1.3.0 | Production Ready | mTLS device certs, audit compliance, MSI installer packaging |
 
 ## Development
 

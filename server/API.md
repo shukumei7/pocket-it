@@ -686,9 +686,10 @@ Pocket IT uses Socket.IO for real-time bidirectional communication. See SPECS.md
 
 **Client → Server:**
 - `chat_message` — User sends message
-- `system_profile` — Device hardware information (CPU model, RAM, disk, cores)
+- `system_profile` — Device hardware information (CPU model, RAM, disk, cores, + 12 extended fields added in v0.9.0)
 - `diagnostic_result` — Diagnostic check results
 - `remediation_result` — Remediation action outcome
+- `system_tool_result` — System tool execution result: `{ requestId, tool, success, data, error }`
 - `heartbeat` — Keep-alive ping
 
 **Server → Client:**
@@ -696,6 +697,7 @@ Pocket IT uses Socket.IO for real-time bidirectional communication. See SPECS.md
 - `chat_response` — AI response with optional action
 - `diagnostic_request` — Request diagnostic check
 - `remediation_request` — Request remediation approval
+- `system_tool_request` — Request system tool execution: `{ requestId, tool, params }`
 
 ### Key Events — /it Namespace
 
@@ -704,6 +706,7 @@ Pocket IT uses Socket.IO for real-time bidirectional communication. See SPECS.md
 - `unwatch_device` — Unsubscribe from device
 - `chat_to_device` — IT sends message to device
 - `request_diagnostic` — Request diagnostic from device
+- `system_tool_request` — Forward tool request to a device: `{ deviceId, requestId, tool, params }`
 
 **Server → Client:**
 - `device_status` — Device information
@@ -713,6 +716,7 @@ Pocket IT uses Socket.IO for real-time bidirectional communication. See SPECS.md
 - `device_remediation_update` — Remediation completed
 - `device_status_changed` — Device online/offline
 - `ticket_created` — New ticket created
+- `system_tool_result` — Tool result relayed from device: `{ deviceId, requestId, tool, success, data, error }`
 
 ---
 

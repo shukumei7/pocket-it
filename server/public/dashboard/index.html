@@ -64,6 +64,12 @@
             border: 1px solid #2a475e;
             border-radius: 8px;
             padding: 20px;
+            cursor: pointer;
+            transition: border-color 0.2s, transform 0.1s;
+        }
+        .stat-card:hover {
+            border-color: #66c0f4;
+            transform: translateY(-2px);
         }
         .stat-card .value {
             font-size: 32px;
@@ -554,31 +560,31 @@
         <!-- Fleet page -->
         <div class="page active" id="page-fleet">
             <div class="stats-row">
-                <div class="stat-card">
+                <div class="stat-card" onclick="navigateTo('fleet')">
                     <div class="value" id="stat-online">0</div>
                     <div class="label">Devices Online</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="navigateTo('fleet')">
                     <div class="value" id="stat-total">0</div>
                     <div class="label">Total Devices</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="navigateTo('tickets')">
                     <div class="value" id="stat-tickets-open">0</div>
                     <div class="label">Open Tickets</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="navigateTo('tickets')">
                     <div class="value" id="stat-tickets-total">0</div>
                     <div class="label">Total Tickets</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="navigateTo('reports')">
                     <div class="value" id="stat-health">—</div>
                     <div class="label">Avg Health Score</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="navigateTo('alerts')">
                     <div class="value" id="stat-critical" style="color: #ef5350;">0</div>
                     <div class="label">Critical Devices</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" onclick="navigateTo('alerts')">
                     <div class="value" id="stat-alerts" style="color: #ef5350;">0</div>
                     <div class="label">Active Alerts</div>
                 </div>
@@ -890,10 +896,10 @@
   <!-- Alert Summary -->
   <h2 class="section-title">Alert Summary</h2>
   <div class="stats-row" id="alert-summary-stats" style="margin-bottom:16px;">
-    <div class="stat-card"><div class="value" id="stat-alert-total">0</div><div class="label">Total Alerts</div></div>
-    <div class="stat-card"><div class="value" id="stat-alert-active" style="color:#ef5350;">0</div><div class="label">Active</div></div>
-    <div class="stat-card"><div class="value" id="stat-alert-resolved" style="color:#66bb6a;">0</div><div class="label">Resolved</div></div>
-    <div class="stat-card"><div class="value" id="stat-alert-mttr">-</div><div class="label">MTTR (hours)</div></div>
+    <div class="stat-card" onclick="navigateTo('alerts')"><div class="value" id="stat-alert-total">0</div><div class="label">Total Alerts</div></div>
+    <div class="stat-card" onclick="navigateTo('alerts')"><div class="value" id="stat-alert-active" style="color:#ef5350;">0</div><div class="label">Active</div></div>
+    <div class="stat-card" onclick="navigateTo('alerts')"><div class="value" id="stat-alert-resolved" style="color:#66bb6a;">0</div><div class="label">Resolved</div></div>
+    <div class="stat-card" onclick="navigateTo('alerts')"><div class="value" id="stat-alert-mttr">-</div><div class="label">MTTR (hours)</div></div>
   </div>
   <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
     <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:20px;">
@@ -907,10 +913,10 @@
   <!-- Ticket Summary -->
   <h2 class="section-title">Ticket Summary</h2>
   <div class="stats-row" id="ticket-summary-stats" style="margin-bottom:16px;">
-    <div class="stat-card"><div class="value" id="stat-ticket-total">0</div><div class="label">Total Tickets</div></div>
-    <div class="stat-card"><div class="value" id="stat-ticket-open" style="color:#ffa726;">0</div><div class="label">Open</div></div>
-    <div class="stat-card"><div class="value" id="stat-ticket-resolved" style="color:#66bb6a;">0</div><div class="label">Resolved</div></div>
-    <div class="stat-card"><div class="value" id="stat-ticket-avgres">-</div><div class="label">Avg Resolution (hours)</div></div>
+    <div class="stat-card" onclick="navigateTo('tickets')"><div class="value" id="stat-ticket-total">0</div><div class="label">Total Tickets</div></div>
+    <div class="stat-card" onclick="navigateTo('tickets')"><div class="value" id="stat-ticket-open" style="color:#ffa726;">0</div><div class="label">Open</div></div>
+    <div class="stat-card" onclick="navigateTo('tickets')"><div class="value" id="stat-ticket-resolved" style="color:#66bb6a;">0</div><div class="label">Resolved</div></div>
+    <div class="stat-card" onclick="navigateTo('tickets')"><div class="value" id="stat-ticket-avgres">-</div><div class="label">Avg Resolution (hours)</div></div>
   </div>
   <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:20px; margin-bottom:20px;">
     <canvas id="chart-tickets-per-day" height="80"></canvas>
@@ -1057,18 +1063,22 @@
         });
 
         // ---- Navigation ----
+        function navigateTo(page) {
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            const navLink = document.querySelector(`[data-page="${page}"]`);
+            if (navLink) navLink.classList.add('active');
+            document.getElementById('page-' + page).classList.add('active');
+            if (page === 'fleet') loadFleet();
+            if (page === 'tickets') loadTickets();
+            if (page === 'alerts') loadAlerts();
+            if (page === 'reports') loadReports();
+        }
+
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                const page = link.dataset.page;
-                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-                link.classList.add('active');
-                document.getElementById(`page-${page}`).classList.add('active');
-                if (page === 'fleet') loadFleet();
-                if (page === 'tickets') loadTickets();
-                if (page === 'alerts') loadAlerts();
-                if (page === 'reports') loadReports();
+                navigateTo(link.dataset.page);
             });
         });
 
@@ -1419,13 +1429,13 @@
 
                 // Render info as stat cards
                 const infoHtml = [];
-                if (d.os_version) infoHtml.push(`<div class="stat-card"><div class="value" style="font-size:16px;">${escapeHtml(d.os_version)}</div><div class="label">OS</div></div>`);
-                if (d.cpu_model) infoHtml.push(`<div class="stat-card"><div class="value" style="font-size:16px;">${escapeHtml(d.cpu_model)}${d.processor_count ? ' (' + d.processor_count + ' cores)' : ''}</div><div class="label">CPU</div></div>`);
-                if (d.total_ram_gb) infoHtml.push(`<div class="stat-card"><div class="value">${d.total_ram_gb} GB</div><div class="label">RAM</div></div>`);
-                if (d.total_disk_gb) infoHtml.push(`<div class="stat-card"><div class="value">${d.total_disk_gb} GB</div><div class="label">Disk</div></div>`);
+                if (d.os_version) infoHtml.push(`<div class="stat-card" onclick="navigateTo('reports')"><div class="value" style="font-size:16px;">${escapeHtml(d.os_version)}</div><div class="label">OS</div></div>`);
+                if (d.cpu_model) infoHtml.push(`<div class="stat-card" onclick="navigateTo('reports')"><div class="value" style="font-size:16px;">${escapeHtml(d.cpu_model)}${d.processor_count ? ' (' + d.processor_count + ' cores)' : ''}</div><div class="label">CPU</div></div>`);
+                if (d.total_ram_gb) infoHtml.push(`<div class="stat-card" onclick="navigateTo('reports')"><div class="value">${d.total_ram_gb} GB</div><div class="label">RAM</div></div>`);
+                if (d.total_disk_gb) infoHtml.push(`<div class="stat-card" onclick="navigateTo('reports')"><div class="value">${d.total_disk_gb} GB</div><div class="label">Disk</div></div>`);
                 if (d.health_score !== null && d.health_score !== undefined) {
                     const color = d.health_score >= 75 ? '#66bb6a' : d.health_score >= 40 ? '#ffa726' : '#ef5350';
-                    infoHtml.push(`<div class="stat-card"><div class="value" style="color:${color};">${d.health_score}%</div><div class="label">Health Score</div></div>`);
+                    infoHtml.push(`<div class="stat-card" onclick="navigateTo('reports')"><div class="value" style="color:${color};">${d.health_score}%</div><div class="label">Health Score</div></div>`);
                 }
                 document.getElementById('detail-info').innerHTML = infoHtml.join('');
             });

@@ -139,6 +139,45 @@ function initDatabase(dbPath) {
     }
   }
 
+  // v0.10.0: Multi-tenancy tables (must come before ALTER TABLE references)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      contact_name TEXT,
+      contact_email TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS user_client_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES it_users(id) ON DELETE CASCADE,
+      client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      assigned_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, client_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_devices_client_id ON devices(client_id);
+    CREATE INDEX IF NOT EXISTS idx_enrollment_tokens_client_id ON enrollment_tokens(client_id);
+    CREATE INDEX IF NOT EXISTS idx_user_client_user ON user_client_assignments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_client_client ON user_client_assignments(client_id);
+  `);
+
+  // v0.10.0: Multi-tenancy columns
+  try {
+    db.prepare('ALTER TABLE devices ADD COLUMN client_id INTEGER REFERENCES clients(id)').run();
+  } catch (err) {
+    // Column already exists
+  }
+  try {
+    db.prepare('ALTER TABLE enrollment_tokens ADD COLUMN client_id INTEGER REFERENCES clients(id)').run();
+  } catch (err) {
+    // Column already exists
+  }
+
   // v0.4.0: Alert monitoring tables
   db.exec(`
     CREATE TABLE IF NOT EXISTS alert_thresholds (
@@ -314,6 +353,19 @@ function initDatabase(dbPath) {
     for (const s of defaultScripts) {
       insertScript.run(s.name, s.description, s.script_content, s.category, s.requires_elevation, s.timeout_seconds);
     }
+  }
+
+  // v0.10.0: Seed "Default" client and assign orphaned devices/tokens
+  const clientCount = db.prepare('SELECT COUNT(*) as count FROM clients').get().count;
+  if (clientCount === 0) {
+    db.prepare(
+      "INSERT INTO clients (name, slug, contact_name, notes, created_at) VALUES ('Default', 'default', 'System', 'Auto-created default client', datetime('now'))"
+    ).run();
+  }
+  const defaultClient = db.prepare("SELECT id FROM clients WHERE slug = 'default'").get();
+  if (defaultClient) {
+    db.prepare('UPDATE devices SET client_id = ? WHERE client_id IS NULL').run(defaultClient.id);
+    db.prepare('UPDATE enrollment_tokens SET client_id = ? WHERE client_id IS NULL').run(defaultClient.id);
   }
 
   return db;

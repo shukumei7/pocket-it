@@ -31,20 +31,27 @@ curl http://localhost:9100/health
 
 ### POST /api/enrollment/token
 
-Generate a one-time enrollment token for new devices.
+Generate a one-time enrollment token for new devices. The token is tied to a specific client so the enrolling device is automatically assigned to that client on enrollment.
 
 **Auth:** Admin (localhost bypass in MVP)
 
 **Request Body:**
 ```json
-{}
+{
+  "client_id": 1
+}
 ```
+
+**Fields:**
+- `client_id` (required) — ID of the client the enrolling device should be assigned to
 
 **Response:**
 ```json
 {
   "token": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "expiresAt": "2024-01-16T10:30:00.000Z"
+  "expiresAt": "2024-01-16T10:30:00.000Z",
+  "client_id": 1,
+  "client_name": "Acme Corp"
 }
 ```
 
@@ -53,10 +60,17 @@ Generate a one-time enrollment token for new devices.
 - Single-use
 - 24-hour expiration
 - Marked as 'used' after enrollment
+- Bound to the specified client; enrolled device inherits client assignment
+
+**Errors:**
+- `400` — `client_id` is required
+- `404` — Client not found
 
 **Example:**
 ```bash
-curl -X POST http://localhost:9100/api/enrollment/token
+curl -X POST http://localhost:9100/api/enrollment/token \
+  -H "Content-Type: application/json" \
+  -d '{"client_id": 1}'
 ```
 
 ### POST /api/enrollment/enroll
@@ -532,7 +546,7 @@ curl http://localhost:9100/api/llm/models
 
 ### POST /api/admin/login
 
-Authenticate as an IT staff user and receive JWT token.
+Authenticate as an IT staff user and receive JWT token. The response includes a `clients` array scoped to the user's role: admins receive all clients, technicians receive only their assigned clients.
 
 **Auth:** None (credentials-based)
 
@@ -553,9 +567,17 @@ Authenticate as an IT staff user and receive JWT token.
     "username": "admin",
     "display_name": "Administrator",
     "role": "admin"
-  }
+  },
+  "clients": [
+    { "id": 1, "name": "Default", "slug": "default" },
+    { "id": 2, "name": "Acme Corp", "slug": "acme-corp" }
+  ]
 }
 ```
+
+**Notes:**
+- `clients` — admin: all clients; technician: only assigned clients; empty array means no client access
+- `POST /api/admin/auto-login` returns the same shape
 
 **Errors:**
 - `400` — Username and password required
@@ -644,7 +666,7 @@ curl -X POST http://localhost:9100/api/admin/users \
 
 ### GET /api/admin/stats
 
-Get system statistics including fleet health metrics.
+Get system statistics including fleet health metrics. All counts are scoped to the requesting user's assigned clients — admins see totals across the entire fleet; technicians see totals for their assigned clients only.
 
 **Auth:** IT staff (localhost bypass in MVP)
 
@@ -661,12 +683,312 @@ Get system statistics including fleet health metrics.
 ```
 
 **Health metrics:**
-- `averageHealth`: Average health score across all devices with scores (0-100)
-- `criticalDevices`: Count of devices with health_score < 40
+- `averageHealth`: Average health score across scoped devices with scores (0-100)
+- `criticalDevices`: Count of scoped devices with health_score < 40
 
 **Example:**
 ```bash
 curl http://localhost:9100/api/admin/stats
+```
+
+---
+
+## Clients
+
+Manage client organizations (companies/tenants). Admins have full access; technicians can only view clients they are assigned to.
+
+### GET /api/clients
+
+List clients. Admins receive all clients; technicians receive only their assigned clients.
+
+**Auth:** IT staff (localhost bypass in MVP)
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "name": "Default",
+    "slug": "default",
+    "contact_name": null,
+    "contact_email": null,
+    "notes": null,
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "updated_at": null
+  },
+  {
+    "id": 2,
+    "name": "Acme Corp",
+    "slug": "acme-corp",
+    "contact_name": "Jane Smith",
+    "contact_email": "jane@acme.com",
+    "notes": "Primary enterprise client",
+    "created_at": "2026-02-01T00:00:00.000Z",
+    "updated_at": null
+  }
+]
+```
+
+**Example:**
+```bash
+curl http://localhost:9100/api/clients
+```
+
+---
+
+### GET /api/clients/:id
+
+Get a single client by ID. Technicians receive 403 if the client is not in their scope.
+
+**Auth:** IT staff (localhost bypass in MVP)
+
+**Response:**
+```json
+{
+  "id": 2,
+  "name": "Acme Corp",
+  "slug": "acme-corp",
+  "contact_name": "Jane Smith",
+  "contact_email": "jane@acme.com",
+  "notes": "Primary enterprise client",
+  "created_at": "2026-02-01T00:00:00.000Z",
+  "updated_at": null
+}
+```
+
+**Errors:**
+- `403` — Not in scope (technician accessing unassigned client)
+- `404` — Client not found
+
+**Example:**
+```bash
+curl http://localhost:9100/api/clients/2
+```
+
+---
+
+### POST /api/clients
+
+Create a new client. A URL-safe slug is auto-generated from the name.
+
+**Auth:** Admin only
+
+**Request Body:**
+```json
+{
+  "name": "Acme Corp",
+  "contact_name": "Jane Smith",
+  "contact_email": "jane@acme.com",
+  "notes": "Primary enterprise client"
+}
+```
+
+**Fields:**
+- `name` (required) — Display name; must be unique
+- `contact_name` (optional) — Primary contact person
+- `contact_email` (optional) — Primary contact email
+- `notes` (optional) — Free-form notes
+
+**Response:**
+```json
+{
+  "id": 2,
+  "name": "Acme Corp",
+  "slug": "acme-corp"
+}
+```
+
+**Errors:**
+- `400` — `name` is required
+- `400` — Client name already exists
+- `403` — Admin role required
+
+**Example:**
+```bash
+curl -X POST http://localhost:9100/api/clients \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Corp",
+    "contact_name": "Jane Smith",
+    "contact_email": "jane@acme.com"
+  }'
+```
+
+---
+
+### PATCH /api/clients/:id
+
+Update client details. Slug is not regenerated on name change.
+
+**Auth:** Admin only
+
+**Request Body (all fields optional):**
+```json
+{
+  "name": "Acme Corporation",
+  "contact_name": "John Doe",
+  "contact_email": "john@acme.com",
+  "notes": "Updated contact"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — No fields to update
+- `403` — Admin role required
+- `404` — Client not found
+
+**Example:**
+```bash
+curl -X PATCH http://localhost:9100/api/clients/2 \
+  -H "Content-Type: application/json" \
+  -d '{"contact_email": "newemail@acme.com"}'
+```
+
+---
+
+### DELETE /api/clients/:id
+
+Delete a client. Fails if the client still has devices assigned.
+
+**Auth:** Admin only
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — Client has devices assigned (reassign or remove devices first)
+- `403` — Admin role required
+- `404` — Client not found
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:9100/api/clients/2
+```
+
+---
+
+### GET /api/clients/:id/users
+
+List IT users assigned to this client.
+
+**Auth:** Admin only
+
+**Response:**
+```json
+[
+  {
+    "id": 2,
+    "username": "tech-user",
+    "display_name": "Tech User",
+    "role": "technician",
+    "assigned_at": "2026-02-01T00:00:00.000Z"
+  }
+]
+```
+
+**Errors:**
+- `403` — Admin role required
+- `404` — Client not found
+
+**Example:**
+```bash
+curl http://localhost:9100/api/clients/2/users
+```
+
+---
+
+### POST /api/clients/:id/users
+
+Assign an IT user to this client.
+
+**Auth:** Admin only
+
+**Request Body:**
+```json
+{
+  "user_id": 2
+}
+```
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — `user_id` is required
+- `400` — User already assigned to this client
+- `403` — Admin role required
+- `404` — Client or user not found
+
+**Example:**
+```bash
+curl -X POST http://localhost:9100/api/clients/2/users \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 2}'
+```
+
+---
+
+### DELETE /api/clients/:id/users/:userId
+
+Unassign an IT user from a client. The user account is not deleted.
+
+**Auth:** Admin only
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `403` — Admin role required
+- `404` — Client not found or user not assigned to this client
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:9100/api/clients/2/users/2
+```
+
+---
+
+### GET /api/clients/:id/installer
+
+Download a pre-configured installer ZIP for this client. The archive contains the published client binary and an `appsettings.json` pre-seeded with the server URL and a freshly generated enrollment token bound to this client.
+
+**Auth:** Admin only
+
+**Response:** Binary ZIP file download
+
+**Headers:**
+```
+Content-Type: application/zip
+Content-Disposition: attachment; filename="pocket-it-acme-corp.zip"
+```
+
+**Errors:**
+- `403` — Admin role required
+- `404` — Client not found
+- `500` — Client build not found (run `dotnet publish` first)
+
+**Example:**
+```bash
+curl -O -J http://localhost:9100/api/clients/2/installer
 ```
 
 ---

@@ -6,17 +6,28 @@ const router = express.Router();
 
 router.post('/token', requireAdmin, (req, res) => {
   const db = req.app.locals.db;
+  const { client_id } = req.body;
+
+  // Validate client exists
+  if (!client_id) {
+    return res.status(400).json({ error: 'client_id is required' });
+  }
+  const client = db.prepare('SELECT id, name FROM clients WHERE id = ?').get(client_id);
+  if (!client) {
+    return res.status(404).json({ error: 'Client not found' });
+  }
+
   const token = uuidv4();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   const insert = db.prepare(`
-    INSERT INTO enrollment_tokens (token, created_by, expires_at, status)
-    VALUES (?, ?, ?, 'active')
+    INSERT INTO enrollment_tokens (token, created_by, expires_at, status, client_id)
+    VALUES (?, ?, ?, 'active', ?)
   `);
 
-  insert.run(token, req.user?.username || 'admin', expiresAt);
+  insert.run(token, req.user?.username || 'admin', expiresAt, client_id);
 
-  res.json({ token, expiresAt });
+  res.json({ token, expiresAt, client_id, client_name: client.name });
 });
 
 router.post('/enroll', (req, res) => {
@@ -49,9 +60,9 @@ router.post('/enroll', (req, res) => {
 
   // Insert new device
   db.prepare(`
-    INSERT INTO devices (device_id, hostname, os_version, status, enrolled_at, last_seen, device_secret)
-    VALUES (?, ?, ?, 'online', ?, ?, ?)
-  `).run(deviceId, hostname, osVersion, enrolledAt, enrolledAt, deviceSecret);
+    INSERT INTO devices (device_id, hostname, os_version, status, enrolled_at, last_seen, device_secret, client_id)
+    VALUES (?, ?, ?, 'online', ?, ?, ?, ?)
+  `).run(deviceId, hostname, osVersion, enrolledAt, enrolledAt, deviceSecret, tokenRecord.client_id || null);
 
   // Mark token as used
   db.prepare(`

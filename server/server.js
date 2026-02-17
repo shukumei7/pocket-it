@@ -35,14 +35,16 @@ app.use(helmet({
 // Do NOT set trust proxy to true blindly — it enables X-Forwarded-For which can be spoofed
 // app.set('trust proxy', 1); // Only enable behind a known reverse proxy
 
-// Rate limiting
+// Rate limiting (skip localhost — consistent with auth bypass)
 const rateLimit = require('express-rate-limit');
+const { isLocalhost } = require('./auth/middleware');
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => isLocalhost(req),
   message: { error: 'Too many requests, please try again later' }
 });
 
@@ -51,6 +53,7 @@ const authLimiter = rateLimit({
   max: 10, // stricter for auth endpoints
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => isLocalhost(req),
   message: { error: 'Too many authentication attempts' }
 });
 
@@ -139,6 +142,8 @@ app.use('/api/tickets', ticketsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/llm', createLLMRouter(llmService));
+const clientsRouter = require('./routes/clients');
+app.use('/api/clients', clientsRouter);
 
 const createAlertsRouter = require('./routes/alerts');
 app.use('/api/alerts', createAlertsRouter(alertService, notificationService));

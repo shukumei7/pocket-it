@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAdmin, requireIT, isLocalhost } = require('../auth/middleware');
 const { generateToken, hashPassword, comparePassword } = require('../auth/userAuth');
+const { resolveClientScope } = require('../auth/clientScope');
 
 const router = express.Router();
 
@@ -79,6 +80,18 @@ router.post('/login', async (req, res) => {
   }
   const token = generateToken(user, jwtSecret);
 
+  // Fetch clients for the user
+  let clients;
+  if (user.role === 'admin') {
+    clients = db.prepare('SELECT id, name, slug FROM clients ORDER BY name').all();
+  } else {
+    clients = db.prepare(`
+      SELECT c.id, c.name, c.slug FROM clients c
+      JOIN user_client_assignments uca ON c.id = uca.client_id
+      WHERE uca.user_id = ? ORDER BY c.name
+    `).all(user.id);
+  }
+
   res.json({
     token,
     user: {
@@ -86,7 +99,8 @@ router.post('/login', async (req, res) => {
       username: user.username,
       display_name: user.display_name,
       role: user.role
-    }
+    },
+    clients
   });
 });
 
@@ -122,19 +136,19 @@ router.post('/users', requireAdmin, async (req, res) => {
   }
 });
 
-router.get('/stats', requireIT, (req, res) => {
+router.get('/stats', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const FleetService = require('../services/fleetService');
   const TicketService = require('../services/ticketService');
   const fleet = new FleetService(db);
   const tickets = new TicketService(db);
-  const healthSummary = fleet.getHealthSummary();
+  const healthSummary = fleet.getHealthSummary(req.clientScope);
 
   res.json({
-    totalDevices: fleet.getTotalCount(),
-    onlineDevices: fleet.getOnlineCount(),
-    openTickets: tickets.getOpenCount(),
-    totalTickets: tickets.getTotalCount(),
+    totalDevices: fleet.getTotalCount(req.clientScope),
+    onlineDevices: fleet.getOnlineCount(req.clientScope),
+    openTickets: tickets.getOpenCount(req.clientScope),
+    totalTickets: tickets.getTotalCount(req.clientScope),
     averageHealth: healthSummary.avgScore,
     criticalDevices: healthSummary.breakdown.critical
   });
@@ -163,9 +177,11 @@ router.post('/auto-login', async (req, res) => {
   }
 
   const token = generateToken(user, jwtSecret);
+  const clients = db.prepare('SELECT id, name, slug FROM clients ORDER BY name').all();
   res.json({
     token,
-    user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role }
+    user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role },
+    clients
   });
 });
 

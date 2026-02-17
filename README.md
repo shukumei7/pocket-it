@@ -31,7 +31,7 @@ The AI assistant can run diagnostics, suggest whitelisted remediation actions (w
 │  └────────────┘  └──────────────┘  └───────────────┘      │
 │  ┌────────────┐  ┌──────────────┐                          │
 │  │  Express   │  │   SQLite DB  │                          │
-│  │  REST API  │  │  (8 tables)  │                          │
+│  │  REST API  │  │  (17 tables) │                          │
 │  └────────────┘  └──────────────┘                          │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -69,7 +69,7 @@ Server emits "chat_response" back to client
 | Client Database | Microsoft.Data.Sqlite | Local message queue and settings |
 | Server Runtime | Node.js (Express 4.21) | HTTP and WebSocket server |
 | Server WebSockets | Socket.IO 4.7 | Two namespaces: /agent and /it |
-| Server Database | SQLite (better-sqlite3) | 8 tables for devices, tickets, chat, diagnostics |
+| Server Database | SQLite (better-sqlite3) | 17 tables for devices, tickets, chat, diagnostics, clients, and more |
 | LLM Providers | Ollama, OpenAI, Anthropic, Claude CLI | Flexible AI backend (4 provider options) |
 | Authentication | JWT (jsonwebtoken 9.0) | IT staff authentication (MVP: localhost bypass) |
 
@@ -351,7 +351,18 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `GET /api/llm/models` — Available models for current provider
 
 ### Admin
-- `GET /api/admin/stats` — System statistics including average health and critical devices (admin auth)
+- `GET /api/admin/stats` — System statistics including average health and critical devices; scope-aware (admin auth)
+
+### Clients
+- `GET /api/clients` — List clients (admin: all, tech: assigned only)
+- `GET /api/clients/:id` — Get client details (scope-checked)
+- `POST /api/clients` — Create client (admin, requires `name`)
+- `PATCH /api/clients/:id` — Update client details (admin)
+- `DELETE /api/clients/:id` — Delete client (admin, fails if has devices)
+- `GET /api/clients/:id/users` — List technicians assigned to client (admin)
+- `POST /api/clients/:id/users` — Assign technician to client (admin, body: `{user_id}`)
+- `DELETE /api/clients/:id/users/:userId` — Unassign technician from client (admin)
+- `GET /api/clients/:id/installer` — Download pre-configured installer ZIP (admin)
 
 ### Reports
 - `GET /api/reports/fleet/health-trend?days=7` — Fleet average health per day
@@ -424,18 +435,27 @@ All endpoints accept `localhost` without authentication for MVP development.
 
 ## Database Schema
 
-The server uses SQLite with 8 tables:
+The server uses SQLite with 17 tables:
 
 | Table | Purpose |
 |-------|---------|
-| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, enrolled_at, last_seen, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters) |
-| `enrollment_tokens` | One-time enrollment tokens (token, expires_at, status, used_by_device) |
+| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, enrolled_at, last_seen, client_id, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters) |
+| `enrollment_tokens` | One-time enrollment tokens (token, expires_at, status, used_by_device, client_id) |
 | `it_users` | IT staff accounts (username, password_hash, role, last_login) |
 | `chat_messages` | Chat history (device_id, sender, content, message_type, metadata) |
 | `tickets` | Support tickets (device_id, title, status, priority, assigned_to, ai_summary) |
 | `ticket_comments` | Ticket comments (ticket_id, author, content) |
 | `diagnostic_results` | Diagnostic check results (device_id, check_type, status, data) |
 | `audit_log` | System audit trail (actor, action, target, details) |
+| `alert_thresholds` | Configurable alert rules (check_type, field_path, operator, threshold_value, severity) |
+| `alerts` | Alert instances with consecutive hit tracking and auto-resolve |
+| `notification_channels` | Webhook, Slack, and Teams notification targets |
+| `auto_remediation_policies` | Automated remediation rules (future use) |
+| `script_library` | Shared PowerShell script templates (future use) |
+| `report_schedules` | Cron-based scheduled report definitions |
+| `report_history` | History of generated reports with export links |
+| `clients` | Client organizations for MSP multi-tenancy (name, slug, contact_name, contact_email, notes) |
+| `user_client_assignments` | Many-to-many mapping of IT technicians to clients |
 
 ## AI Personality System
 
@@ -596,16 +616,19 @@ pocket-it/
 │   ├── socket/
 │   │   ├── index.js              # Socket.IO setup
 │   │   ├── agentNamespace.js     # /agent namespace (device clients)
-│   │   └── itNamespace.js        # /it namespace (IT dashboard)
+│   │   ├── itNamespace.js        # /it namespace (IT dashboard)
+│   │   └── scopedEmit.js         # Scoped broadcast helper with device-client cache
 │   ├── routes/
 │   │   ├── enrollment.js         # Token generation and device enrollment
 │   │   ├── devices.js            # Device management
 │   │   ├── tickets.js            # Ticket CRUD
 │   │   ├── chat.js               # Chat history
 │   │   ├── llm.js                # LLM config endpoints
-│   │   └── admin.js              # Admin stats
+│   │   ├── admin.js              # Admin stats
+│   │   └── clients.js            # Client CRUD, user assignment, installer download
 │   ├── auth/
-│   │   └── middleware.js         # Auth middleware (localhost bypass)
+│   │   ├── middleware.js         # Auth middleware (localhost bypass)
+│   │   └── clientScope.js        # resolveClientScope middleware, scopeSQL, isDeviceInScope
 │   └── public/
 │       └── dashboard/            # IT staff web dashboard (future)
 └── client/
@@ -652,7 +675,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.9.0)
+## Current Status (v0.10.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -682,6 +705,13 @@ pocket-it/
 - Chat history on reconnect (last 20 messages)
 - Full ticket detail view with comments and status/priority editing
 - 50+ tests (34 security unit tests + 16 E2E smoke tests)
+- **Multi-tenancy (MSP model)**: devices organized by client; IT technicians scoped to assigned clients; admins see everything
+- **Client management**: full CRUD for client organizations with contact info, notes, and auto-generated slugs
+- **User-client assignment**: assign/unassign IT technicians to clients; unassigned techs see zero devices
+- **Scope middleware**: `resolveClientScope` middleware and `scopeSQL` helper enforce per-user data isolation on all fleet, ticket, alert, and report endpoints
+- **Scoped Socket.IO**: `emitToScoped()` restricts real-time device events to in-scope IT dashboard connections
+- **Per-client installer download**: admin can generate a pre-configured installer ZIP per client with pre-seeded enrollment token
+- **Dashboard client selector**: filter entire dashboard by client; fleet page shows grouped device view under client headers when all clients selected
 
 ### Setup
 
@@ -735,6 +765,7 @@ dotnet run
 | v0.7.0 | Reporting & Analytics | Fleet health trends, device metrics, alert/ticket summaries, CSV/PDF export, scheduled reports |
 | v0.8.0 | Remote Desktop | Real-time screen view and control, GDI+ frame streaming, mouse/keyboard relay, configurable quality/FPS/scale |
 | v0.9.0 | System Tools & Enhanced Device Info | System Tools Engine (process_list, process_kill, service_list, service_action, event_log_query), 12 new device profile fields, dashboard System Tools tab |
+| v0.10.0 | Multi-Tenancy (MSP Model) | Client organizations, technician-to-client assignment, scope middleware, scoped Socket.IO broadcasts, per-client installer download, dashboard client management |
 
 ### Planned
 | Version | Theme | Key Capabilities |
@@ -742,7 +773,7 @@ dotnet run
 | v0.5.0 | Remote Execution & File Access | Auto-remediation policies, IT-admin file browser, remote PowerShell script execution |
 | v1.0.0 | Patch & Software Management | Trigger Windows Update, remote install/uninstall, compliance policies |
 | v1.1.0 | Knowledge Base | Searchable KB, AI references KB in responses, IT staff curated solutions |
-| v1.2.0 | Multi-tenant & RBAC | Organizations, role-based permissions, IT team management |
+| v1.2.0 | Advanced RBAC | Fine-grained permissions within client scope, IT team management, per-client alert thresholds and report schedules (client-level multi-tenancy delivered in v0.10.0) |
 | v1.3.0 | Production Ready | mTLS device certs, audit compliance, MSI installer packaging |
 
 ## Development

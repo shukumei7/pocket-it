@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-02-17
+
+### Added
+- **Client-Based Multi-Tenancy (MSP Model)** — Devices are organized by client (company/organization); IT technicians only see devices belonging to their assigned clients; admins see everything
+- **Client CRUD API** — Full REST API for managing clients: create, read, update, delete; with slug generation, contact info, and notes fields
+- **User-to-Client Assignment** — Admins can assign/unassign IT technicians to clients; unassigned technicians see zero devices
+- **Scope Middleware** — `resolveClientScope` middleware resolves per-request access scope from JWT claims; `scopeSQL` injects WHERE clause fragments for filtering; `isDeviceInScope` for per-device authorization checks
+- **Scoped Socket.IO Broadcasts** — `emitToScoped()` helper targets only IT sockets whose scope includes a given device; device-client mapping cached in-process for fast lookup
+- **Per-Client Installer Download** — Admin can download a pre-configured installer ZIP per client (`GET /api/clients/:id/installer`), bundling the enrollment token and client assignment
+- **Dashboard Client Selector** — Nav bar dropdown to filter the entire dashboard by client (admin: "All Clients" + individual; tech: assigned clients only)
+- **Dashboard Clients Management Page** — Admin-only page for full client CRUD, user assignment, and per-client installer download
+- **Fleet Grouped View** — When "All Clients" selected by admin, fleet page groups devices under client headers
+- **Enrollment Client Picker** — Enrollment token creation now includes a client picker dropdown; `client_id` is stored on the token and propagated to the device on enroll
+- **Default Client Seed** — On first run (empty clients table), a "Default" client is seeded and all existing devices/tokens are auto-assigned to it
+- **`archiver` dependency** — ZIP creation for per-client installer download endpoint
+
+### Changed
+- **Enrollment token creation requires `client_id`** — `POST /api/enrollment/token` body must include `client_id`; enrolled device is automatically assigned to that client
+- **Login response includes `clients` array** — `POST /api/admin/login` and `POST /api/admin/auto-login` responses now include a `clients` array (admin: all clients; tech: assigned clients)
+- **Stats endpoint is scope-aware** — `GET /api/admin/stats` returns counts scoped to the requesting user's assigned clients
+- **All device, ticket, alert, and report list endpoints are scope-filtered** — technicians only receive records belonging to their assigned clients
+- **Socket.IO /it namespace** — Scope resolved on connect and stored as `socket.userScope`; all 16+ device-specific event handlers enforce scope before forwarding; fleet-wide events (e.g. `alert_stats_updated`) still broadcast to all
+- **Socket.IO /agent namespace** — All ~23 `io.of('/it').emit()` calls replaced with `emitToScoped()` to restrict broadcasts to in-scope IT sockets
+
+### Technical
+- NEW: `server/auth/clientScope.js` — `resolveClientScope` middleware, `scopeSQL` helper, `isDeviceInScope` check
+- NEW: `server/routes/clients.js` — Client CRUD endpoints, user assignment endpoints, per-client installer download
+- NEW: `server/socket/scopedEmit.js` — `emitToScoped(io, deviceId, event, data)` with device-client cache
+- EDIT: `server/db/schema.js` — Added `clients` table, `user_client_assignments` table, `client_id` column on `devices` and `enrollment_tokens`, indexes, Default client seed migration
+- EDIT: `server/server.js` — Register `/api/clients` routes
+- EDIT: `server/services/fleetService.js` — Optional `scope` param on `getAllDevices`, `getOnlineCount`, `getTotalCount`, `getHealthSummary`
+- EDIT: `server/services/ticketService.js` — Optional `scope` param on `getOpenCount`, `getTotalCount` (JOINs through devices)
+- EDIT: `server/services/alertService.js` — Optional `scope` param on `getStats`, `getActiveAlerts`, `getAlertHistory`
+- EDIT: `server/services/reportService.js` — Optional `scope` param on `getFleetHealthTrend`, `getAlertSummary`, `getTicketSummary`
+- EDIT: `server/routes/devices.js` — Scope filter on `GET /`, scope check on `GET /:id`, `GET /:id/diagnostics`, `DELETE /:id`
+- EDIT: `server/routes/enrollment.js` — `client_id` required on token creation; auto-assign device to client on enroll
+- EDIT: `server/routes/admin.js` — Scoped stats; `clients` array included in login response
+- EDIT: `server/routes/tickets.js` — Scope filter via device JOIN
+- EDIT: `server/routes/alerts.js` — Scope filter via alertService
+- EDIT: `server/routes/reports.js` — Scope filter on all report endpoints
+- EDIT: `server/socket/itNamespace.js` — Scope resolution on connect, scope guard on all 16+ handlers
+- EDIT: `server/socket/agentNamespace.js` — All ~23 `io.of('/it').emit()` calls replaced with `emitToScoped()`
+- DEPS: Added `archiver` ^7.0.0
+
 ## [0.9.0] - 2026-02-17
 
 ### Added
@@ -239,7 +283,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/example/pocket-it/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/example/pocket-it/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/example/pocket-it/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/example/pocket-it/compare/v0.6.0...v0.7.0

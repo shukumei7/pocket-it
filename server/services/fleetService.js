@@ -1,10 +1,13 @@
+const { scopeSQL } = require('../auth/clientScope');
+
 class FleetService {
   constructor(db) {
     this.db = db;
   }
 
-  getAllDevices() {
-    return this.db.prepare('SELECT * FROM devices ORDER BY last_seen DESC').all();
+  getAllDevices(scope) {
+    const { clause, params } = scopeSQL(scope);
+    return this.db.prepare(`SELECT * FROM devices WHERE ${clause} ORDER BY last_seen DESC`).all(...params);
   }
 
   getDevice(deviceId) {
@@ -17,12 +20,14 @@ class FleetService {
     ).all(deviceId, limit);
   }
 
-  getOnlineCount() {
-    return this.db.prepare("SELECT COUNT(*) as count FROM devices WHERE status = 'online'").get().count;
+  getOnlineCount(scope) {
+    const { clause, params } = scopeSQL(scope);
+    return this.db.prepare(`SELECT COUNT(*) as count FROM devices WHERE status = 'online' AND ${clause}`).get(...params).count;
   }
 
-  getTotalCount() {
-    return this.db.prepare('SELECT COUNT(*) as count FROM devices').get().count;
+  getTotalCount(scope) {
+    const { clause, params } = scopeSQL(scope);
+    return this.db.prepare(`SELECT COUNT(*) as count FROM devices WHERE ${clause}`).get(...params).count;
   }
 
   computeHealthScore(deviceId) {
@@ -55,11 +60,12 @@ class FleetService {
     return avgScore;
   }
 
-  getHealthSummary() {
+  getHealthSummary(scope) {
+    const { clause, params } = scopeSQL(scope);
     const devices = this.db.prepare(`
       SELECT device_id, hostname, status, health_score, cpu_model, total_ram_gb, total_disk_gb, processor_count, last_seen
-      FROM devices ORDER BY last_seen DESC
-    `).all();
+      FROM devices WHERE ${clause} ORDER BY last_seen DESC
+    `).all(...params);
 
     let healthy = 0, warning = 0, critical = 0, unscanned = 0;
     let totalScore = 0, scoredCount = 0;

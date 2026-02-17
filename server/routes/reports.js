@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { requireIT } = require('../auth/middleware');
+const { resolveClientScope, isDeviceInScope } = require('../auth/clientScope');
 
 module.exports = function createReportsRouter(reportService, exportService) {
 
   // Fleet health trend
-  router.get('/fleet/health-trend', requireIT, (req, res) => {
+  router.get('/fleet/health-trend', requireIT, resolveClientScope, (req, res) => {
     try {
       const days = parseInt(req.query.days) || 7;
-      const data = reportService.getFleetHealthTrend(days);
+      const data = reportService.getFleetHealthTrend(days, req.clientScope);
       res.json(data);
     } catch (err) {
       console.error('Fleet health trend error:', err);
@@ -17,8 +18,11 @@ module.exports = function createReportsRouter(reportService, exportService) {
   });
 
   // Device metric trend
-  router.get('/device/:id/metrics', requireIT, (req, res) => {
+  router.get('/device/:id/metrics', requireIT, resolveClientScope, (req, res) => {
     try {
+      if (!isDeviceInScope(req.app.locals.db, req.params.id, req.clientScope)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
       const days = parseInt(req.query.days) || 7;
       const checkType = req.query.check_type || 'cpu';
       const data = reportService.getDeviceMetricTrend(req.params.id, checkType, days);
@@ -30,8 +34,11 @@ module.exports = function createReportsRouter(reportService, exportService) {
   });
 
   // Device health history
-  router.get('/device/:id/health-history', requireIT, (req, res) => {
+  router.get('/device/:id/health-history', requireIT, resolveClientScope, (req, res) => {
     try {
+      if (!isDeviceInScope(req.app.locals.db, req.params.id, req.clientScope)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
       const days = parseInt(req.query.days) || 30;
       const data = reportService.getDeviceHealthHistory(req.params.id, days);
       res.json(data);
@@ -42,10 +49,10 @@ module.exports = function createReportsRouter(reportService, exportService) {
   });
 
   // Alert summary
-  router.get('/alerts/summary', requireIT, (req, res) => {
+  router.get('/alerts/summary', requireIT, resolveClientScope, (req, res) => {
     try {
       const days = parseInt(req.query.days) || 30;
-      const data = reportService.getAlertSummary(days);
+      const data = reportService.getAlertSummary(days, req.clientScope);
       res.json(data);
     } catch (err) {
       console.error('Alert summary error:', err);
@@ -54,10 +61,10 @@ module.exports = function createReportsRouter(reportService, exportService) {
   });
 
   // Ticket summary
-  router.get('/tickets/summary', requireIT, (req, res) => {
+  router.get('/tickets/summary', requireIT, resolveClientScope, (req, res) => {
     try {
       const days = parseInt(req.query.days) || 30;
-      const data = reportService.getTicketSummary(days);
+      const data = reportService.getTicketSummary(days, req.clientScope);
       res.json(data);
     } catch (err) {
       console.error('Ticket summary error:', err);
@@ -66,7 +73,7 @@ module.exports = function createReportsRouter(reportService, exportService) {
   });
 
   // Export report
-  router.get('/export', requireIT, async (req, res) => {
+  router.get('/export', requireIT, resolveClientScope, async (req, res) => {
     try {
       const { type, days: daysStr, format = 'csv', device_id, check_type } = req.query;
       const days = parseInt(daysStr) || 30;
@@ -74,7 +81,7 @@ module.exports = function createReportsRouter(reportService, exportService) {
       let data, title, columns;
       switch (type) {
         case 'fleet_health': {
-          const rows = reportService.getFleetHealthTrend(days);
+          const rows = reportService.getFleetHealthTrend(days, req.clientScope);
           data = rows;
           title = 'Fleet Health Trend';
           columns = ['day', 'avg_score', 'check_count'];
@@ -90,14 +97,14 @@ module.exports = function createReportsRouter(reportService, exportService) {
           break;
         }
         case 'alert_summary': {
-          const summary = reportService.getAlertSummary(days);
+          const summary = reportService.getAlertSummary(days, req.clientScope);
           data = summary.per_day;
           title = 'Alert Summary';
           columns = ['day', 'count'];
           break;
         }
         case 'ticket_summary': {
-          const summary = reportService.getTicketSummary(days);
+          const summary = reportService.getTicketSummary(days, req.clientScope);
           data = summary.per_day;
           title = 'Ticket Summary';
           columns = ['day', 'opened', 'closed'];

@@ -1,5 +1,8 @@
+const { emitToScoped, emitToAll } = require('./scopedEmit');
+
 function setup(io, app) {
   const agentNs = io.of('/agent');
+  const itNs = io.of('/it');
 
   // Store connected devices: deviceId → socket
   const connectedDevices = new Map();
@@ -9,6 +12,10 @@ function setup(io, app) {
 
   // Diagnostic result buffers: deviceId → { results: {}, timer }
   const diagnosticBuffers = new Map();
+
+  // Track AI-initiated diagnostic requests: deviceId → Set of pending requestIds
+  // Only diagnostic results matching a pending AI request get fed back to the AI
+  const pendingAIDiagnostics = new Set();
 
   // Diagnostic descriptions for chat UI
   const DIAGNOSTIC_DESCRIPTIONS = {
@@ -67,7 +74,7 @@ function setup(io, app) {
       const alertService = app.locals.alertService;
       if (alertService) {
         alertService.resolveUptimeAlert(deviceId);
-        io.of('/it').emit('alert_stats_updated', alertService.getStats());
+        emitToAll(itNs, 'alert_stats_updated', alertService.getStats());
       }
     } catch (err) {
       console.error('[Agent] Uptime resolve error:', err.message);
@@ -156,7 +163,7 @@ function setup(io, app) {
       }
 
       // Notify IT dashboard
-      io.of('/it').emit('device_status_changed', { deviceId, status: 'online' });
+      emitToScoped(itNs, db, deviceId, 'device_status_changed', { deviceId, status: 'online' });
     });
 
     // Chat message from user
@@ -215,6 +222,7 @@ function setup(io, app) {
         if (response.action && response.action.type === 'diagnose') {
           const requestId = Date.now().toString();
           const checkType = response.action.checkType;
+          pendingAIDiagnostics.add(deviceId);
 
           // Audit log: AI-triggered diagnostic request
           try {
@@ -284,7 +292,7 @@ function setup(io, app) {
             ).run(deviceId, ticketTitle, ticketPriority, response.text);
 
             // Notify IT namespace
-            io.of('/it').emit('ticket_created', {
+            emitToScoped(itNs, db, deviceId, 'ticket_created', {
               id: ticketResult.lastInsertRowid,
               deviceId,
               title: ticketTitle,
@@ -296,7 +304,7 @@ function setup(io, app) {
         }
 
         // Notify IT namespace watchers
-        io.of('/it').emit('device_chat_update', {
+        emitToScoped(itNs, db, deviceId, 'device_chat_update', {
           deviceId,
           message: { sender: 'user', content },
           response: { sender: 'ai', text: response.text, action: response.action }
@@ -341,7 +349,7 @@ function setup(io, app) {
         healthScore = fleet.computeHealthScore(deviceId);
 
         // Notify IT dashboard with health score
-        io.of('/it').emit('device_diagnostic_update', {
+        emitToScoped(itNs, db, deviceId, 'device_diagnostic_update', {
           deviceId,
           checkType: data.checkType,
           results: data.results,
@@ -362,7 +370,7 @@ function setup(io, app) {
 
             // Emit each new alert to IT dashboard
             for (const alert of newAlerts) {
-              io.of('/it').emit('new_alert', { alert, hostname: device?.hostname || deviceId });
+              emitToScoped(itNs, db, deviceId, 'new_alert', { alert, hostname: device?.hostname || deviceId });
             }
 
             // Dispatch notifications
@@ -376,7 +384,7 @@ function setup(io, app) {
             }
 
             // Emit updated stats
-            io.of('/it').emit('alert_stats_updated', alertService.getStats());
+            emitToAll(itNs, 'alert_stats_updated', alertService.getStats());
 
             // v0.5.0: Check auto-remediation policies for each new alert
             for (const alert of newAlerts) {
@@ -401,7 +409,7 @@ function setup(io, app) {
                   }));
 
                   // Notify IT dashboard
-                  io.of('/it').emit('auto_remediation_triggered', {
+                  emitToScoped(itNs, db, deviceId, 'auto_remediation_triggered', {
                     deviceId,
                     hostname: device?.hostname || deviceId,
                     actionId: policy.action_id,
@@ -422,8 +430,8 @@ function setup(io, app) {
         console.error('[Agent] Alert evaluation error:', err.message);
       }
 
-      // Silent diagnostics (scheduled checks) skip AI entirely
-      if (data.silent) return;
+      // Only feed results to AI if the AI requested them (not scheduled/IT-initiated)
+      if (!pendingAIDiagnostics.has(deviceId)) return;
 
       // Buffer diagnostic results — debounce 2s so "all" checks produce one AI response
       let buffer = diagnosticBuffers.get(deviceId);
@@ -437,6 +445,7 @@ function setup(io, app) {
       buffer.timer = setTimeout(async () => {
         const bufferedResults = buffer.results;
         diagnosticBuffers.delete(deviceId);
+        pendingAIDiagnostics.delete(deviceId);
 
         const diagnosticAI = app.locals.diagnosticAI;
         if (!diagnosticAI) return;
@@ -512,7 +521,7 @@ function setup(io, app) {
       }
 
       // Notify IT namespace
-      io.of('/it').emit('device_remediation_update', {
+      emitToScoped(itNs, db, deviceId, 'device_remediation_update', {
         deviceId,
         success: data.success,
         message: data.message
@@ -542,7 +551,7 @@ function setup(io, app) {
       }
 
       // Relay to IT dashboard
-      io.of('/it').emit('file_browse_result', {
+      emitToScoped(itNs, db, deviceId, 'file_browse_result', {
         deviceId,
         requestId: data.requestId,
         approved: data.approved,
@@ -564,7 +573,7 @@ function setup(io, app) {
         console.error('[Agent] Audit log error:', err.message);
       }
 
-      io.of('/it').emit('file_read_result', {
+      emitToScoped(itNs, db, deviceId, 'file_read_result', {
         deviceId,
         requestId: data.requestId,
         approved: data.approved,
@@ -591,7 +600,7 @@ function setup(io, app) {
         console.error('[Agent] Audit log error:', err.message);
       }
 
-      io.of('/it').emit('script_result', {
+      emitToScoped(itNs, db, deviceId, 'script_result', {
         deviceId,
         requestId: data.requestId,
         success: data.success,
@@ -617,14 +626,14 @@ function setup(io, app) {
         console.error('[Agent] Audit log error:', err.message);
       }
 
-      io.of('/it').emit('terminal_started', {
+      emitToScoped(itNs, db, deviceId, 'terminal_started', {
         deviceId,
         requestId: data.requestId
       });
     });
 
     socket.on('terminal_output', (data) => {
-      io.of('/it').emit('terminal_output', {
+      emitToScoped(itNs, db, deviceId, 'terminal_output', {
         deviceId,
         output: data.output
       });
@@ -643,7 +652,7 @@ function setup(io, app) {
         console.error('[Agent] Audit log error:', err.message);
       }
 
-      io.of('/it').emit('terminal_stopped', {
+      emitToScoped(itNs, db, deviceId, 'terminal_stopped', {
         deviceId,
         requestId: data.requestId,
         exitCode: data.exitCode,
@@ -662,7 +671,7 @@ function setup(io, app) {
         console.error('[Agent] Audit log error:', err.message);
       }
 
-      io.of('/it').emit('terminal_denied', {
+      emitToScoped(itNs, db, deviceId, 'terminal_denied', {
         deviceId,
         requestId: data.requestId
       });
@@ -680,7 +689,7 @@ function setup(io, app) {
         console.error('[Agent] Audit log error:', err.message);
       }
 
-      io.of('/it').emit('desktop_started', {
+      emitToScoped(itNs, db, deviceId, 'desktop_started', {
         deviceId,
         requestId: data.requestId
       });
@@ -688,7 +697,7 @@ function setup(io, app) {
 
     socket.on('desktop_frame', (data) => {
       // High-frequency: no logging, relay directly
-      io.of('/it').emit('desktop_frame', {
+      emitToScoped(itNs, db, deviceId, 'desktop_frame', {
         deviceId,
         frame: data.frame,
         width: data.width,
@@ -710,7 +719,7 @@ function setup(io, app) {
         console.error('[Agent] Audit log error:', err.message);
       }
 
-      io.of('/it').emit('desktop_stopped', {
+      emitToScoped(itNs, db, deviceId, 'desktop_stopped', {
         deviceId,
         requestId: data.requestId,
         reason: data.reason
@@ -728,7 +737,7 @@ function setup(io, app) {
         console.error('[Agent] Audit log error:', err.message);
       }
 
-      io.of('/it').emit('desktop_denied', {
+      emitToScoped(itNs, db, deviceId, 'desktop_denied', {
         deviceId,
         requestId: data.requestId
       });
@@ -750,7 +759,7 @@ function setup(io, app) {
       }
 
       // Relay to IT dashboard
-      io.of('/it').emit('system_tool_result', {
+      emitToScoped(itNs, db, deviceId, 'system_tool_result', {
         deviceId,
         requestId: data.requestId,
         tool: data.tool,
@@ -766,6 +775,7 @@ function setup(io, app) {
       connectedDevices.delete(deviceId);
       chatRateLimiter.delete(deviceId);
       diagnosticBuffers.delete(deviceId);
+      pendingAIDiagnostics.delete(deviceId);
 
       try {
         db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\') WHERE device_id = ?')
@@ -775,7 +785,7 @@ function setup(io, app) {
       }
 
       // Notify IT namespace
-      io.of('/it').emit('device_status_changed', {
+      emitToScoped(itNs, db, deviceId, 'device_status_changed', {
         deviceId,
         status: 'offline'
       });
@@ -803,8 +813,8 @@ function setup(io, app) {
         // Create uptime alert
         const alert = alertService.createUptimeAlert(device.device_id, device.hostname);
         if (alert) {
-          io.of('/it').emit('new_alert', { alert, hostname: device.hostname || device.device_id });
-          io.of('/it').emit('device_status_changed', { deviceId: device.device_id, status: 'offline' });
+          emitToScoped(itNs, db, device.device_id, 'new_alert', { alert, hostname: device.hostname || device.device_id });
+          emitToScoped(itNs, db, device.device_id, 'device_status_changed', { deviceId: device.device_id, status: 'offline' });
 
           if (notificationService) {
             notificationService.dispatchAlert(alert, device).catch(err => {
@@ -812,7 +822,7 @@ function setup(io, app) {
             });
           }
 
-          io.of('/it').emit('alert_stats_updated', alertService.getStats());
+          emitToAll(itNs, 'alert_stats_updated', alertService.getStats());
         }
       }
     } catch (err) {

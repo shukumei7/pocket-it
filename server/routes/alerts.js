@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const { requireIT } = require('../auth/middleware');
+const { resolveClientScope } = require('../auth/clientScope');
 
 module.exports = function createAlertsRouter(alertService, notificationService) {
   // ---- Thresholds ----
@@ -60,22 +62,22 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
   });
 
   // ---- Alerts ----
-  router.get('/', (req, res) => {
+  router.get('/', requireIT, resolveClientScope, (req, res) => {
     try {
       const { status, device_id, limit } = req.query;
       if (status === 'active') {
-        res.json(alertService.getActiveAlerts(device_id || null));
+        res.json(alertService.getActiveAlerts(device_id || null, req.clientScope));
       } else {
-        res.json(alertService.getAlertHistory(parseInt(limit) || 50));
+        res.json(alertService.getAlertHistory(parseInt(limit) || 50, req.clientScope));
       }
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  router.get('/stats', (req, res) => {
+  router.get('/stats', requireIT, resolveClientScope, (req, res) => {
     try {
-      res.json(alertService.getStats());
+      res.json(alertService.getStats(req.clientScope));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

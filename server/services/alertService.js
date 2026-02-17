@@ -1,3 +1,5 @@
+const { scopeSQL } = require('../auth/clientScope');
+
 class AlertService {
   constructor(db) {
     this.db = db;
@@ -121,21 +123,33 @@ class AlertService {
     ).run(deviceId);
   }
 
-  getActiveAlerts(deviceId) {
+  getActiveAlerts(deviceId, scope) {
     if (deviceId) {
       return this.db.prepare(
         "SELECT a.*, d.hostname FROM alerts a LEFT JOIN devices d ON a.device_id = d.device_id WHERE a.device_id = ? AND a.status IN ('active', 'acknowledged') ORDER BY a.triggered_at DESC"
       ).all(deviceId);
     }
+    if (!scope || scope.isAdmin || scope.clientIds === null) {
+      return this.db.prepare(
+        "SELECT a.*, d.hostname FROM alerts a LEFT JOIN devices d ON a.device_id = d.device_id WHERE a.status IN ('active', 'acknowledged') ORDER BY CASE a.severity WHEN 'critical' THEN 0 ELSE 1 END, a.triggered_at DESC"
+      ).all();
+    }
+    const { clause, params } = scopeSQL(scope, 'd');
     return this.db.prepare(
-      "SELECT a.*, d.hostname FROM alerts a LEFT JOIN devices d ON a.device_id = d.device_id WHERE a.status IN ('active', 'acknowledged') ORDER BY CASE a.severity WHEN 'critical' THEN 0 ELSE 1 END, a.triggered_at DESC"
-    ).all();
+      `SELECT a.*, d.hostname FROM alerts a LEFT JOIN devices d ON a.device_id = d.device_id WHERE a.status IN ('active', 'acknowledged') AND ${clause} ORDER BY CASE a.severity WHEN 'critical' THEN 0 ELSE 1 END, a.triggered_at DESC`
+    ).all(...params);
   }
 
-  getAlertHistory(limit = 50) {
+  getAlertHistory(limit = 50, scope) {
+    if (!scope || scope.isAdmin || scope.clientIds === null) {
+      return this.db.prepare(
+        'SELECT a.*, d.hostname FROM alerts a LEFT JOIN devices d ON a.device_id = d.device_id ORDER BY a.triggered_at DESC LIMIT ?'
+      ).all(limit);
+    }
+    const { clause, params } = scopeSQL(scope, 'd');
     return this.db.prepare(
-      'SELECT a.*, d.hostname FROM alerts a LEFT JOIN devices d ON a.device_id = d.device_id ORDER BY a.triggered_at DESC LIMIT ?'
-    ).all(limit);
+      `SELECT a.*, d.hostname FROM alerts a LEFT JOIN devices d ON a.device_id = d.device_id WHERE ${clause} ORDER BY a.triggered_at DESC LIMIT ?`
+    ).all(...params, limit);
   }
 
   acknowledgeAlert(alertId, acknowledgedBy) {
@@ -152,11 +166,19 @@ class AlertService {
     return this.db.prepare('SELECT * FROM alerts WHERE id = ?').get(alertId);
   }
 
-  getStats() {
-    const active = this.db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status = 'active'").get().count;
-    const acknowledged = this.db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status = 'acknowledged'").get().count;
-    const critical = this.db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status IN ('active', 'acknowledged') AND severity = 'critical'").get().count;
-    const warning = this.db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status IN ('active', 'acknowledged') AND severity = 'warning'").get().count;
+  getStats(scope) {
+    if (!scope || scope.isAdmin || scope.clientIds === null) {
+      const active = this.db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status = 'active'").get().count;
+      const acknowledged = this.db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status = 'acknowledged'").get().count;
+      const critical = this.db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status IN ('active', 'acknowledged') AND severity = 'critical'").get().count;
+      const warning = this.db.prepare("SELECT COUNT(*) as count FROM alerts WHERE status IN ('active', 'acknowledged') AND severity = 'warning'").get().count;
+      return { activeCount: active + acknowledged, criticalCount: critical, warningCount: warning };
+    }
+    const { clause, params } = scopeSQL(scope, 'd');
+    const active = this.db.prepare(`SELECT COUNT(*) as count FROM alerts a JOIN devices d ON a.device_id = d.device_id WHERE a.status = 'active' AND ${clause}`).get(...params).count;
+    const acknowledged = this.db.prepare(`SELECT COUNT(*) as count FROM alerts a JOIN devices d ON a.device_id = d.device_id WHERE a.status = 'acknowledged' AND ${clause}`).get(...params).count;
+    const critical = this.db.prepare(`SELECT COUNT(*) as count FROM alerts a JOIN devices d ON a.device_id = d.device_id WHERE a.status IN ('active', 'acknowledged') AND a.severity = 'critical' AND ${clause}`).get(...params).count;
+    const warning = this.db.prepare(`SELECT COUNT(*) as count FROM alerts a JOIN devices d ON a.device_id = d.device_id WHERE a.status IN ('active', 'acknowledged') AND a.severity = 'warning' AND ${clause}`).get(...params).count;
     return { activeCount: active + acknowledged, criticalCount: critical, warningCount: warning };
   }
 

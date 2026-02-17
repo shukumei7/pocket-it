@@ -36,14 +36,14 @@ function validateToolParams(tool, params) {
     }
     case 'service_action': {
       const namePattern = /^[a-zA-Z0-9_\-\.]{1,256}$/;
-      if (!params?.name || !namePattern.test(params.name)) return { valid: false, reason: 'name must be alphanumeric/underscores/hyphens/dots, max 256 chars' };
+      if (!params?.serviceName || !namePattern.test(params.serviceName)) return { valid: false, reason: 'serviceName must be alphanumeric/underscores/hyphens/dots, max 256 chars' };
       const validActions = ['start', 'stop', 'restart'];
       if (!validActions.includes(params?.action)) return { valid: false, reason: `action must be one of: ${validActions.join(', ')}` };
       return { valid: true };
     }
     case 'event_log_query': {
       const validLogs = ['System', 'Application', 'Security', 'Setup'];
-      if (params?.log && !validLogs.includes(params.log)) return { valid: false, reason: `log must be one of: ${validLogs.join(', ')}` };
+      if (params?.logName && !validLogs.includes(params.logName)) return { valid: false, reason: `logName must be one of: ${validLogs.join(', ')}` };
       return { valid: true };
     }
     default:
@@ -64,6 +64,7 @@ function setup(io, app) {
     const ip = socket.handshake.address;
     const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 
+    let decoded = null;
     if (!isLocal) {
       if (!token) {
         socket.disconnect();
@@ -76,19 +77,53 @@ function setup(io, app) {
           socket.disconnect();
           return;
         }
-        jwt.verify(token, secret);
+        decoded = jwt.verify(token, secret);
       } catch (err) {
         socket.disconnect();
         return;
       }
+    } else if (token) {
+      // Local connection with token — try to decode for scope
+      try {
+        const secret = process.env.POCKET_IT_JWT_SECRET;
+        if (secret) decoded = jwt.verify(token, secret);
+      } catch (err) { /* ignore, treat as admin */ }
+    }
+
+    // Resolve client scope for this socket
+    const db = app.locals.db;
+    if (isLocal || (decoded && decoded.role === 'admin')) {
+      socket.userScope = { isAdmin: true, clientIds: null };
+    } else if (decoded && decoded.id) {
+      const assignments = db.prepare(
+        'SELECT client_id FROM user_client_assignments WHERE user_id = ?'
+      ).all(decoded.id);
+      socket.userScope = { isAdmin: false, clientIds: assignments.map(a => a.client_id) };
+    } else {
+      socket.userScope = { isAdmin: true, clientIds: null }; // fallback for localhost without token
     }
 
     console.log(`[IT] Dashboard connected: ${socket.id}`);
     watchers.set(socket.id, new Set());
 
+    // Scope check helper — avoids inline require in every handler
+    function checkDeviceScope(deviceId) {
+      if (!socket.userScope || socket.userScope.isAdmin) return true;
+      if (!socket.userScope.clientIds || socket.userScope.clientIds.length === 0) return false;
+      const dev = db.prepare('SELECT client_id FROM devices WHERE device_id = ?').get(deviceId);
+      if (!dev) return false;
+      return socket.userScope.clientIds.includes(dev.client_id);
+    }
+
     // Watch a specific device (subscribe to its events)
     socket.on('watch_device', (data) => {
       const deviceId = data.deviceId;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       const watched = watchers.get(socket.id);
       if (watched) {
         watched.add(deviceId);
@@ -121,6 +156,12 @@ function setup(io, app) {
     // IT tech sends chat message to device user
     socket.on('chat_to_device', (data) => {
       const { deviceId, content } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] Chat to device ${deviceId}: ${content.substring(0, 50)}...`);
 
       const db = app.locals.db;
@@ -151,6 +192,12 @@ function setup(io, app) {
     // Request diagnostic from device
     socket.on('request_diagnostic', (data) => {
       const { deviceId, checkType } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] Requesting diagnostic ${checkType} from ${deviceId}`);
 
       const connectedDevices = app.locals.connectedDevices;
@@ -172,6 +219,12 @@ function setup(io, app) {
     // v0.5.0: File access requests from IT dashboard
     socket.on('request_file_browse', (data) => {
       const { deviceId, path: browsePath } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] File browse request for ${deviceId}: ${browsePath}`);
 
       // Rate limit: 30/min
@@ -209,6 +262,12 @@ function setup(io, app) {
 
     socket.on('request_file_read', (data) => {
       const { deviceId, path: filePath } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] File read request for ${deviceId}: ${filePath}`);
 
       // Rate limit: 20/min
@@ -246,6 +305,12 @@ function setup(io, app) {
     // v0.5.0: Script execution from IT dashboard
     socket.on('execute_script', (data) => {
       const { deviceId, scriptName, scriptContent, requiresElevation, timeoutSeconds } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] Script execution request for ${deviceId}: ${scriptName || 'ad-hoc'}`);
 
       // Rate limit: 5/min
@@ -304,6 +369,12 @@ function setup(io, app) {
 
     socket.on('execute_library_script', (data) => {
       const { deviceId, scriptId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] Library script execution for ${deviceId}: scriptId=${scriptId}`);
 
       const db = app.locals.db;
@@ -346,6 +417,12 @@ function setup(io, app) {
     // v0.6.0: Remote terminal
     socket.on('start_terminal', (data) => {
       const { deviceId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] Terminal start request for ${deviceId}`);
 
       try {
@@ -373,6 +450,11 @@ function setup(io, app) {
     socket.on('terminal_input', (data) => {
       const { deviceId, input } = data;
 
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       const connectedDevices = app.locals.connectedDevices;
       if (connectedDevices) {
         const deviceSocket = connectedDevices.get(deviceId);
@@ -386,6 +468,12 @@ function setup(io, app) {
 
     socket.on('stop_terminal', (data) => {
       const { deviceId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] Terminal stop request for ${deviceId}`);
 
       try {
@@ -413,6 +501,12 @@ function setup(io, app) {
     // v0.8.0: Remote desktop
     socket.on('start_desktop', (data) => {
       const { deviceId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] Desktop start request for ${deviceId}`);
 
       try {
@@ -439,6 +533,12 @@ function setup(io, app) {
 
     socket.on('desktop_mouse', (data) => {
       const { deviceId, x, y, button, action } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       const connectedDevices = app.locals.connectedDevices;
       if (connectedDevices) {
         const deviceSocket = connectedDevices.get(deviceId);
@@ -450,6 +550,12 @@ function setup(io, app) {
 
     socket.on('desktop_keyboard', (data) => {
       const { deviceId, vkCode, action } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       const connectedDevices = app.locals.connectedDevices;
       if (connectedDevices) {
         const deviceSocket = connectedDevices.get(deviceId);
@@ -461,6 +567,12 @@ function setup(io, app) {
 
     socket.on('desktop_quality', (data) => {
       const { deviceId, quality, fps, scale } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       const connectedDevices = app.locals.connectedDevices;
       if (connectedDevices) {
         const deviceSocket = connectedDevices.get(deviceId);
@@ -472,6 +584,12 @@ function setup(io, app) {
 
     socket.on('stop_desktop', (data) => {
       const { deviceId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] Desktop stop request for ${deviceId}`);
 
       try {
@@ -499,6 +617,12 @@ function setup(io, app) {
     // v0.9.0: System tools
     socket.on('system_tool_request', (data) => {
       const { deviceId, requestId, tool, params } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
       console.log(`[IT] System tool request for ${deviceId}: ${tool}`);
 
       // Rate limit: 30/min

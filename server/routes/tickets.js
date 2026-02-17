@@ -1,32 +1,32 @@
 const express = require('express');
 const { requireIT, requireDevice } = require('../auth/middleware');
+const { resolveClientScope, scopeSQL, isDeviceInScope } = require('../auth/clientScope');
 
 const router = express.Router();
 
-router.get('/', requireIT, (req, res) => {
+router.get('/', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const { status } = req.query;
+  const { clause, params } = scopeSQL(req.clientScope, 'd');
 
-  let query = 'SELECT * FROM tickets';
-  let params = [];
-
+  let query = `SELECT t.* FROM tickets t JOIN devices d ON t.device_id = d.device_id WHERE ${clause}`;
   if (status) {
-    query += ' WHERE status = ?';
+    query += ' AND t.status = ?';
     params.push(status);
   }
-
-  query += ' ORDER BY created_at DESC';
+  query += ' ORDER BY t.created_at DESC';
 
   const tickets = db.prepare(query).all(...params);
   res.json(tickets);
 });
 
-router.get('/:id', requireIT, (req, res) => {
+router.get('/:id', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
-  if (!ticket) {
-    return res.status(404).json({ error: 'Ticket not found' });
+  if (!isDeviceInScope(db, ticket.device_id, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
   }
 
   const comments = db.prepare(`
@@ -69,7 +69,7 @@ router.post('/', requireDevice, (req, res) => {
   res.status(201).json({ id: result.lastInsertRowid, device_id, title });
 });
 
-router.patch('/:id', requireIT, (req, res) => {
+router.patch('/:id', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const { status, assigned_to, priority } = req.body;
 
@@ -107,9 +107,13 @@ router.patch('/:id', requireIT, (req, res) => {
   params.push(new Date().toISOString());
   params.push(req.params.id);
 
-  const ticket = db.prepare('SELECT id FROM tickets WHERE id = ?').get(req.params.id);
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
   if (!ticket) {
     return res.status(404).json({ error: 'Ticket not found' });
+  }
+
+  if (!isDeviceInScope(db, ticket.device_id, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
   }
 
   const query = `UPDATE tickets SET ${updates.join(', ')} WHERE id = ?`;
@@ -118,7 +122,7 @@ router.patch('/:id', requireIT, (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/:id/comments', requireIT, (req, res) => {
+router.post('/:id/comments', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const { author, content } = req.body;
 
@@ -126,9 +130,13 @@ router.post('/:id/comments', requireIT, (req, res) => {
     return res.status(400).json({ error: 'Comment content required' });
   }
 
-  const ticket = db.prepare('SELECT id FROM tickets WHERE id = ?').get(req.params.id);
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
   if (!ticket) {
     return res.status(404).json({ error: 'Ticket not found' });
+  }
+
+  if (!isDeviceInScope(db, ticket.device_id, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
   }
 
   const result = db.prepare(`

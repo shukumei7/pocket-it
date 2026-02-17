@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.9.0
+Version: 0.10.0
 
 ## System Architecture
 
@@ -44,14 +44,18 @@ Version: 0.9.0
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  Express REST API                                            │   │
-│  │  /api/enrollment, /api/devices, /api/tickets, /api/chat     │   │
+│  │  /api/enrollment, /api/devices, /api/tickets, /api/chat,    │   │
+│  │  /api/clients                                               │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  SQLite Database (better-sqlite3)                            │   │
-│  │  8 tables: devices, enrollment_tokens, it_users,             │   │
+│  │  17 tables: devices, enrollment_tokens, it_users,            │   │
 │  │  chat_messages, tickets, ticket_comments,                    │   │
-│  │  diagnostic_results, audit_log                               │   │
+│  │  diagnostic_results, audit_log, alert_thresholds, alerts,   │   │
+│  │  notification_channels, auto_remediation_policies,           │   │
+│  │  script_library, report_schedules, report_history,           │   │
+│  │  clients, user_client_assignments                            │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -555,7 +559,9 @@ CREATE TABLE devices (
   last_boot_time TEXT,                         -- ISO 8601 timestamp of last boot
   uptime_hours REAL,                           -- Hours since last boot
   logged_in_users TEXT,                        -- JSON array of logged-in usernames
-  network_adapters TEXT                        -- JSON array of adapter objects
+  network_adapters TEXT,                       -- JSON array of adapter objects
+  -- Multi-tenancy (v0.10.0)
+  client_id INTEGER REFERENCES clients(id)     -- Owning client (NULL = Default)
 );
 ```
 
@@ -573,7 +579,9 @@ CREATE TABLE enrollment_tokens (
   created_by TEXT,                             -- Username of creator
   expires_at TEXT,                             -- ISO 8601 timestamp
   used_by_device TEXT,                         -- device_id after use
-  status TEXT DEFAULT 'active'                 -- active | used | expired
+  status TEXT DEFAULT 'active',                -- active | used | expired
+  -- Multi-tenancy (v0.10.0)
+  client_id INTEGER REFERENCES clients(id)     -- Target client for enrolled device
 );
 ```
 
@@ -707,6 +715,56 @@ CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
 
 **Indexes:**
 - Index on `created_at` for time-based queries
+
+### Table: `clients`
+
+Client organizations managed by the MSP. Each client groups one or more enrolled devices.
+
+```sql
+CREATE TABLE clients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,                   -- Display name, e.g. "Acme Corp"
+  slug TEXT UNIQUE NOT NULL,                   -- URL-safe identifier, e.g. "acme-corp"
+  contact_name TEXT,                           -- Primary contact person
+  contact_email TEXT,                          -- Primary contact email
+  notes TEXT,                                  -- Free-form notes
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT
+);
+
+CREATE INDEX idx_clients_slug ON clients(slug);
+```
+
+**Indexes:**
+- Unique index on `name`
+- Unique index on `slug`
+- Index on `slug` for lookup
+
+**Seed:** On first run (empty table), a "Default" client is inserted and all existing devices/tokens are assigned to it.
+
+### Table: `user_client_assignments`
+
+Many-to-many join between IT users and clients. A technician assigned to a client can see all devices belonging to that client.
+
+```sql
+CREATE TABLE user_client_assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES it_users(id) ON DELETE CASCADE,
+  client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  assigned_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, client_id)
+);
+
+CREATE INDEX idx_uca_user_id ON user_client_assignments(user_id);
+CREATE INDEX idx_uca_client_id ON user_client_assignments(client_id);
+```
+
+**Indexes:**
+- Unique constraint on `(user_id, client_id)` prevents duplicate assignments
+- Index on `user_id` for per-user scope lookups
+- Index on `client_id` for per-client user listings
+
+**Admin behavior:** Admin role users bypass this table entirely — admins always see all clients and all devices.
 
 ## Whitelisted Remediation Actions
 
@@ -999,6 +1057,16 @@ public async Task<DiagnosticResult> RunAsync()
 - Server verifies `deviceId` exists in `devices` table
 - Server validates `device_secret` from handshake auth (required as of v0.1.2) AND `x-device-secret` header via `requireDevice` middleware (v0.1.4)
 - Devices with null `device_secret` are rejected (requires re-enrollment)
+
+### Client-Scoped Access (v0.10.0)
+
+IT technicians are scoped to one or more clients via the `user_client_assignments` table. The `resolveClientScope` middleware runs on every authenticated request and resolves one of two scope shapes:
+
+- `{ isAdmin: true, clientIds: null }` — admin role; all devices and clients visible
+- `{ isAdmin: false, clientIds: [1, 2] }` — technician; only devices belonging to listed clients visible
+- `{ isAdmin: false, clientIds: [] }` — unassigned technician; sees no devices
+
+All service methods that return lists (fleet, tickets, alerts, reports) accept an optional `scope` parameter. `scopeSQL(scope, alias)` returns a parameterized SQL fragment and bind values that are injected at query time. Socket.IO handlers in the `/it` namespace enforce scope on connection and on each device-specific event — unauthorized access attempts are silently ignored.
 
 ### Production Roadmap
 
@@ -1465,6 +1533,24 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut
 
 ## Version History
+
+**0.10.0**
+- Client-based multi-tenancy (MSP model): devices organized by client, IT technicians scoped to assigned clients
+- New `clients` table (id, name, slug, contact_name, contact_email, notes) with Default client seed
+- New `user_client_assignments` table for many-to-many user-to-client mapping
+- New `client_id` column on `devices` and `enrollment_tokens` tables
+- `resolveClientScope` middleware: resolves `{ isAdmin, clientIds }` scope from JWT claims per request
+- `scopeSQL` helper: generates SQL WHERE clause fragment to filter by client scope
+- `emitToScoped()` Socket.IO helper: targets only in-scope /it sockets using device-client cache
+- Full client CRUD REST API (`/api/clients`): create, read, update, delete clients
+- User assignment REST API: assign/unassign IT technicians to clients
+- Per-client installer download: `GET /api/clients/:id/installer` returns pre-configured ZIP with enrollment token
+- All fleet, ticket, alert, and report service methods accept optional `scope` param
+- /it namespace: scope resolved on connect, all 16+ device event handlers enforce scope
+- /agent namespace: all ~23 `io.of('/it').emit()` calls replaced with `emitToScoped()`
+- Login responses include `clients` array; admin stats are scope-aware
+- Enrollment token creation requires `client_id`; device auto-assigned to client on enroll
+- Dashboard: client selector dropdown in nav, grouped fleet view, Clients admin page
 
 **0.9.0**
 - System Tools Engine: generic `system_tool_request`/`system_tool_result` socket event pattern on both `/agent` and `/it` namespaces

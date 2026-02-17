@@ -1,34 +1,45 @@
 const express = require('express');
 const { requireIT, requireAdmin } = require('../auth/middleware');
+const { resolveClientScope, scopeSQL, isDeviceInScope } = require('../auth/clientScope');
 
 const router = express.Router();
 
-router.get('/', requireIT, (req, res) => {
+router.get('/', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
-  const devices = db.prepare('SELECT * FROM devices').all();
+  const { clause, params } = scopeSQL(req.clientScope);
+  // Optional client_id filter for admin
+  let extraClause = '';
+  const extraParams = [];
+  if (req.query.client_id) {
+    extraClause = ' AND client_id = ?';
+    extraParams.push(parseInt(req.query.client_id));
+  }
+  const devices = db.prepare(`SELECT * FROM devices WHERE ${clause}${extraClause}`).all(...params, ...extraParams);
   res.json(devices);
 });
 
-router.get('/health/summary', requireIT, (req, res) => {
+router.get('/health/summary', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const FleetService = require('../services/fleetService');
   const fleet = new FleetService(db);
-  res.json(fleet.getHealthSummary());
+  res.json(fleet.getHealthSummary(req.clientScope));
 });
 
-router.get('/:id', requireIT, (req, res) => {
+router.get('/:id', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
-  const device = db.prepare('SELECT * FROM devices WHERE device_id = ?').get(req.params.id);
-
-  if (!device) {
-    return res.status(404).json({ error: 'Device not found' });
+  if (!isDeviceInScope(db, req.params.id, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
   }
-
+  const device = db.prepare('SELECT * FROM devices WHERE device_id = ?').get(req.params.id);
+  if (!device) return res.status(404).json({ error: 'Device not found' });
   res.json(device);
 });
 
-router.get('/:id/diagnostics', requireIT, (req, res) => {
+router.get('/:id/diagnostics', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
+  if (!isDeviceInScope(db, req.params.id, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
   const diagnostics = db.prepare(`
     SELECT * FROM diagnostic_results
     WHERE device_id = ?
@@ -39,9 +50,13 @@ router.get('/:id/diagnostics', requireIT, (req, res) => {
   res.json(diagnostics);
 });
 
-router.delete('/:id', requireAdmin, (req, res) => {
+router.delete('/:id', requireAdmin, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const deviceId = req.params.id;
+
+  if (!isDeviceInScope(db, deviceId, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
 
   const device = db.prepare('SELECT device_id FROM devices WHERE device_id = ?').get(deviceId);
   if (!device) {

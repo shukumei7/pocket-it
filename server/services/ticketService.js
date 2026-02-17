@@ -1,3 +1,5 @@
+const { scopeSQL } = require('../auth/clientScope');
+
 class TicketService {
   constructor(db) {
     this.db = db;
@@ -43,12 +45,20 @@ class TicketService {
     ).run(ticketId, author, content);
   }
 
-  getOpenCount() {
-    return this.db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status IN ('open', 'in_progress')").get().count;
+  getOpenCount(scope) {
+    const { clause, params } = scopeSQL(scope, 'd');
+    if (!scope || scope.isAdmin || scope.clientIds === null) {
+      return this.db.prepare("SELECT COUNT(*) as count FROM tickets WHERE status IN ('open', 'in_progress')").get().count;
+    }
+    return this.db.prepare(`SELECT COUNT(*) as count FROM tickets t JOIN devices d ON t.device_id = d.device_id WHERE t.status IN ('open', 'in_progress') AND ${clause}`).get(...params).count;
   }
 
-  getTotalCount() {
-    return this.db.prepare('SELECT COUNT(*) as count FROM tickets').get().count;
+  getTotalCount(scope) {
+    const { clause, params } = scopeSQL(scope, 'd');
+    if (!scope || scope.isAdmin || scope.clientIds === null) {
+      return this.db.prepare('SELECT COUNT(*) as count FROM tickets').get().count;
+    }
+    return this.db.prepare(`SELECT COUNT(*) as count FROM tickets t JOIN devices d ON t.device_id = d.device_id WHERE ${clause}`).get(...params).count;
   }
 }
 

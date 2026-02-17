@@ -48,6 +48,34 @@
             background: #1b5e20;
             color: #a5d6a7;
         }
+        nav .client-selector {
+            margin-left: 16px;
+            margin-right: 16px;
+            padding: 6px 10px;
+            background: #0f1923;
+            border: 1px solid #2a475e;
+            border-radius: 6px;
+            color: #c7d5e0;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        nav .client-selector:focus { border-color: #66c0f4; outline: none; }
+
+        /* Client management page */
+        .client-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        .client-table th, .client-table td {
+            padding: 10px 14px; text-align: left; border-bottom: 1px solid #2a475e;
+        }
+        .client-table th { color: #8f98a0; font-size: 12px; text-transform: uppercase; }
+        .client-table td { font-size: 14px; }
+        .client-table tr:hover { background: rgba(102, 192, 244, 0.05); }
+        .client-form { background: #1b2838; border: 1px solid #2a475e; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+        .client-form input, .client-form textarea {
+            width: 100%; padding: 8px 12px; margin-top: 4px; margin-bottom: 12px;
+            background: #0f1923; border: 1px solid #2a475e; border-radius: 6px; color: #c7d5e0; font-size: 14px;
+        }
+        .client-form label { font-size: 13px; color: #8f98a0; }
+        .client-group-header { font-size: 15px; font-weight: 600; color: #66c0f4; margin: 20px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #2a475e; }
 
         /* Layout */
         .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
@@ -599,11 +627,15 @@
 
     <nav>
         <span class="logo">Pocket IT</span>
+        <select id="client-selector" class="client-selector" onchange="onClientChange()" style="display:none;">
+            <option value="">All Clients</option>
+        </select>
         <a href="#" class="nav-link active" data-page="fleet">Fleet</a>
         <a href="#" class="nav-link" data-page="tickets">Tickets</a>
         <a href="#" class="nav-link" data-page="enrollment">Enrollment</a>
         <a href="#" class="nav-link" data-page="alerts">Alerts <span id="nav-alert-badge" style="display:none; background:#ef5350; color:#fff; font-size:10px; padding:2px 6px; border-radius:8px; margin-left:4px;">0</span></a>
         <a href="#" class="nav-link" data-page="reports">Reports</a>
+        <a href="#" class="nav-link" data-page="clients" id="nav-clients" style="display:none;">Clients</a>
         <span class="spacer"></span>
         <span class="status-badge" id="server-status">Connected</span>
     </nav>
@@ -897,9 +929,13 @@
         <div class="page" id="page-enrollment">
             <h2 class="section-title">Enrollment Tokens</h2>
             <p style="margin-bottom: 16px; color: #8f98a0;">Generate tokens for devices to enroll with Pocket IT.</p>
-            <button class="diag-btn" onclick="generateToken()" style="margin-bottom: 16px;">Generate Token</button>
+            <div style="margin-bottom: 16px;">
+                <label style="font-size: 13px; color: #8f98a0;">Client:</label>
+                <select id="enroll-client-select" style="margin-left: 8px; padding: 6px 10px; background: #0f1923; border: 1px solid #2a475e; border-radius: 6px; color: #c7d5e0;"></select>
+                <button class="diag-btn" onclick="generateToken()" style="margin-left: 8px;">Generate Token</button>
+            </div>
             <div id="token-display" style="display:none; background: #1b2838; border: 1px solid #2a475e; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-                <div style="font-size: 13px; color: #8f98a0;">Enrollment Token (one-time use):</div>
+                <div style="font-size: 13px; color: #8f98a0;">Enrollment Token (one-time use) for <strong id="token-client-name"></strong>:</div>
                 <div id="token-value" style="font-family: monospace; font-size: 18px; color: #66c0f4; margin-top: 8px; user-select: all;"></div>
             </div>
         </div>
@@ -1027,6 +1063,35 @@
                             <button class="diag-btn" onclick="hideAddPolicyForm()">Cancel</button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clients page (admin only) -->
+        <div class="page" id="page-clients">
+            <h2 class="section-title">Client Management</h2>
+            <div class="client-form" id="client-create-form">
+                <h3 style="margin-bottom: 12px; color: #c7d5e0;">Add New Client</h3>
+                <label>Name *</label>
+                <input type="text" id="new-client-name" placeholder="e.g. Acme Corp">
+                <label>Contact Name</label>
+                <input type="text" id="new-client-contact" placeholder="e.g. John Smith">
+                <label>Contact Email</label>
+                <input type="email" id="new-client-email" placeholder="e.g. john@acme.com">
+                <label>Notes</label>
+                <textarea id="new-client-notes" rows="2" placeholder="Optional notes..."></textarea>
+                <button class="diag-btn" onclick="createClient()">Create Client</button>
+            </div>
+            <table class="client-table">
+                <thead><tr><th>Name</th><th>Devices</th><th>Contact</th><th>Created</th><th>Actions</th></tr></thead>
+                <tbody id="client-table-body"></tbody>
+            </table>
+            <div id="client-users-panel" style="display:none; margin-top: 24px; background: #1b2838; border: 1px solid #2a475e; border-radius: 8px; padding: 20px;">
+                <h3 style="color: #c7d5e0; margin-bottom: 12px;">Assigned Technicians — <span id="client-users-title"></span></h3>
+                <div id="client-users-list"></div>
+                <div style="margin-top: 12px;">
+                    <select id="assign-user-select" style="padding: 6px 10px; background: #0f1923; border: 1px solid #2a475e; border-radius: 6px; color: #c7d5e0;"></select>
+                    <button class="diag-btn" onclick="assignUserToClient()" style="margin-left: 8px;">Assign</button>
                 </div>
             </div>
         </div>
@@ -1162,6 +1227,9 @@
         let desktopCanvas = null;
         let desktopCtx = null;
         let desktopImg = new Image();
+        let currentClients = [];
+        let selectedClientId = null; // null = "All Clients"
+        let currentUserRole = null;
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -1207,6 +1275,7 @@
                 if (res.ok && data.token) {
                     authToken = data.token;
                     sessionStorage.setItem('pocket_it_token', authToken);
+                    setupClientData(data);
                     hideLogin();
                     initSocket();
                     loadFleet();
@@ -1236,6 +1305,7 @@
             if (page === 'tickets') loadTickets();
             if (page === 'alerts') loadAlerts();
             if (page === 'reports') loadReports();
+            if (page === 'clients') loadClients();
         }
 
         function navigateTo(page) {
@@ -1509,11 +1579,28 @@
         }
 
         // ---- Fleet ----
+        function renderDeviceCard(d) {
+            const hs = d.health_score;
+            const healthClass = hs === null || hs === undefined ? 'unknown' : hs >= 75 ? 'good' : hs >= 40 ? 'warning' : 'critical';
+            const healthLabel = hs !== null && hs !== undefined ? hs + '%' : 'No data';
+            return `
+            <div class="device-card" onclick="openDevice('${d.device_id}')">
+                <div class="device-header">
+                    <span class="hostname">${escapeHtml(d.hostname || 'Unknown')}</span>
+                    <span class="status-dot ${d.status || 'offline'}"></span>
+                </div>
+                <div class="device-id">${escapeHtml(d.device_id.substring(0, 8))}...</div>
+                <div class="last-seen">Last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Never'}</div>
+                <div class="health-bar"><div class="fill ${healthClass}" style="width: ${hs !== null && hs !== undefined ? hs : 0}%"></div></div>
+                <div style="font-size: 11px; color: #8f98a0; margin-top: 4px;">Health: ${healthLabel}</div>
+            </div>`;
+        }
+
         async function loadFleet() {
             try {
                 const [statsRes, devicesRes] = await Promise.all([
                     fetchWithAuth(`${API}/api/admin/stats`),
-                    fetchWithAuth(`${API}/api/devices`)
+                    fetchWithAuth(`${API}/api/devices${selectedClientId ? '?client_id=' + selectedClientId : ''}`)
                 ]);
                 const stats = await statsRes.json();
                 const devices = await devicesRes.json();
@@ -1548,22 +1635,30 @@
                     grid.innerHTML = '<div class="empty-state">No devices enrolled yet.</div>';
                     return;
                 }
-                grid.innerHTML = devices.map(d => {
-                    const hs = d.health_score;
-                    const healthClass = hs === null || hs === undefined ? 'unknown' : hs >= 75 ? 'good' : hs >= 40 ? 'warning' : 'critical';
-                    const healthLabel = hs !== null && hs !== undefined ? hs + '%' : 'No data';
-                    return `
-                    <div class="device-card" onclick="openDevice('${d.device_id}')">
-                        <div class="device-header">
-                            <span class="hostname">${escapeHtml(d.hostname || 'Unknown')}</span>
-                            <span class="status-dot ${d.status || 'offline'}"></span>
-                        </div>
-                        <div class="device-id">${escapeHtml(d.device_id.substring(0, 8))}...</div>
-                        <div class="last-seen">Last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Never'}</div>
-                        <div class="health-bar"><div class="fill ${healthClass}" style="width: ${hs !== null && hs !== undefined ? hs : 0}%"></div></div>
-                        <div style="font-size: 11px; color: #8f98a0; margin-top: 4px;">Health: ${healthLabel}</div>
-                    </div>`;
-                }).join('');
+                // Group by client if showing all
+                if (!selectedClientId && currentClients.length > 1) {
+                    const groups = {};
+                    devices.forEach(d => {
+                        const cid = d.client_id || 'unassigned';
+                        if (!groups[cid]) groups[cid] = [];
+                        groups[cid].push(d);
+                    });
+                    let html = '';
+                    for (const c of currentClients) {
+                        const grp = groups[c.id];
+                        if (!grp || grp.length === 0) continue;
+                        html += `<div class="client-group-header" style="grid-column: 1 / -1;">${escapeHtml(c.name)} (${grp.length})</div>`;
+                        html += grp.map(d => renderDeviceCard(d)).join('');
+                    }
+                    // Any unassigned
+                    if (groups['unassigned']) {
+                        html += `<div class="client-group-header" style="grid-column: 1 / -1;">Unassigned (${groups['unassigned'].length})</div>`;
+                        html += groups['unassigned'].map(d => renderDeviceCard(d)).join('');
+                    }
+                    grid.innerHTML = html;
+                } else {
+                    grid.innerHTML = devices.map(d => renderDeviceCard(d)).join('');
+                }
             } catch (err) {
                 console.error('Failed to load fleet:', err);
             }
@@ -1943,11 +2038,24 @@
         }
 
         async function generateToken() {
+            const clientSel = document.getElementById('enroll-client-select');
+            const clientId = clientSel ? parseInt(clientSel.value) : null;
+            if (!clientId) return alert('Please select a client');
+            const clientName = clientSel.options[clientSel.selectedIndex]?.text || '';
             try {
-                const res = await fetchWithAuth(`${API}/api/enrollment/token`, { method: 'POST' });
+                const res = await fetchWithAuth(`${API}/api/enrollment/token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: clientId })
+                });
                 const data = await res.json();
-                document.getElementById('token-display').style.display = 'block';
-                document.getElementById('token-value').textContent = data.token;
+                if (res.ok) {
+                    document.getElementById('token-display').style.display = 'block';
+                    document.getElementById('token-value').textContent = data.token;
+                    document.getElementById('token-client-name').textContent = clientName;
+                } else {
+                    alert(data.error || 'Failed to generate token');
+                }
             } catch (err) {
                 alert('Failed to generate token: ' + err.message);
             }
@@ -2485,6 +2593,7 @@
                         const data = await autoRes.json();
                         authToken = data.token;
                         sessionStorage.setItem('pocket_it_token', authToken);
+                        setupClientData(data);
                         hideLogin();
                         initSocket();
                         setupDesktopInput();
@@ -2960,6 +3069,232 @@
             });
             html += '</tbody></table>';
             container.innerHTML = html;
+        }
+
+        // ========== CLIENT MULTI-TENANCY ==========
+
+        function setupClientData(data) {
+            currentClients = data.clients || [];
+            currentUserRole = data.user?.role || null;
+
+            // Populate client selector in nav
+            const sel = document.getElementById('client-selector');
+            sel.innerHTML = '<option value="">All Clients</option>';
+            currentClients.forEach(c => {
+                sel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name)}</option>`;
+            });
+
+            // Show selector if there are clients
+            if (currentClients.length > 0) {
+                sel.style.display = '';
+            }
+
+            // Restore selection from session
+            const saved = sessionStorage.getItem('pocket_it_selected_client');
+            if (saved && currentClients.find(c => String(c.id) === saved)) {
+                sel.value = saved;
+                selectedClientId = parseInt(saved);
+            }
+
+            // For non-admin with single client, auto-select and hide "All" option
+            if (currentUserRole !== 'admin' && currentClients.length === 1) {
+                sel.value = String(currentClients[0].id);
+                selectedClientId = currentClients[0].id;
+                sel.querySelector('option[value=""]').style.display = 'none';
+            }
+
+            // Show Clients nav and admin-only elements
+            if (currentUserRole === 'admin') {
+                document.getElementById('nav-clients').style.display = '';
+            }
+
+            // Populate enrollment client picker
+            const enrollSel = document.getElementById('enroll-client-select');
+            if (enrollSel) {
+                enrollSel.innerHTML = currentClients.map(c =>
+                    `<option value="${c.id}">${escapeHtml(c.name)}</option>`
+                ).join('');
+            }
+        }
+
+        function onClientChange() {
+            const sel = document.getElementById('client-selector');
+            const val = sel.value;
+            selectedClientId = val ? parseInt(val) : null;
+            sessionStorage.setItem('pocket_it_selected_client', val);
+            // Reload current page data
+            const activePage = document.querySelector('.nav-link.active');
+            if (activePage) {
+                const page = activePage.dataset.page;
+                if (page === 'fleet') loadFleet();
+                else if (page === 'tickets') loadTickets();
+                else if (page === 'alerts') loadAlerts();
+                else if (page === 'reports') loadReports();
+            }
+        }
+
+        // ---- Client Management (admin) ----
+        async function loadClients() {
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients`);
+                const clients = await res.json();
+                const tbody = document.getElementById('client-table-body');
+
+                // Get device counts
+                const devRes = await fetchWithAuth(`${API}/api/devices`);
+                const devices = await devRes.json();
+                const counts = {};
+                devices.forEach(d => { counts[d.client_id] = (counts[d.client_id] || 0) + 1; });
+
+                tbody.innerHTML = clients.map(c => `
+                    <tr>
+                        <td><strong>${escapeHtml(c.name)}</strong><br><span style="font-size:11px;color:#8f98a0;">${escapeHtml(c.slug)}</span></td>
+                        <td>${counts[c.id] || 0}</td>
+                        <td>${escapeHtml(c.contact_name || '')}${c.contact_email ? '<br><span style="font-size:11px;color:#8f98a0;">' + escapeHtml(c.contact_email) + '</span>' : ''}</td>
+                        <td style="font-size:12px;color:#8f98a0;">${c.created_at ? new Date(c.created_at).toLocaleDateString() : ''}</td>
+                        <td>
+                            <button class="diag-btn" onclick="manageClientUsers(${c.id}, '${escapeHtml(c.name)}')" style="font-size:11px;padding:4px 8px;">Users</button>
+                            <button class="diag-btn" onclick="downloadInstaller(${c.id})" style="font-size:11px;padding:4px 8px;margin-left:4px;">Installer</button>
+                            ${c.slug !== 'default' ? `<button class="diag-btn" onclick="deleteClient(${c.id})" style="font-size:11px;padding:4px 8px;margin-left:4px;background:#5c2020;">Delete</button>` : ''}
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load clients:', err);
+            }
+        }
+
+        async function createClient() {
+            const name = document.getElementById('new-client-name').value.trim();
+            if (!name) return alert('Client name is required');
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        contact_name: document.getElementById('new-client-contact').value.trim() || undefined,
+                        contact_email: document.getElementById('new-client-email').value.trim() || undefined,
+                        notes: document.getElementById('new-client-notes').value.trim() || undefined
+                    })
+                });
+                if (res.ok) {
+                    document.getElementById('new-client-name').value = '';
+                    document.getElementById('new-client-contact').value = '';
+                    document.getElementById('new-client-email').value = '';
+                    document.getElementById('new-client-notes').value = '';
+                    loadClients();
+                    // Refresh client selector
+                    const clientsRes = await fetchWithAuth(`${API}/api/clients`);
+                    const clients = await clientsRes.json();
+                    currentClients = clients;
+                    const sel = document.getElementById('client-selector');
+                    sel.innerHTML = '<option value="">All Clients</option>' +
+                        clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+                    if (selectedClientId) sel.value = String(selectedClientId);
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to create client');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function deleteClient(id) {
+            if (!confirm('Delete this client? All devices must be reassigned first.')) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    loadClients();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to delete client');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        let managingClientId = null;
+        async function manageClientUsers(clientId, clientName) {
+            managingClientId = clientId;
+            document.getElementById('client-users-title').textContent = clientName;
+            document.getElementById('client-users-panel').style.display = '';
+
+            // Load assigned users
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${clientId}/users`);
+                const users = await res.json();
+                document.getElementById('client-users-list').innerHTML = users.length === 0
+                    ? '<div style="color:#8f98a0;font-size:13px;">No technicians assigned.</div>'
+                    : users.map(u => `
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #2a475e;">
+                            <span>${escapeHtml(u.display_name || u.username)} <span style="font-size:11px;color:#8f98a0;">(${u.role})</span></span>
+                            <button class="diag-btn" onclick="unassignUser(${clientId}, ${u.id})" style="font-size:11px;padding:2px 6px;background:#5c2020;">Remove</button>
+                        </div>
+                    `).join('');
+            } catch (err) { console.error('Load users error:', err); }
+
+            // Load all users for assignment dropdown
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/users`);
+                const allUsers = await res.json();
+                const sel = document.getElementById('assign-user-select');
+                sel.innerHTML = allUsers.map(u =>
+                    `<option value="${u.id}">${escapeHtml(u.display_name || u.username)} (${u.role})</option>`
+                ).join('');
+            } catch (err) { console.error('Load all users error:', err); }
+        }
+
+        async function assignUserToClient() {
+            if (!managingClientId) return;
+            const userId = document.getElementById('assign-user-select').value;
+            if (!userId) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${managingClientId}/users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: parseInt(userId) })
+                });
+                if (res.ok) {
+                    manageClientUsers(managingClientId, document.getElementById('client-users-title').textContent);
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to assign user');
+                }
+            } catch (err) { alert('Error: ' + err.message); }
+        }
+
+        async function unassignUser(clientId, userId) {
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${clientId}/users/${userId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    manageClientUsers(clientId, document.getElementById('client-users-title').textContent);
+                }
+            } catch (err) { console.error('Unassign error:', err); }
+        }
+
+        async function downloadInstaller(clientId) {
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${clientId}/installer`);
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to download installer');
+                    return;
+                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'PocketIT-setup.zip';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('Download failed: ' + err.message);
+            }
         }
     </script>
 </body>

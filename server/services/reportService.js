@@ -1,19 +1,34 @@
+const { scopeSQL } = require('../auth/clientScope');
+
 class ReportService {
   constructor(db) {
     this.db = db;
   }
 
-  getFleetHealthTrend(days = 7) {
-    // Daily avg health score: ok=100, warning=50, critical/error=0
+  getFleetHealthTrend(days = 7, scope) {
+    if (!scope || scope.isAdmin || scope.clientIds === null) {
+      // Daily avg health score: ok=100, warning=50, critical/error=0
+      return this.db.prepare(`
+        SELECT date(created_at) as day,
+               avg(CASE status WHEN 'ok' THEN 100 WHEN 'warning' THEN 50 ELSE 0 END) as avg_score,
+               count(*) as check_count
+        FROM diagnostic_results
+        WHERE created_at > datetime('now', '-' || ? || ' days')
+        GROUP BY date(created_at)
+        ORDER BY day
+      `).all(days);
+    }
+    const { clause, params } = scopeSQL(scope, 'd');
     return this.db.prepare(`
-      SELECT date(created_at) as day,
-             avg(CASE status WHEN 'ok' THEN 100 WHEN 'warning' THEN 50 ELSE 0 END) as avg_score,
+      SELECT date(dr.created_at) as day,
+             avg(CASE dr.status WHEN 'ok' THEN 100 WHEN 'warning' THEN 50 ELSE 0 END) as avg_score,
              count(*) as check_count
-      FROM diagnostic_results
-      WHERE created_at > datetime('now', '-' || ? || ' days')
-      GROUP BY date(created_at)
+      FROM diagnostic_results dr
+      JOIN devices d ON dr.device_id = d.device_id
+      WHERE dr.created_at > datetime('now', '-' || ? || ' days') AND ${clause}
+      GROUP BY date(dr.created_at)
       ORDER BY day
-    `).all(days);
+    `).all(days, ...params);
   }
 
   getDeviceMetricTrend(deviceId, checkType, days = 7) {
@@ -68,46 +83,94 @@ class ReportService {
     `).all(deviceId, days);
   }
 
-  getAlertSummary(days = 30) {
+  getAlertSummary(days = 30, scope) {
+    if (!scope || scope.isAdmin || scope.clientIds === null) {
+      const total = this.db.prepare(`
+        SELECT count(*) as total,
+               sum(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+               sum(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
+               avg(CASE WHEN resolved_at IS NOT NULL
+                 THEN (julianday(resolved_at) - julianday(triggered_at)) * 24
+                 ELSE NULL END) as mttr_hours
+        FROM alerts
+        WHERE triggered_at > datetime('now', '-' || ? || ' days')
+      `).get(days);
+
+      const bySeverity = this.db.prepare(`
+        SELECT severity, count(*) as count
+        FROM alerts
+        WHERE triggered_at > datetime('now', '-' || ? || ' days')
+        GROUP BY severity ORDER BY count DESC
+      `).all(days);
+
+      const byCheckType = this.db.prepare(`
+        SELECT check_type, count(*) as count
+        FROM alerts
+        WHERE triggered_at > datetime('now', '-' || ? || ' days')
+        GROUP BY check_type ORDER BY count DESC
+      `).all(days);
+
+      const topDevices = this.db.prepare(`
+        SELECT a.device_id, d.hostname, count(*) as count
+        FROM alerts a
+        LEFT JOIN devices d ON a.device_id = d.device_id
+        WHERE a.triggered_at > datetime('now', '-' || ? || ' days')
+        GROUP BY a.device_id ORDER BY count DESC LIMIT 5
+      `).all(days);
+
+      const perDay = this.db.prepare(`
+        SELECT date(triggered_at) as day, count(*) as count
+        FROM alerts
+        WHERE triggered_at > datetime('now', '-' || ? || ' days')
+        GROUP BY date(triggered_at) ORDER BY day
+      `).all(days);
+
+      return {
+        ...total,
+        mttr_hours: total.mttr_hours ? Math.round(total.mttr_hours * 10) / 10 : null,
+        by_severity: bySeverity,
+        by_check_type: byCheckType,
+        top_devices: topDevices,
+        per_day: perDay
+      };
+    }
+
+    const { clause, params } = scopeSQL(scope, 'd');
     const total = this.db.prepare(`
       SELECT count(*) as total,
-             sum(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
-             sum(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
-             avg(CASE WHEN resolved_at IS NOT NULL
-               THEN (julianday(resolved_at) - julianday(triggered_at)) * 24
+             sum(CASE WHEN a.status = 'active' THEN 1 ELSE 0 END) as active,
+             sum(CASE WHEN a.status = 'resolved' THEN 1 ELSE 0 END) as resolved,
+             avg(CASE WHEN a.resolved_at IS NOT NULL
+               THEN (julianday(a.resolved_at) - julianday(a.triggered_at)) * 24
                ELSE NULL END) as mttr_hours
-      FROM alerts
-      WHERE triggered_at > datetime('now', '-' || ? || ' days')
-    `).get(days);
+      FROM alerts a JOIN devices d ON a.device_id = d.device_id
+      WHERE a.triggered_at > datetime('now', '-' || ? || ' days') AND ${clause}
+    `).get(days, ...params);
 
     const bySeverity = this.db.prepare(`
-      SELECT severity, count(*) as count
-      FROM alerts
-      WHERE triggered_at > datetime('now', '-' || ? || ' days')
-      GROUP BY severity ORDER BY count DESC
-    `).all(days);
+      SELECT a.severity, count(*) as count FROM alerts a JOIN devices d ON a.device_id = d.device_id
+      WHERE a.triggered_at > datetime('now', '-' || ? || ' days') AND ${clause}
+      GROUP BY a.severity ORDER BY count DESC
+    `).all(days, ...params);
 
     const byCheckType = this.db.prepare(`
-      SELECT check_type, count(*) as count
-      FROM alerts
-      WHERE triggered_at > datetime('now', '-' || ? || ' days')
-      GROUP BY check_type ORDER BY count DESC
-    `).all(days);
+      SELECT a.check_type, count(*) as count FROM alerts a JOIN devices d ON a.device_id = d.device_id
+      WHERE a.triggered_at > datetime('now', '-' || ? || ' days') AND ${clause}
+      GROUP BY a.check_type ORDER BY count DESC
+    `).all(days, ...params);
 
     const topDevices = this.db.prepare(`
-      SELECT a.device_id, d.hostname, count(*) as count
-      FROM alerts a
-      LEFT JOIN devices d ON a.device_id = d.device_id
-      WHERE a.triggered_at > datetime('now', '-' || ? || ' days')
+      SELECT a.device_id, d.hostname, count(*) as count FROM alerts a
+      JOIN devices d ON a.device_id = d.device_id
+      WHERE a.triggered_at > datetime('now', '-' || ? || ' days') AND ${clause}
       GROUP BY a.device_id ORDER BY count DESC LIMIT 5
-    `).all(days);
+    `).all(days, ...params);
 
     const perDay = this.db.prepare(`
-      SELECT date(triggered_at) as day, count(*) as count
-      FROM alerts
-      WHERE triggered_at > datetime('now', '-' || ? || ' days')
-      GROUP BY date(triggered_at) ORDER BY day
-    `).all(days);
+      SELECT date(a.triggered_at) as day, count(*) as count FROM alerts a JOIN devices d ON a.device_id = d.device_id
+      WHERE a.triggered_at > datetime('now', '-' || ? || ' days') AND ${clause}
+      GROUP BY date(a.triggered_at) ORDER BY day
+    `).all(days, ...params);
 
     return {
       ...total,
@@ -119,47 +182,98 @@ class ReportService {
     };
   }
 
-  getTicketSummary(days = 30) {
+  getTicketSummary(days = 30, scope) {
+    if (!scope || scope.isAdmin || scope.clientIds === null) {
+      const total = this.db.prepare(`
+        SELECT count(*) as total,
+               sum(CASE WHEN status IN ('open', 'in_progress') THEN 1 ELSE 0 END) as open,
+               sum(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as resolved,
+               avg(CASE WHEN updated_at IS NOT NULL AND status IN ('resolved', 'closed')
+                 THEN (julianday(updated_at) - julianday(created_at)) * 24
+                 ELSE NULL END) as avg_resolution_hours
+        FROM tickets
+        WHERE created_at > datetime('now', '-' || ? || ' days')
+      `).get(days);
+
+      const byStatus = this.db.prepare(`
+        SELECT status, count(*) as count
+        FROM tickets
+        WHERE created_at > datetime('now', '-' || ? || ' days')
+        GROUP BY status ORDER BY count DESC
+      `).all(days);
+
+      const byPriority = this.db.prepare(`
+        SELECT priority, count(*) as count
+        FROM tickets
+        WHERE created_at > datetime('now', '-' || ? || ' days')
+        GROUP BY priority ORDER BY count DESC
+      `).all(days);
+
+      const byCategory = this.db.prepare(`
+        SELECT coalesce(category, 'uncategorized') as category, count(*) as count
+        FROM tickets
+        WHERE created_at > datetime('now', '-' || ? || ' days')
+        GROUP BY category ORDER BY count DESC
+      `).all(days);
+
+      const perDay = this.db.prepare(`
+        SELECT date(created_at) as day,
+               count(*) as opened,
+               sum(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed
+        FROM tickets
+        WHERE created_at > datetime('now', '-' || ? || ' days')
+        GROUP BY date(created_at) ORDER BY day
+      `).all(days);
+
+      return {
+        ...total,
+        avg_resolution_hours: total.avg_resolution_hours ? Math.round(total.avg_resolution_hours * 10) / 10 : null,
+        by_status: byStatus,
+        by_priority: byPriority,
+        by_category: byCategory,
+        per_day: perDay
+      };
+    }
+
+    const { clause, params } = scopeSQL(scope, 'd');
     const total = this.db.prepare(`
       SELECT count(*) as total,
-             sum(CASE WHEN status IN ('open', 'in_progress') THEN 1 ELSE 0 END) as open,
-             sum(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as resolved,
-             avg(CASE WHEN updated_at IS NOT NULL AND status IN ('resolved', 'closed')
-               THEN (julianday(updated_at) - julianday(created_at)) * 24
+             sum(CASE WHEN t.status IN ('open', 'in_progress') THEN 1 ELSE 0 END) as open,
+             sum(CASE WHEN t.status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as resolved,
+             avg(CASE WHEN t.updated_at IS NOT NULL AND t.status IN ('resolved', 'closed')
+               THEN (julianday(t.updated_at) - julianday(t.created_at)) * 24
                ELSE NULL END) as avg_resolution_hours
-      FROM tickets
-      WHERE created_at > datetime('now', '-' || ? || ' days')
-    `).get(days);
+      FROM tickets t JOIN devices d ON t.device_id = d.device_id
+      WHERE t.created_at > datetime('now', '-' || ? || ' days') AND ${clause}
+    `).get(days, ...params);
 
     const byStatus = this.db.prepare(`
-      SELECT status, count(*) as count
-      FROM tickets
-      WHERE created_at > datetime('now', '-' || ? || ' days')
-      GROUP BY status ORDER BY count DESC
-    `).all(days);
+      SELECT t.status, count(*) as count FROM tickets t JOIN devices d ON t.device_id = d.device_id
+      WHERE t.created_at > datetime('now', '-' || ? || ' days') AND ${clause}
+      GROUP BY t.status ORDER BY count DESC
+    `).all(days, ...params);
 
     const byPriority = this.db.prepare(`
-      SELECT priority, count(*) as count
-      FROM tickets
-      WHERE created_at > datetime('now', '-' || ? || ' days')
-      GROUP BY priority ORDER BY count DESC
-    `).all(days);
+      SELECT t.priority, count(*) as count FROM tickets t JOIN devices d ON t.device_id = d.device_id
+      WHERE t.created_at > datetime('now', '-' || ? || ' days') AND ${clause}
+      GROUP BY t.priority ORDER BY count DESC
+    `).all(days, ...params);
 
     const byCategory = this.db.prepare(`
-      SELECT coalesce(category, 'uncategorized') as category, count(*) as count
-      FROM tickets
-      WHERE created_at > datetime('now', '-' || ? || ' days')
-      GROUP BY category ORDER BY count DESC
-    `).all(days);
+      SELECT coalesce(t.category, 'uncategorized') as category, count(*) as count
+      FROM tickets t JOIN devices d ON t.device_id = d.device_id
+      WHERE t.created_at > datetime('now', '-' || ? || ' days') AND ${clause}
+      GROUP BY t.category ORDER BY count DESC
+    `).all(days, ...params);
 
     const perDay = this.db.prepare(`
-      SELECT date(created_at) as day,
+      SELECT date(t.created_at) as day,
              count(*) as opened,
-             sum(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed
-      FROM tickets
-      WHERE created_at > datetime('now', '-' || ? || ' days')
-      GROUP BY date(created_at) ORDER BY day
-    `).all(days);
+             sum(CASE WHEN t.status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed
+      FROM tickets t JOIN devices d ON t.device_id = d.device_id
+      WHERE t.created_at > datetime('now', '-' || ? || ' days') AND ${clause}
+      GROUP BY date(t.created_at) ORDER BY day
+    `).all(days, ...params);
 
     return {
       ...total,

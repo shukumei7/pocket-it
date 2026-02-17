@@ -422,22 +422,21 @@ function setup(io, app) {
         console.error('[Agent] Alert evaluation error:', err.message);
       }
 
+      // Silent diagnostics (scheduled checks) skip AI entirely
+      if (data.silent) return;
+
       // Buffer diagnostic results — debounce 2s so "all" checks produce one AI response
       let buffer = diagnosticBuffers.get(deviceId);
       if (!buffer) {
-        buffer = { results: {}, timer: null, silent: false };
+        buffer = { results: {}, timer: null };
         diagnosticBuffers.set(deviceId, buffer);
       }
       buffer.results[data.checkType] = data.results;
-      if (data.silent) buffer.silent = true;
 
       if (buffer.timer) clearTimeout(buffer.timer);
       buffer.timer = setTimeout(async () => {
         const bufferedResults = buffer.results;
-        const wasSilent = buffer.silent;
         diagnosticBuffers.delete(deviceId);
-
-        if (wasSilent) return; // Skip AI chat for silent diagnostics
 
         const diagnosticAI = app.locals.diagnosticAI;
         if (!diagnosticAI) return;

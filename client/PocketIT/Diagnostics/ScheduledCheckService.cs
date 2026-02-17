@@ -53,7 +53,7 @@ public class ScheduledCheckService : IDisposable
             var results = await _engine.RunAllAsync();
             foreach (var result in results)
             {
-                await _connection.SendDiagnosticResult(result);
+                await _connection.SendDiagnosticResult(result, silent: true);
             }
             Logger.Info($"Scheduled diagnostics: {results.Count} checks completed");
         }

@@ -1225,7 +1225,8 @@
         });
 
         // ---- Navigation ----
-        function navigateTo(page) {
+        // Show a page without pushing history (used by popstate)
+        function showPage(page) {
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             const navLink = document.querySelector(`[data-page="${page}"]`);
@@ -1237,12 +1238,58 @@
             if (page === 'reports') loadReports();
         }
 
+        function navigateTo(page) {
+            showPage(page);
+            history.pushState({ page }, '', '#' + page);
+        }
+
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 navigateTo(link.dataset.page);
             });
         });
+
+        // ---- History navigation (back/forward) ----
+        window.addEventListener('popstate', (e) => {
+            const state = e.state;
+            if (!state || !state.page) {
+                showPage('fleet');
+                return;
+            }
+            if (state.page === 'device' && state.deviceId) {
+                openDevice(state.deviceId, true);
+            } else {
+                // Clean up device view if navigating away
+                if (currentDeviceId) {
+                    cleanupTerminal();
+                    cleanupDesktop();
+                    if (socket) socket.emit('unwatch_device', { deviceId: currentDeviceId });
+                    currentDeviceId = null;
+                }
+                showPage(state.page);
+            }
+        });
+
+        function restoreFromHash() {
+            const hash = location.hash.slice(1); // remove '#'
+            if (!hash) return false;
+            if (hash.startsWith('device/')) {
+                const deviceId = hash.slice(7);
+                if (deviceId) {
+                    openDevice(deviceId, true);
+                    history.replaceState({ page: 'device', deviceId }, '', '#device/' + deviceId);
+                    return true;
+                }
+            }
+            const validPages = ['fleet', 'tickets', 'enrollment', 'alerts', 'reports'];
+            if (validPages.includes(hash)) {
+                showPage(hash);
+                history.replaceState({ page: hash }, '', '#' + hash);
+                return true;
+            }
+            return false;
+        }
 
         // ---- Socket.IO ----
         function initSocket() {
@@ -1626,7 +1673,7 @@
         }
 
         // ---- Device Detail ----
-        function openDevice(deviceId) {
+        function openDevice(deviceId, skipPush) {
             cleanupTerminal();
             currentDeviceId = deviceId;
 
@@ -1634,6 +1681,8 @@
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.getElementById('page-device').classList.add('active');
+
+            if (!skipPush) history.pushState({ page: 'device', deviceId }, '', '#device/' + deviceId);
 
             document.getElementById('detail-hostname').textContent = 'Loading...';
             document.getElementById('detail-device-id').textContent = '';
@@ -1712,12 +1761,7 @@
                 socket.emit('unwatch_device', { deviceId: currentDeviceId });
             }
             currentDeviceId = null;
-            // Switch back to fleet page
-            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.querySelector('[data-page="fleet"]').classList.add('active');
-            document.getElementById('page-fleet').classList.add('active');
-            loadFleet();
+            navigateTo('fleet');
         }
 
         function closeDetail() { backToFleet(); }
@@ -2444,7 +2488,7 @@
                         hideLogin();
                         initSocket();
                         setupDesktopInput();
-                        loadFleet();
+                        if (!restoreFromHash()) loadFleet();
                         return;
                     }
                 }
@@ -2454,7 +2498,7 @@
                     hideLogin();
                     initSocket();
                     setupDesktopInput();
-                    loadFleet();
+                    if (!restoreFromHash()) loadFleet();
                 } else {
                     showLogin();
                 }

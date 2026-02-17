@@ -37,6 +37,23 @@ public class ScriptExecutionService
         new Regex(@"iex\s*\(.*downloadstring", RegexOptions.IgnoreCase),
         new Regex(@"New-Service", RegexOptions.IgnoreCase),
         new Regex(@"sc\s+delete", RegexOptions.IgnoreCase),
+        // v0.9.1: Encoded command bypass
+        new Regex(@"-e(nc(odedcommand)?)?[\s]+", RegexOptions.IgnoreCase),
+        // Download cradles
+        new Regex(@"Invoke-WebRequest|wget|curl", RegexOptions.IgnoreCase),
+        new Regex(@"Start-BitsTransfer", RegexOptions.IgnoreCase),
+        new Regex(@"Net\.WebClient", RegexOptions.IgnoreCase),
+        new Regex(@"FromBase64String", RegexOptions.IgnoreCase),
+        // Defender tampering
+        new Regex(@"Add-MpPreference.*ExclusionPath", RegexOptions.IgnoreCase),
+        new Regex(@"Set-MpPreference.*DisableRealtimeMonitoring", RegexOptions.IgnoreCase),
+        // Persistence mechanisms
+        new Regex(@"reg\s+add.*\\Run\b", RegexOptions.IgnoreCase),
+        new Regex(@"schtasks\s+/create", RegexOptions.IgnoreCase),
+        new Regex(@"New-ItemProperty.*\\Run\b", RegexOptions.IgnoreCase),
+        // Dangerous system changes
+        new Regex(@"Disable-WindowsOptionalFeature", RegexOptions.IgnoreCase),
+        new Regex(@"\bnet\s+user\s+.*\s+/add", RegexOptions.IgnoreCase),
     };
 
     public (bool IsValid, string? RejectionReason) ValidateScript(string script)
@@ -58,6 +75,8 @@ public class ScriptExecutionService
 
     public async Task<ScriptResult> ExecuteAsync(string script, int timeoutSeconds = 60, bool requiresElevation = false)
     {
+        timeoutSeconds = Math.Clamp(timeoutSeconds, 5, 300);
+
         var (isValid, rejectionReason) = ValidateScript(script);
         if (!isValid)
         {
@@ -150,7 +169,7 @@ public class ScriptExecutionService
     private static string EscapeScript(string script)
     {
         // Escape double quotes for the command line
-        return script.Replace("\"", "\\\"");
+        return script.Replace("`", "``").Replace("\"", "`\"");
     }
 
     private static ScriptResult TruncateIfNeeded(ScriptResult result)

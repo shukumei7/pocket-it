@@ -1,6 +1,10 @@
 const { getSystemPrompt, getAgentName } = require('../ai/systemPrompt');
 const { parseResponse } = require('../ai/decisionEngine');
 
+function sanitizeForLLM(text) {
+  return text.replace(/\[ACTION:[A-Z_]+(?::[^\]]+)?\]/gi, '[BLOCKED_TAG]');
+}
+
 class DiagnosticAI {
   constructor(llmService, db) {
     this.llm = llmService;
@@ -27,7 +31,7 @@ class DiagnosticAI {
     const ctx = this.getOrCreateContext(deviceId, deviceInfo);
 
     // Add user message to context
-    ctx.messages.push({ role: 'user', content: `<user_message>${userMessage}</user_message>` });
+    ctx.messages.push({ role: 'user', content: `<user_message>${sanitizeForLLM(userMessage)}</user_message>` });
 
     // Trim context if too long
     if (ctx.messages.length > this.maxContextMessages) {
@@ -80,7 +84,7 @@ class DiagnosticAI {
   async processDiagnosticResult(deviceId, checkType, results) {
     const ctx = this.getOrCreateContext(deviceId, {});
 
-    const resultText = `[DIAGNOSTIC RESULTS - ${checkType}]\n${JSON.stringify(results, null, 2)}`;
+    const resultText = sanitizeForLLM(`[DIAGNOSTIC RESULTS - ${checkType}]\n${JSON.stringify(results, null, 2)}`);
     ctx.messages.push({ role: 'user', content: resultText });
 
     const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName);

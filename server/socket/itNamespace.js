@@ -1,6 +1,56 @@
 const { verifyToken } = require('../auth/userAuth');
 const jwt = require('jsonwebtoken');
 
+// Rate limiter for sensitive operations
+const opRateLimits = new Map(); // key: `${socketId}:${eventType}` → { count, resetTime }
+
+function checkOpRateLimit(socketId, eventType, maxPerMin) {
+  const key = `${socketId}:${eventType}`;
+  const now = Date.now();
+  const entry = opRateLimits.get(key) || { count: 0, resetTime: now + 60000 };
+  if (now > entry.resetTime) {
+    entry.count = 0;
+    entry.resetTime = now + 60000;
+  }
+  entry.count++;
+  opRateLimits.set(key, entry);
+  return entry.count <= maxPerMin;
+}
+
+// Tool whitelist and parameter validation
+const VALID_TOOLS = ['process_list', 'process_kill', 'service_list', 'service_action', 'event_log_query'];
+
+function validateToolParams(tool, params) {
+  switch (tool) {
+    case 'process_list':
+      return { valid: true };
+    case 'process_kill': {
+      const pid = parseInt(params?.pid, 10);
+      if (!Number.isInteger(pid) || pid <= 0) return { valid: false, reason: 'pid must be a positive integer' };
+      return { valid: true };
+    }
+    case 'service_list': {
+      const validFilters = ['all', 'running', 'stopped'];
+      if (params?.filter && !validFilters.includes(params.filter)) return { valid: false, reason: `filter must be one of: ${validFilters.join(', ')}` };
+      return { valid: true };
+    }
+    case 'service_action': {
+      const namePattern = /^[a-zA-Z0-9_\-\.]{1,256}$/;
+      if (!params?.name || !namePattern.test(params.name)) return { valid: false, reason: 'name must be alphanumeric/underscores/hyphens/dots, max 256 chars' };
+      const validActions = ['start', 'stop', 'restart'];
+      if (!validActions.includes(params?.action)) return { valid: false, reason: `action must be one of: ${validActions.join(', ')}` };
+      return { valid: true };
+    }
+    case 'event_log_query': {
+      const validLogs = ['System', 'Application', 'Security', 'Setup'];
+      if (params?.log && !validLogs.includes(params.log)) return { valid: false, reason: `log must be one of: ${validLogs.join(', ')}` };
+      return { valid: true };
+    }
+    default:
+      return { valid: false, reason: 'Unknown tool' };
+  }
+}
+
 function setup(io, app) {
   const itNs = io.of('/it');
 
@@ -124,6 +174,12 @@ function setup(io, app) {
       const { deviceId, path: browsePath } = data;
       console.log(`[IT] File browse request for ${deviceId}: ${browsePath}`);
 
+      // Rate limit: 30/min
+      if (!checkOpRateLimit(socket.id, 'request_file_browse', 30)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for file browse (30/min)' });
+        return;
+      }
+
       // Audit log
       try {
         const db = app.locals.db;
@@ -154,6 +210,12 @@ function setup(io, app) {
     socket.on('request_file_read', (data) => {
       const { deviceId, path: filePath } = data;
       console.log(`[IT] File read request for ${deviceId}: ${filePath}`);
+
+      // Rate limit: 20/min
+      if (!checkOpRateLimit(socket.id, 'request_file_read', 20)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for file read (20/min)' });
+        return;
+      }
 
       try {
         const db = app.locals.db;
@@ -186,13 +248,34 @@ function setup(io, app) {
       const { deviceId, scriptName, scriptContent, requiresElevation, timeoutSeconds } = data;
       console.log(`[IT] Script execution request for ${deviceId}: ${scriptName || 'ad-hoc'}`);
 
+      // Rate limit: 5/min
+      if (!checkOpRateLimit(socket.id, 'execute_script', 5)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for script execution (5/min)' });
+        return;
+      }
+
+      // Validate script parameters
+      if (!scriptContent || typeof scriptContent !== 'string' || scriptContent.length === 0) {
+        socket.emit('error_message', { message: 'Script content is required' });
+        return;
+      }
+      if (scriptContent.length > 50000) {
+        socket.emit('error_message', { message: 'Script exceeds maximum length of 50,000 characters' });
+        return;
+      }
+      if (scriptName && scriptName.length > 200) {
+        socket.emit('error_message', { message: 'Script name exceeds maximum length of 200 characters' });
+        return;
+      }
+      const clampedTimeout = Math.max(5, Math.min(300, parseInt(timeoutSeconds, 10) || 60));
+
       try {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
         ).run('it_staff', 'script_requested', deviceId, JSON.stringify({
           scriptName: scriptName || 'ad-hoc',
-          scriptLength: (scriptContent || '').length,
+          scriptLength: scriptContent.length,
           requiresElevation: !!requiresElevation
         }));
       } catch (err) {
@@ -209,7 +292,7 @@ function setup(io, app) {
             scriptName: scriptName || 'Ad-hoc Script',
             scriptContent,
             requiresElevation: !!requiresElevation,
-            timeoutSeconds: timeoutSeconds || 60,
+            timeoutSeconds: clampedTimeout,
             itInitiated: true
           });
           socket.emit('script_requested', { deviceId, requestId, scriptName });
@@ -418,6 +501,27 @@ function setup(io, app) {
       const { deviceId, requestId, tool, params } = data;
       console.log(`[IT] System tool request for ${deviceId}: ${tool}`);
 
+      // Rate limit: 30/min
+      if (!checkOpRateLimit(socket.id, 'system_tool_request', 30)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for system tool requests (30/min)' });
+        return;
+      }
+
+      // Tool whitelist
+      if (!VALID_TOOLS.includes(tool)) {
+        console.warn(`[IT] Blocked invalid system tool: ${tool}`);
+        socket.emit('error_message', { message: `Invalid tool: ${tool}` });
+        return;
+      }
+
+      // Parameter validation
+      const validation = validateToolParams(tool, params);
+      if (!validation.valid) {
+        console.warn(`[IT] Blocked system tool ${tool} with invalid params: ${validation.reason}`);
+        socket.emit('error_message', { message: `Invalid parameters for ${tool}: ${validation.reason}` });
+        return;
+      }
+
       try {
         const db = app.locals.db;
         db.prepare(
@@ -446,6 +550,10 @@ function setup(io, app) {
     socket.on('disconnect', () => {
       console.log(`[IT] Dashboard disconnected: ${socket.id}`);
       watchers.delete(socket.id);
+      // Clean up rate limit entries for this socket
+      for (const key of opRateLimits.keys()) {
+        if (key.startsWith(`${socket.id}:`)) opRateLimits.delete(key);
+      }
     });
   });
 

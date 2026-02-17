@@ -235,11 +235,37 @@ function setup(io, app) {
         if (response.action && response.action.type === 'remediate') {
           const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service'];
           if (VALID_ACTIONS.includes(response.action.actionId)) {
-            socket.emit('remediation_request', {
-              actionId: response.action.actionId,
-              requestId: Date.now().toString(),
-              parameter: response.action.parameter || null
-            });
+            // Validate parameters for parameterized actions
+            const param = response.action.parameter || null;
+            if (response.action.actionId === 'kill_process') {
+              const pid = parseInt(param, 10);
+              if (!Number.isInteger(pid) || pid < 1 || pid > 65535) {
+                console.warn(`[Agent] Blocked kill_process with invalid PID: ${param}`);
+              } else {
+                socket.emit('remediation_request', {
+                  actionId: response.action.actionId,
+                  requestId: Date.now().toString(),
+                  parameter: String(pid)
+                });
+              }
+            } else if (response.action.actionId === 'restart_service') {
+              const ALLOWED_SERVICES = ['spooler', 'wuauserv', 'bits', 'dnscache', 'w32time', 'winmgmt', 'themes', 'audiosrv', 'wsearch'];
+              if (!param || !ALLOWED_SERVICES.includes(param.toLowerCase())) {
+                console.warn(`[Agent] Blocked restart_service with invalid service: ${param}`);
+              } else {
+                socket.emit('remediation_request', {
+                  actionId: response.action.actionId,
+                  requestId: Date.now().toString(),
+                  parameter: param.toLowerCase()
+                });
+              }
+            } else {
+              socket.emit('remediation_request', {
+                actionId: response.action.actionId,
+                requestId: Date.now().toString(),
+                parameter: param
+              });
+            }
           } else {
             console.warn(`[Agent] Blocked invalid remediation action: ${response.action.actionId}`);
           }
@@ -248,16 +274,21 @@ function setup(io, app) {
         // If action is ticket, create ticket in DB
         if (response.action && response.action.type === 'ticket') {
           try {
+            // Sanitize ticket fields
+            const VALID_PRIORITIES = ['low', 'medium', 'high', 'critical'];
+            const ticketTitle = (response.action.title || 'Untitled').replace(/[<>&"']/g, '').substring(0, 200);
+            const ticketPriority = VALID_PRIORITIES.includes(response.action.priority) ? response.action.priority : 'medium';
+
             const ticketResult = db.prepare(
               'INSERT INTO tickets (device_id, title, priority, ai_summary, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))'
-            ).run(deviceId, response.action.title, response.action.priority, response.text);
+            ).run(deviceId, ticketTitle, ticketPriority, response.text);
 
             // Notify IT namespace
             io.of('/it').emit('ticket_created', {
               id: ticketResult.lastInsertRowid,
               deviceId,
-              title: response.action.title,
-              priority: response.action.priority
+              title: ticketTitle,
+              priority: ticketPriority
             });
           } catch (err) {
             console.error('[Agent] Ticket creation error:', err.message);
@@ -427,11 +458,39 @@ function setup(io, app) {
           if (response.action && response.action.type === 'remediate') {
             const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service'];
             if (VALID_ACTIONS.includes(response.action.actionId)) {
-              socket.emit('remediation_request', {
-                actionId: response.action.actionId,
-                requestId: Date.now().toString(),
-                parameter: response.action.parameter || null
-              });
+              // Validate parameters for parameterized actions
+              const param = response.action.parameter || null;
+              if (response.action.actionId === 'kill_process') {
+                const pid = parseInt(param, 10);
+                if (!Number.isInteger(pid) || pid < 1 || pid > 65535) {
+                  console.warn(`[Agent] Blocked kill_process with invalid PID: ${param}`);
+                } else {
+                  socket.emit('remediation_request', {
+                    actionId: response.action.actionId,
+                    requestId: Date.now().toString(),
+                    parameter: String(pid)
+                  });
+                }
+              } else if (response.action.actionId === 'restart_service') {
+                const ALLOWED_SERVICES = ['spooler', 'wuauserv', 'bits', 'dnscache', 'w32time', 'winmgmt', 'themes', 'audiosrv', 'wsearch'];
+                if (!param || !ALLOWED_SERVICES.includes(param.toLowerCase())) {
+                  console.warn(`[Agent] Blocked restart_service with invalid service: ${param}`);
+                } else {
+                  socket.emit('remediation_request', {
+                    actionId: response.action.actionId,
+                    requestId: Date.now().toString(),
+                    parameter: param.toLowerCase()
+                  });
+                }
+              } else {
+                socket.emit('remediation_request', {
+                  actionId: response.action.actionId,
+                  requestId: Date.now().toString(),
+                  parameter: param
+                });
+              }
+            } else {
+              console.warn(`[Agent] Blocked invalid remediation action: ${response.action.actionId}`);
             }
           }
         } catch (err) {

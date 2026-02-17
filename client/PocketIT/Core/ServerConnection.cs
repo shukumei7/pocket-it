@@ -21,15 +21,15 @@ public class ServerConnection : IDisposable
     public bool IsConnected => _isConnected;
 
     public event Action<string>? OnChatResponse;
-    public event Action<string, string>? OnDiagnosticRequest; // checkType, requestId
+    public event Action<string, string, bool>? OnDiagnosticRequest; // checkType, requestId, itInitiated
     public event Action<string, string, string?, bool>? OnRemediationRequest; // actionId, requestId, parameter, autoApprove
     public event Action<bool>? OnConnectionChanged;
     public event Action<string>? OnChatHistory;
     public event Action? OnConnectedReady;
-    public event Action<string, string>? OnFileBrowseRequest; // requestId, path
-    public event Action<string, string>? OnFileReadRequest; // requestId, path
-    public event Action<string, string, string, bool, int>? OnScriptRequest; // requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds
-    public event Action<string>? OnTerminalStartRequest;  // requestId
+    public event Action<string, string, bool>? OnFileBrowseRequest; // requestId, path, itInitiated
+    public event Action<string, string, bool>? OnFileReadRequest; // requestId, path, itInitiated
+    public event Action<string, string, string, bool, int, bool>? OnScriptRequest; // requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds, itInitiated
+    public event Action<string, bool>? OnTerminalStartRequest;  // requestId, itInitiated
     public event Action<string>? OnTerminalInput;          // input text
     public event Action<string>? OnTerminalStopRequest;    // requestId
 
@@ -101,7 +101,8 @@ public class ServerConnection : IDisposable
             var data = response.GetValue<JsonElement>();
             var checkType = data.GetProperty("checkType").GetString() ?? "all";
             var requestId = data.TryGetProperty("requestId", out var rid) ? rid.GetString() ?? "" : "";
-            OnDiagnosticRequest?.Invoke(checkType, requestId);
+            bool itInitiated = data.TryGetProperty("itInitiated", out var itProp) && itProp.ValueKind == JsonValueKind.True;
+            OnDiagnosticRequest?.Invoke(checkType, requestId, itInitiated);
         });
 
         _socket.On("remediation_request", response =>
@@ -127,8 +128,9 @@ public class ServerConnection : IDisposable
             var json = response.GetValue<JsonElement>();
             var requestId = json.GetProperty("requestId").GetString() ?? "";
             var path = json.GetProperty("path").GetString() ?? "";
+            bool itInitiated = json.TryGetProperty("itInitiated", out var itProp) && itProp.ValueKind == JsonValueKind.True;
             Logger.Info($"File browse request: {path} (requestId: {requestId})");
-            OnFileBrowseRequest?.Invoke(requestId, path);
+            OnFileBrowseRequest?.Invoke(requestId, path, itInitiated);
         });
 
         _socket.On("file_read_request", response =>
@@ -136,8 +138,9 @@ public class ServerConnection : IDisposable
             var json = response.GetValue<JsonElement>();
             var requestId = json.GetProperty("requestId").GetString() ?? "";
             var path = json.GetProperty("path").GetString() ?? "";
+            bool itInitiated = json.TryGetProperty("itInitiated", out var itProp2) && itProp2.ValueKind == JsonValueKind.True;
             Logger.Info($"File read request: {path} (requestId: {requestId})");
-            OnFileReadRequest?.Invoke(requestId, path);
+            OnFileReadRequest?.Invoke(requestId, path, itInitiated);
         });
 
         _socket.On("script_request", response =>
@@ -152,16 +155,18 @@ public class ServerConnection : IDisposable
             int timeoutSeconds = 60;
             if (json.TryGetProperty("timeoutSeconds", out var toProp))
                 timeoutSeconds = toProp.GetInt32();
+            bool itInitiated = json.TryGetProperty("itInitiated", out var itProp) && itProp.ValueKind == JsonValueKind.True;
             Logger.Info($"Script request: {scriptName} (requestId: {requestId}, elevation: {requiresElevation})");
-            OnScriptRequest?.Invoke(requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds);
+            OnScriptRequest?.Invoke(requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds, itInitiated);
         });
 
         _socket.On("terminal_start_request", response =>
         {
             var json = response.GetValue<JsonElement>();
             var requestId = json.GetProperty("requestId").GetString() ?? "";
+            bool itInitiated = json.TryGetProperty("itInitiated", out var itProp) && itProp.ValueKind == JsonValueKind.True;
             Logger.Info($"Terminal start request (requestId: {requestId})");
-            OnTerminalStartRequest?.Invoke(requestId);
+            OnTerminalStartRequest?.Invoke(requestId, itInitiated);
         });
 
         _socket.On("terminal_input", response =>

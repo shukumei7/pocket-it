@@ -109,7 +109,8 @@ function setup(io, app) {
         if (deviceSocket) {
           deviceSocket.emit('diagnostic_request', {
             checkType: checkType || 'all',
-            requestId: Date.now().toString()
+            requestId: Date.now().toString(),
+            itInitiated: true
           });
           socket.emit('diagnostic_requested', { deviceId, checkType });
         } else {
@@ -140,7 +141,8 @@ function setup(io, app) {
           const requestId = `fb-${Date.now()}`;
           deviceSocket.emit('file_browse_request', {
             requestId,
-            path: browsePath
+            path: browsePath,
+            itInitiated: true
           });
           socket.emit('file_browse_requested', { deviceId, requestId, path: browsePath });
         } else {
@@ -169,7 +171,8 @@ function setup(io, app) {
           const requestId = `fr-${Date.now()}`;
           deviceSocket.emit('file_read_request', {
             requestId,
-            path: filePath
+            path: filePath,
+            itInitiated: true
           });
           socket.emit('file_read_requested', { deviceId, requestId, path: filePath });
         } else {
@@ -206,7 +209,8 @@ function setup(io, app) {
             scriptName: scriptName || 'Ad-hoc Script',
             scriptContent,
             requiresElevation: !!requiresElevation,
-            timeoutSeconds: timeoutSeconds || 60
+            timeoutSeconds: timeoutSeconds || 60,
+            itInitiated: true
           });
           socket.emit('script_requested', { deviceId, requestId, scriptName });
         } else {
@@ -246,7 +250,8 @@ function setup(io, app) {
             scriptName: script.name,
             scriptContent: script.script_content,
             requiresElevation: !!script.requires_elevation,
-            timeoutSeconds: script.timeout_seconds || 60
+            timeoutSeconds: script.timeout_seconds || 60,
+            itInitiated: true
           });
           socket.emit('script_requested', { deviceId, requestId, scriptName: script.name });
         } else {
@@ -274,7 +279,7 @@ function setup(io, app) {
         const deviceSocket = connectedDevices.get(deviceId);
         if (deviceSocket) {
           const requestId = `term-${Date.now()}`;
-          deviceSocket.emit('terminal_start_request', { requestId });
+          deviceSocket.emit('terminal_start_request', { requestId, itInitiated: true });
           socket.emit('terminal_requested', { deviceId, requestId });
         } else {
           socket.emit('error_message', { message: 'Device is not connected' });

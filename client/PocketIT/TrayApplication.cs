@@ -318,8 +318,37 @@ public class TrayApplication : ApplicationContext
         }, null);
     }
 
-    private void OnServerDiagnosticRequest(string checkType, string requestId)
+    private void OnServerDiagnosticRequest(string checkType, string requestId, bool itInitiated)
     {
+        if (itInitiated)
+        {
+            Logger.Info($"IT-initiated diagnostic: {checkType} (requestId: {requestId})");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (checkType == "all")
+                    {
+                        var allResults = await _diagnosticsEngine.RunAllAsync();
+                        foreach (var diagResult in allResults)
+                        {
+                            await _serverConnection.SendDiagnosticResult(diagResult);
+                        }
+                    }
+                    else
+                    {
+                        var diagResult = await _diagnosticsEngine.RunCheckAsync(checkType);
+                        await _serverConnection.SendDiagnosticResult(diagResult);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"IT-initiated diagnostic failed: {checkType}", ex);
+                }
+            });
+            return;
+        }
+
         // Forward to chat window for user consent (like remediation)
         var msg = JsonSerializer.Serialize(new
         {
@@ -372,9 +401,29 @@ public class TrayApplication : ApplicationContext
         _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
     }
 
-    private void OnServerFileBrowseRequest(string requestId, string path)
+    private void OnServerFileBrowseRequest(string requestId, string path, bool itInitiated)
     {
         Logger.Info($"File browse request: {path}");
+
+        if (itInitiated)
+        {
+            Logger.Info($"IT-initiated file browse: {path} (requestId: {requestId})");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var entries = _fileAccess.Browse(path);
+                    await _serverConnection.SendFileBrowseResult(requestId, path, true, entries);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"IT-initiated file browse failed: {path}", ex);
+                    await _serverConnection.SendFileBrowseResult(requestId, path, true, error: ex.Message);
+                }
+            });
+            return;
+        }
+
         var bridgeData = new
         {
             type = "file_access_request",
@@ -385,9 +434,32 @@ public class TrayApplication : ApplicationContext
         _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
     }
 
-    private void OnServerFileReadRequest(string requestId, string path)
+    private void OnServerFileReadRequest(string requestId, string path, bool itInitiated)
     {
         Logger.Info($"File read request: {path}");
+
+        if (itInitiated)
+        {
+            Logger.Info($"IT-initiated file read: {path} (requestId: {requestId})");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var result = _fileAccess.ReadFile(path);
+                    if (result.Success)
+                        await _serverConnection.SendFileReadResult(requestId, path, true, result.Content, result.SizeBytes);
+                    else
+                        await _serverConnection.SendFileReadResult(requestId, path, true, error: result.Error);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"IT-initiated file read failed: {path}", ex);
+                    await _serverConnection.SendFileReadResult(requestId, path, true, error: ex.Message);
+                }
+            });
+            return;
+        }
+
         var bridgeData = new
         {
             type = "file_access_request",
@@ -398,9 +470,31 @@ public class TrayApplication : ApplicationContext
         _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
     }
 
-    private void OnServerScriptRequest(string requestId, string scriptName, string scriptContent, bool requiresElevation, int timeoutSeconds)
+    private void OnServerScriptRequest(string requestId, string scriptName, string scriptContent, bool requiresElevation, int timeoutSeconds, bool itInitiated)
     {
         Logger.Info($"Script request: {scriptName} (elevation: {requiresElevation})");
+
+        if (itInitiated)
+        {
+            Logger.Info($"IT-initiated script execution: {scriptName} (requestId: {requestId})");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var result = await _scriptExecution.ExecuteAsync(scriptContent, timeoutSeconds, requiresElevation);
+                    await _serverConnection.SendScriptResult(requestId, scriptName, result.Success,
+                        result.Output, result.ErrorOutput, result.ExitCode, result.DurationMs,
+                        result.Truncated, result.TimedOut, result.ValidationError);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"IT-initiated script execution failed: {scriptName}", ex);
+                    await _serverConnection.SendScriptResult(requestId, scriptName, false, errorOutput: ex.Message);
+                }
+            });
+            return;
+        }
+
         var bridgeData = new
         {
             type = "script_request",
@@ -413,9 +507,38 @@ public class TrayApplication : ApplicationContext
         _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
     }
 
-    private void OnServerTerminalStartRequest(string requestId)
+    private void OnServerTerminalStartRequest(string requestId, bool itInitiated)
     {
         Logger.Info($"Terminal start request: {requestId}");
+
+        if (itInitiated)
+        {
+            Logger.Info($"IT-initiated terminal start (requestId: {requestId})");
+            _remoteTerminal?.Dispose();
+            _remoteTerminal = new RemoteTerminalService();
+
+            _remoteTerminal.OnOutput += output =>
+            {
+                _ = _serverConnection.SendTerminalOutput(output);
+            };
+
+            _remoteTerminal.OnSessionEnded += exitCode =>
+            {
+                _ = _serverConnection.SendTerminalStopped(requestId, exitCode, exitCode == -1 ? "idle_timeout" : "process_exited");
+                _remoteTerminal?.Dispose();
+                _remoteTerminal = null;
+                var endMsg = JsonSerializer.Serialize(new { type = "terminal_session_ended", exitCode });
+                _uiContext.Post(_ => _chatWindow?.SendToWebView(endMsg), null);
+            };
+
+            _remoteTerminal.StartSession();
+            _ = _serverConnection.SendTerminalStarted(requestId);
+
+            var activeMsg = JsonSerializer.Serialize(new { type = "terminal_session_active" });
+            _uiContext.Post(_ => _chatWindow?.SendToWebView(activeMsg), null);
+            return;
+        }
+
         var bridgeData = new
         {
             type = "terminal_start_request",

@@ -74,7 +74,8 @@ public class ServerConnection : IDisposable
                 new("deviceId", _deviceId),
                 new("hostname", DeviceIdentity.GetHostname()),
                 new("deviceSecret", _deviceSecret),
-                new("clientVersion", AppVersion.Current)
+                new("clientVersion", AppVersion.Current),
+                new("exeHash", IntegrityCheck.GetExeHash())
             },
             Reconnection = true,
             ReconnectionAttempts = 50,

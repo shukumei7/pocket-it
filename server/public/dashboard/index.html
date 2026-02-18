@@ -1548,6 +1548,18 @@
                 loadAlerts();
             });
 
+            socket.on('integrity_warning', (data) => {
+                const msg = `INTEGRITY WARNING: Device ${data.hostname || data.deviceId} (v${data.clientVersion}) has mismatched EXE hash!`;
+                console.warn(msg);
+                // Show as a notification banner at top of page
+                const banner = document.createElement('div');
+                banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:12px 20px;background:#5c2020;color:#ff6b6b;font-size:13px;z-index:10000;text-align:center;cursor:pointer;';
+                banner.textContent = msg;
+                banner.onclick = () => banner.remove();
+                document.body.appendChild(banner);
+                setTimeout(() => banner.remove(), 15000);
+            });
+
             socket.on('terminal_started', (data) => {
                 if (data.deviceId !== terminalDeviceId) return;
                 document.getElementById('terminal-container').style.display = 'block';

@@ -57,11 +57,21 @@ router.post('/upload', requireIT, upload.single('installer'), (req, res) => {
     const finalPath = path.join(uploadsDir, filename);
     fs.renameSync(req.file.path, finalPath);
 
+    // Compute EXE hash from publish directory (if available)
+    let exeHash = req.body.exe_hash || null;
+    if (!exeHash) {
+      const publishExe = path.join(__dirname, '..', '..', 'client', 'publish', 'win-x64', 'PocketIT.exe');
+      if (fs.existsSync(publishExe)) {
+        const exeBuffer = fs.readFileSync(publishExe);
+        exeHash = crypto.createHash('sha256').update(exeBuffer).digest('hex');
+      }
+    }
+
     // Insert into DB
     const uploadedBy = req.user?.username || 'localhost';
     db.prepare(
-      'INSERT INTO update_packages (version, filename, file_size, sha256, release_notes, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(version, filename, req.file.size, sha256, release_notes || null, uploadedBy);
+      'INSERT INTO update_packages (version, filename, file_size, sha256, release_notes, uploaded_by, exe_hash) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(version, filename, req.file.size, sha256, release_notes || null, uploadedBy, exeHash);
 
     // Audit log
     try {

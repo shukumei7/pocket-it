@@ -185,6 +185,18 @@ function initDatabase(dbPath) {
     // Column already exists
   }
 
+  // v0.11.0: Tamper protection — EXE hash tracking
+  try {
+    db.prepare('ALTER TABLE devices ADD COLUMN exe_hash TEXT').run();
+  } catch (err) {
+    // Column already exists
+  }
+  try {
+    db.prepare('ALTER TABLE update_packages ADD COLUMN exe_hash TEXT').run();
+  } catch (err) {
+    // Column already exists
+  }
+
   // v0.11.0: Update packages table
   db.exec(`
     CREATE TABLE IF NOT EXISTS update_packages (

@@ -56,6 +56,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 ; Register scheduled task for elevated auto-start (when user chose autostart)
 Filename: "schtasks"; Parameters: "/Create /TN ""PocketIT"" /TR """"""{app}\{#MyAppExeName}"""""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden; Tasks: autostart
+; Lock down install folder permissions (Administrators + SYSTEM only)
+Filename: "icacls"; Parameters: """{app}"" /inheritance:r /grant:r ""SYSTEM:(OI)(CI)F"" ""BUILTIN\Administrators:(OI)(CI)F"" ""BUILTIN\Users:(OI)(CI)RX"""; Flags: runhidden
 ; Launch after install
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 ; Auto-relaunch after silent update

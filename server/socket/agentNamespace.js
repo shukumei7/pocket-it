@@ -38,6 +38,7 @@ function setup(io, app) {
     const deviceId = socket.handshake.query.deviceId;
     const hostname = socket.handshake.query.hostname;
     const clientVersion = socket.handshake.query.clientVersion;
+    const exeHash = socket.handshake.query.exeHash;
 
     if (!deviceId) {
       console.log('[Agent] Connection rejected: no deviceId');
@@ -83,8 +84,18 @@ function setup(io, app) {
 
     // Update device status in DB (device already verified above)
     try {
-      db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\'), hostname = COALESCE(?, hostname), client_version = COALESCE(?, client_version) WHERE device_id = ?')
-        .run('online', hostname, clientVersion || null, deviceId);
+      db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\'), hostname = COALESCE(?, hostname), client_version = COALESCE(?, client_version), exe_hash = COALESCE(?, exe_hash) WHERE device_id = ?')
+        .run('online', hostname, clientVersion || null, exeHash || null, deviceId);
+
+      // Integrity check: compare device exe_hash against known good hash for its version
+      if (exeHash && exeHash !== 'unknown' && clientVersion) {
+        const knownPkg = db.prepare('SELECT exe_hash FROM update_packages WHERE version = ?').get(clientVersion);
+        if (knownPkg && knownPkg.exe_hash && knownPkg.exe_hash !== exeHash) {
+          console.warn(`[Agent] INTEGRITY WARNING: Device ${deviceId} (v${clientVersion}) has unexpected EXE hash. Expected: ${knownPkg.exe_hash.substring(0, 16)}... Got: ${exeHash.substring(0, 16)}...`);
+          // Notify IT dashboard
+          emitToAll(itNs, 'integrity_warning', { deviceId, hostname, clientVersion, expectedHash: knownPkg.exe_hash, actualHash: exeHash });
+        }
+      }
     } catch (err) {
       console.error('[Agent] DB error on connect:', err.message);
     }

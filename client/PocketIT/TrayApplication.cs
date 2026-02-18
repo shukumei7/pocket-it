@@ -193,6 +193,8 @@ public class TrayApplication : ApplicationContext
                     _localDb.SetSetting("device_secret", result.DeviceSecret);
                     _serverConnection.UpdateDeviceSecret(result.DeviceSecret);
                     _isEnrolled = true;
+                    // Protect config file after enrollment
+                    ProtectConfigFile();
                 }
                 else if (!result.Success)
                 {
@@ -930,6 +932,8 @@ public class TrayApplication : ApplicationContext
                         _localDb.SetSetting("device_secret", enrollResult.DeviceSecret);
                         _serverConnection.UpdateDeviceSecret(enrollResult.DeviceSecret);
                         _isEnrolled = true;
+                        // Protect config file after enrollment
+                        ProtectConfigFile();
                         await Task.Delay(1500);
                         _uiContext.Post(_ =>
                         {
@@ -1050,6 +1054,23 @@ public class TrayApplication : ApplicationContext
         _chatWindow?.Close();
         _scheduledChecks?.Stop();
         Application.Exit();
+    }
+
+    private static void ProtectConfigFile()
+    {
+        try
+        {
+            var configPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+            if (File.Exists(configPath))
+            {
+                File.SetAttributes(configPath, File.GetAttributes(configPath) | FileAttributes.ReadOnly);
+                Logger.Info("Config file protected (read-only)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Could not protect config file: {ex.Message}");
+        }
     }
 
     protected override void Dispose(bool disposing)

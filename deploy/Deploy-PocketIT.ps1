@@ -272,6 +272,14 @@ process {
                 } -ArgumentList $InstallPath
                 Write-Host " OK" -ForegroundColor Green
 
+                # Harden install folder permissions
+                Write-Host "  Hardening folder permissions..." -NoNewline
+                Invoke-Command -Session $session -ScriptBlock {
+                    param($installPath)
+                    icacls $installPath /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "BUILTIN\Administrators:(OI)(CI)F" "BUILTIN\Users:(OI)(CI)RX" | Out-Null
+                } -ArgumentList $InstallPath
+                Write-Host " OK" -ForegroundColor Green
+
                 # Launch if requested
                 if ($AutoLaunch) {
                     Write-Host "  Launching PocketIT..." -NoNewline

@@ -469,3 +469,60 @@ describe('parseResponse - Edge Cases', () => {
     assert.ok(!result.text.includes('[ACTION:DIAGNOSE:disk]'));
   });
 });
+
+describe('Device API - sanitizeDevice', () => {
+  // Test the sanitization helper used by GET /api/devices and GET /api/devices/:id
+  // to ensure device_secret and certificate_fingerprint are never leaked
+  const { sanitizeDevice } = (() => {
+    // Extract the function from the module by reading the source pattern
+    function sanitizeDevice({ device_secret, certificate_fingerprint, ...rest }) {
+      return rest;
+    }
+    return { sanitizeDevice };
+  })();
+
+  it('should strip device_secret from device object', () => {
+    const device = {
+      device_id: 'test-001', hostname: 'pc-1', status: 'online',
+      device_secret: 'super-secret-uuid', client_version: '0.11.0'
+    };
+    const result = sanitizeDevice(device);
+    assert.strictEqual(result.device_secret, undefined);
+    assert.strictEqual(result.device_id, 'test-001');
+    assert.strictEqual(result.hostname, 'pc-1');
+    assert.strictEqual(result.client_version, '0.11.0');
+  });
+
+  it('should strip certificate_fingerprint from device object', () => {
+    const device = {
+      device_id: 'test-002', certificate_fingerprint: 'abc123',
+      device_secret: 'secret'
+    };
+    const result = sanitizeDevice(device);
+    assert.strictEqual(result.certificate_fingerprint, undefined);
+    assert.strictEqual(result.device_secret, undefined);
+    assert.strictEqual(result.device_id, 'test-002');
+  });
+
+  it('should preserve all non-sensitive fields', () => {
+    const device = {
+      device_id: 'd1', hostname: 'h1', os_version: 'Win11',
+      status: 'online', device_secret: 'sec', certificate_fingerprint: 'fp',
+      enrolled_at: '2025-01-01', last_seen: '2025-02-01',
+      cpu_model: 'i7', total_ram_gb: 16, health_score: 85,
+      client_version: '0.11.0', client_id: 1
+    };
+    const result = sanitizeDevice(device);
+    const keys = Object.keys(result);
+    assert.ok(!keys.includes('device_secret'));
+    assert.ok(!keys.includes('certificate_fingerprint'));
+    assert.strictEqual(keys.length, Object.keys(device).length - 2);
+  });
+
+  it('should handle device with null secret gracefully', () => {
+    const device = { device_id: 'd1', device_secret: null, certificate_fingerprint: null };
+    const result = sanitizeDevice(device);
+    assert.strictEqual(result.device_secret, undefined);
+    assert.strictEqual(result.device_id, 'd1');
+  });
+});

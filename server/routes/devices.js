@@ -4,6 +4,11 @@ const { resolveClientScope, scopeSQL, isDeviceInScope } = require('../auth/clien
 
 const router = express.Router();
 
+// Strip sensitive fields from device records before sending to clients
+function sanitizeDevice({ device_secret, certificate_fingerprint, ...rest }) {
+  return rest;
+}
+
 router.get('/', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const { clause, params } = scopeSQL(req.clientScope);
@@ -15,7 +20,7 @@ router.get('/', requireIT, resolveClientScope, (req, res) => {
     extraParams.push(parseInt(req.query.client_id));
   }
   const devices = db.prepare(`SELECT * FROM devices WHERE ${clause}${extraClause}`).all(...params, ...extraParams);
-  res.json(devices);
+  res.json(devices.map(sanitizeDevice));
 });
 
 router.get('/health/summary', requireIT, resolveClientScope, (req, res) => {
@@ -32,7 +37,7 @@ router.get('/:id', requireIT, resolveClientScope, (req, res) => {
   }
   const device = db.prepare('SELECT * FROM devices WHERE device_id = ?').get(req.params.id);
   if (!device) return res.status(404).json({ error: 'Device not found' });
-  res.json(device);
+  res.json(sanitizeDevice(device));
 });
 
 router.get('/:id/diagnostics', requireIT, resolveClientScope, (req, res) => {

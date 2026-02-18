@@ -3371,7 +3371,7 @@
                         <td style="font-size:12px;color:#8f98a0;">${c.created_at ? new Date(c.created_at).toLocaleDateString() : ''}</td>
                         <td>
                             <button class="diag-btn" onclick="manageClientUsers(${c.id}, '${escapeHtml(c.name)}')" style="font-size:11px;padding:4px 8px;">Users</button>
-                            <button class="diag-btn" onclick="downloadInstaller(${c.id})" style="font-size:11px;padding:4px 8px;margin-left:4px;">Installer</button>
+                            <button class="diag-btn" onclick="downloadInstaller(${c.id}, this)" style="font-size:11px;padding:4px 8px;margin-left:4px;">Installer</button>
                             ${c.slug !== 'default' ? `<button class="diag-btn" onclick="deleteClient(${c.id})" style="font-size:11px;padding:4px 8px;margin-left:4px;background:#5c2020;">Delete</button>` : ''}
                         </td>
                     </tr>
@@ -3492,7 +3492,12 @@
             } catch (err) { console.error('Unassign error:', err); }
         }
 
-        async function downloadInstaller(clientId) {
+        async function downloadInstaller(clientId, btn) {
+            const origText = btn.textContent;
+            btn.textContent = 'Downloading...';
+            btn.disabled = true;
+            btn.style.opacity = '0.6';
+
             try {
                 const res = await fetchWithAuth(`${API}/api/clients/${clientId}/installer`);
                 if (!res.ok) {
@@ -3501,17 +3506,53 @@
                     return;
                 }
                 const blob = await res.blob();
+                const filename = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'PocketIT-setup.zip';
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'PocketIT-setup.zip';
+                a.download = filename;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
+
+                // Show instructions dialog
+                showInstallerInstructions(filename);
             } catch (err) {
                 alert('Download failed: ' + err.message);
+            } finally {
+                btn.textContent = origText;
+                btn.disabled = false;
+                btn.style.opacity = '';
             }
+        }
+
+        function showInstallerInstructions(filename) {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:10000;';
+            overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+            overlay.innerHTML = `
+                <div style="background:#1b2838;border:1px solid #2a475e;border-radius:8px;padding:24px;max-width:520px;width:90%;color:#c7d5e0;">
+                    <h3 style="margin:0 0 16px 0;color:#66c0f4;">Installer Downloaded</h3>
+                    <p style="margin:0 0 8px;color:#8f98a0;font-size:13px;"><strong style="color:#c7d5e0;">${escapeHtml(filename)}</strong> has been saved to your Downloads folder.</p>
+                    <h4 style="margin:16px 0 8px;color:#c7d5e0;">Installation Steps:</h4>
+                    <ol style="margin:0 0 16px;padding-left:20px;line-height:1.8;font-size:13px;">
+                        <li>Extract the ZIP to <code style="background:#0e1621;padding:2px 6px;border-radius:3px;">C:\\Program Files\\PocketIT</code></li>
+                        <li>Run <code style="background:#0e1621;padding:2px 6px;border-radius:3px;">PocketIT.exe</code> <strong>as Administrator</strong></li>
+                        <li>The client will auto-enroll with the pre-seeded token</li>
+                        <li>A system tray icon will appear once connected</li>
+                    </ol>
+                    <p style="margin:0 0 16px;font-size:12px;color:#8f98a0;">
+                        <strong>Note:</strong> The enrollment token expires in 24 hours. The ZIP includes a pre-configured
+                        <code style="background:#0e1621;padding:2px 6px;border-radius:3px;">appsettings.json</code> with the server URL and token — no manual config needed.
+                    </p>
+                    <div style="text-align:right;">
+                        <button class="diag-btn" onclick="this.closest('div[style*=fixed]').remove()" style="padding:8px 20px;">Got it</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
         }
 
         // ========== ACTIVITY HISTORY ==========

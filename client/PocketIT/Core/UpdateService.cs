@@ -54,9 +54,9 @@ public class UpdateService : IDisposable
         });
     }
 
-    public async Task CheckForUpdateAsync()
+    public async Task<UpdateInfo?> CheckForUpdateAsync()
     {
-        if (_isUpdating) return;
+        if (_isUpdating) return null;
 
         try
         {
@@ -66,7 +66,7 @@ public class UpdateService : IDisposable
             if (!response.IsSuccessStatusCode)
             {
                 Logger.Warn($"Update check failed: HTTP {(int)response.StatusCode}");
-                return;
+                return null;
             }
 
             var json = await response.Content.ReadAsStringAsync();
@@ -74,7 +74,7 @@ public class UpdateService : IDisposable
             var root = doc.RootElement;
 
             var updateAvailable = root.TryGetProperty("updateAvailable", out var uaProp) && uaProp.GetBoolean();
-            if (!updateAvailable) return;
+            if (!updateAvailable) return new UpdateInfo { UpdateAvailable = false };
 
             var info = new UpdateInfo
             {
@@ -88,10 +88,12 @@ public class UpdateService : IDisposable
 
             Logger.Info($"Update available: {AppVersion.Current} -> {info.LatestVersion}");
             OnUpdateAvailable?.Invoke(info);
+            return info;
         }
         catch (Exception ex)
         {
             Logger.Warn($"Update check error: {ex.Message}");
+            return null;
         }
     }
 

@@ -1023,7 +1023,19 @@ public class TrayApplication : ApplicationContext
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        await _updateService.CheckForUpdateAsync();
+
+        var result = await _updateService.CheckForUpdateAsync();
+
+        if (result == null)
+        {
+            MessageBox.Show("Unable to check for updates. The server may be unavailable.", "Check for Updates",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        else if (!result.UpdateAvailable)
+        {
+            MessageBox.Show($"You're up to date! (v{AppVersion.Current})", "Check for Updates",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
     }
 
     private void OnAbout(object? sender, EventArgs e)

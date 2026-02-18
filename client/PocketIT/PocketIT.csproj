@@ -10,6 +10,7 @@
     <AssemblyName>PocketIT</AssemblyName>
     <Version>0.11.0</Version>
     <InformationalVersion>0.11.0</InformationalVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2739.15" />

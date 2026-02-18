@@ -50,14 +50,19 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-; Auto-start on login (current user)
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "PocketIT"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: autostart
+; Clean up old registry auto-start on uninstall (migration cleanup)
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "PocketIT"; Flags: deletevalue uninsdeletevalue
 
 [Run]
+; Register scheduled task for elevated auto-start (when user chose autostart)
+Filename: "schtasks"; Parameters: "/Create /TN ""PocketIT"" /TR """"""{app}\{#MyAppExeName}"""""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden; Tasks: autostart
 ; Launch after install
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 ; Auto-relaunch after silent update
 Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall skipifnotsilent
+
+[UninstallRun]
+Filename: "schtasks"; Parameters: "/Delete /TN ""PocketIT"" /F"; Flags: runhidden
 
 [UninstallDelete]
 ; Clean up local database and logs on uninstall

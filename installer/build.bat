@@ -41,8 +41,16 @@ if errorlevel 1 (
 
 echo.
 echo === Build complete! ===
-echo Installer: %~dp0output\PocketIT-0.11.0-setup.exe
+echo Installer: %~dp0output\PocketIT-0.12.0-setup.exe
 echo.
-echo Silent install:  PocketIT-0.11.0-setup.exe /SILENT
-echo Very silent:     PocketIT-0.11.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES
-echo Custom config:   PocketIT-0.11.0-setup.exe /SILENT /DIR="C:\PocketIT"
+echo Silent install:  PocketIT-0.12.0-setup.exe /SILENT
+echo Very silent:     PocketIT-0.12.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES
+echo Custom config:   PocketIT-0.12.0-setup.exe /SILENT /DIR="C:\PocketIT"
+
+echo === Auto-publishing to server ===
+curl -s --max-time 5 -X POST http://localhost:9100/api/updates/publish-local 2>nul
+if errorlevel 1 (
+    echo WARNING: Auto-publish failed. Is the server running?
+) else (
+    echo Update published and pushed to connected devices.
+)

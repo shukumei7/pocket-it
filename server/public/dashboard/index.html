@@ -2238,7 +2238,6 @@
             const content = input.value.trim();
             if (!content || !currentDeviceId || !socket) return;
             socket.emit('chat_to_device', { deviceId: currentDeviceId, content });
-            appendChatMessage('it_tech', content);
             input.value = '';
         }
 

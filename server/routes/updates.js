@@ -264,4 +264,95 @@ router.get('/fleet-versions', requireIT, (req, res) => {
   res.json(versions);
 });
 
+// POST /api/updates/publish-local — auto-register from build output (localhost only)
+router.post('/publish-local', (req, res) => {
+  // Localhost only
+  const ip = req.ip || req.connection.remoteAddress || '';
+  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  if (!isLocal) {
+    return res.status(403).json({ error: 'Localhost only' });
+  }
+
+  try {
+    const db = req.app.locals.db;
+    const installerDir = path.join(__dirname, '..', '..', 'installer', 'output');
+
+    if (!fs.existsSync(installerDir)) {
+      return res.status(404).json({ error: 'Installer output directory not found' });
+    }
+
+    // Find latest PocketIT-*-setup.exe
+    const files = fs.readdirSync(installerDir)
+      .filter(f => /^PocketIT-\d+\.\d+\.\d+-setup\.exe$/i.test(f))
+      .sort()
+      .reverse();
+
+    if (files.length === 0) {
+      return res.status(404).json({ error: 'No installer found in output directory' });
+    }
+
+    const filename = files[0];
+    const versionMatch = filename.match(/PocketIT-(\d+\.\d+\.\d+)-setup\.exe/i);
+    if (!versionMatch) {
+      return res.status(400).json({ error: 'Could not extract version from filename' });
+    }
+
+    const version = versionMatch[1];
+    const sourcePath = path.join(installerDir, filename);
+    const destPath = path.join(uploadsDir, filename);
+    const fileBuffer = fs.readFileSync(sourcePath);
+    const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+    const fileSize = fileBuffer.length;
+
+    // Compute EXE hash from publish directory
+    let exeHash = null;
+    const publishExe = path.join(__dirname, '..', '..', 'publish', 'win-x64', 'PocketIT.exe');
+    if (fs.existsSync(publishExe)) {
+      const exeBuffer = fs.readFileSync(publishExe);
+      exeHash = crypto.createHash('sha256').update(exeBuffer).digest('hex');
+    }
+
+    // Copy installer to server/updates/
+    fs.copyFileSync(sourcePath, destPath);
+
+    // Upsert into DB (delete + insert to allow rebuilds of same version)
+    const existing = db.prepare('SELECT id FROM update_packages WHERE version = ?').get(version);
+    if (existing) {
+      db.prepare('DELETE FROM update_packages WHERE version = ?').run(version);
+    }
+
+    db.prepare(
+      'INSERT INTO update_packages (version, filename, file_size, sha256, release_notes, uploaded_by, exe_hash) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(version, filename, fileSize, sha256, 'Auto-published from build', 'build-script', exeHash);
+
+    // Audit log
+    try {
+      db.prepare(
+        "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+      ).run('build-script', 'update_published', version, JSON.stringify({ filename, fileSize, sha256 }));
+    } catch (err) {
+      console.error('[Updates] Audit log error:', err.message);
+    }
+
+    // Push update_available to all outdated connected devices
+    let notified = 0;
+    const connectedDevices = req.app.locals.connectedDevices;
+    if (connectedDevices) {
+      for (const [deviceId, socket] of connectedDevices) {
+        const device = db.prepare('SELECT client_version FROM devices WHERE device_id = ?').get(deviceId);
+        if (!device || !device.client_version || isNewerVersion(version, device.client_version)) {
+          socket.emit('update_available', { version });
+          notified++;
+        }
+      }
+    }
+
+    console.log(`[Updates] Auto-published v${version} (${fileSize} bytes, SHA-256: ${sha256.substring(0, 16)}...), notified ${notified} devices`);
+    res.json({ success: true, version, filename, sha256, fileSize, notified });
+  } catch (err) {
+    console.error('[Updates] Publish-local error:', err.message);
+    res.status(500).json({ error: 'Publish failed: ' + err.message });
+  }
+});
+
 module.exports = router;

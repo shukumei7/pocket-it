@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -38,6 +39,9 @@ public class TrayApplication : ApplicationContext
     private bool _isEnrolled;
     private bool _wasConnected;
     private Icon? _remoteActiveIcon;
+    private Icon? _unreadIcon;
+    private bool _hasUnreadMessages;
+    private bool _remoteDesktopActive;
 
     public TrayApplication()
     {
@@ -154,15 +158,49 @@ public class TrayApplication : ApplicationContext
     {
         if (_remoteActiveIcon != null) return _remoteActiveIcon;
         var baseIcon = LoadTrayIcon();
+        using var srcBmp = baseIcon.ToBitmap();
+        var bmp = new Bitmap(srcBmp.Width, srcBmp.Height);
+        using var g = Graphics.FromImage(bmp);
+        // Swap R↔G channels to turn red background green
+        var colorMatrix = new ColorMatrix(new float[][]
+        {
+            new float[] {0, 1, 0, 0, 0},
+            new float[] {1, 0, 0, 0, 0},
+            new float[] {0, 0, 1, 0, 0},
+            new float[] {0, 0, 0, 1, 0},
+            new float[] {0, 0, 0, 0, 1}
+        });
+        using var attrs = new ImageAttributes();
+        attrs.SetColorMatrix(colorMatrix);
+        g.DrawImage(srcBmp, new Rectangle(0, 0, bmp.Width, bmp.Height),
+            0, 0, srcBmp.Width, srcBmp.Height, GraphicsUnit.Pixel, attrs);
+        _remoteActiveIcon = Icon.FromHandle(bmp.GetHicon());
+        return _remoteActiveIcon;
+    }
+
+    private Icon GetUnreadIcon()
+    {
+        if (_unreadIcon != null) return _unreadIcon;
+        var baseIcon = LoadTrayIcon();
         using var bmp = baseIcon.ToBitmap();
         using var g = Graphics.FromImage(bmp);
         int dotSize = Math.Max(6, bmp.Width / 3);
-        using var brush = new SolidBrush(Color.Lime);
-        using var pen = new Pen(Color.DarkGreen, 1);
+        using var brush = new SolidBrush(Color.Orange);
+        using var pen = new Pen(Color.DarkOrange, 1);
         g.FillEllipse(brush, bmp.Width - dotSize - 1, bmp.Height - dotSize - 1, dotSize, dotSize);
         g.DrawEllipse(pen, bmp.Width - dotSize - 1, bmp.Height - dotSize - 1, dotSize, dotSize);
-        _remoteActiveIcon = Icon.FromHandle(bmp.GetHicon());
-        return _remoteActiveIcon;
+        _unreadIcon = Icon.FromHandle(bmp.GetHicon());
+        return _unreadIcon;
+    }
+
+    private void UpdateTrayIcon()
+    {
+        if (_remoteDesktopActive)
+            _trayIcon.Icon = GetRemoteActiveIcon();
+        else if (_hasUnreadMessages)
+            _trayIcon.Icon = GetUnreadIcon();
+        else
+            _trayIcon.Icon = LoadTrayIcon();
     }
 
     private bool ValidateConfig()
@@ -317,6 +355,8 @@ public class TrayApplication : ApplicationContext
 
         _chatWindow.Show();
         _chatWindow.Activate();
+        _hasUnreadMessages = false;
+        UpdateTrayIcon();
     }
 
     private void ShowEnrollmentWindow()
@@ -370,6 +410,8 @@ public class TrayApplication : ApplicationContext
                 }
                 catch { }
                 _trayIcon.ShowBalloonTip(5000, "Pocket IT", preview, ToolTipIcon.Info);
+                _hasUnreadMessages = true;
+                UpdateTrayIcon();
             }
             // Update last seen timestamp
             _localDb.SetSetting("last_seen_chat", DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"));
@@ -410,7 +452,8 @@ public class TrayApplication : ApplicationContext
                     _remoteDesktop.StopSession();
                     _remoteDesktop.Dispose();
                     _remoteDesktop = null;
-                    _trayIcon.Icon = LoadTrayIcon();
+                    _remoteDesktopActive = false;
+                    UpdateTrayIcon();
                 }
             }
             _wasConnected = connected;
@@ -682,12 +725,12 @@ public class TrayApplication : ApplicationContext
                 _ = _serverConnection.SendDesktopStopped(requestId, "session_ended");
                 _remoteDesktop?.Dispose();
                 _remoteDesktop = null;
-                _uiContext.Post(_ => _trayIcon.Icon = LoadTrayIcon(), null);
+                _uiContext.Post(_ => { _remoteDesktopActive = false; UpdateTrayIcon(); }, null);
             };
 
             _remoteDesktop.StartSession();
             _ = _serverConnection.SendDesktopStarted(requestId);
-            _uiContext.Post(_ => _trayIcon.Icon = GetRemoteActiveIcon(), null);
+            _uiContext.Post(_ => { _remoteDesktopActive = true; UpdateTrayIcon(); }, null);
             return;
         }
 
@@ -711,7 +754,7 @@ public class TrayApplication : ApplicationContext
         _remoteDesktop?.StopSession();
         _remoteDesktop?.Dispose();
         _remoteDesktop = null;
-        _uiContext.Post(_ => _trayIcon.Icon = LoadTrayIcon(), null);
+        _uiContext.Post(_ => { _remoteDesktopActive = false; UpdateTrayIcon(); }, null);
     }
 
     private void OnServerDesktopQualityUpdate(int quality, int fps, float scale)

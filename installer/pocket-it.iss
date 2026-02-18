@@ -1,5 +1,5 @@
 #define MyAppName "Pocket IT"
-#define MyAppVersion "0.11.0"
+#define MyAppVersion "0.12.0"
 #define MyAppPublisher "Pocket IT"
 #define MyAppExeName "PocketIT.exe"
 #define MyAppURL "https://github.com/pocket-it"

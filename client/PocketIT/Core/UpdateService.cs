@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -108,49 +109,88 @@ public class UpdateService : IDisposable
 
             // Download to temp directory
             var tempDir = Path.Combine(Path.GetTempPath(), "PocketIT-Update");
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
             Directory.CreateDirectory(tempDir);
-            var installerPath = Path.Combine(tempDir, $"PocketIT-{info.LatestVersion}-setup.exe");
 
-            // Download the installer
+            var zipPath = Path.Combine(tempDir, $"PocketIT-{info.LatestVersion}.zip");
+
+            // Download the ZIP
             var url = $"{_serverUrl}{info.DownloadUrl}";
             using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
 
             using (var stream = await response.Content.ReadAsStreamAsync())
-            using (var fileStream = new FileStream(installerPath, FileMode.Create, System.IO.FileAccess.Write, FileShare.None))
+            using (var fileStream = new FileStream(zipPath, FileMode.Create, System.IO.FileAccess.Write, FileShare.None))
             {
                 await stream.CopyToAsync(fileStream);
             }
 
-            Logger.Info($"Download complete: {installerPath}");
+            Logger.Info($"Download complete: {zipPath}");
 
             // Verify SHA-256
-            var actualHash = ComputeSha256(installerPath);
+            var actualHash = ComputeSha256(zipPath);
             if (!string.Equals(actualHash, info.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 Logger.Error($"SHA-256 mismatch! Expected: {info.Sha256}, Got: {actualHash}");
-                try { File.Delete(installerPath); } catch { }
+                try { File.Delete(zipPath); } catch { }
                 _isUpdating = false;
                 return false;
             }
 
-            Logger.Info("SHA-256 verified. Launching installer...");
+            Logger.Info("SHA-256 verified. Extracting update...");
 
-            // Launch the installer in silent mode
+            // Extract to staging
+            var stagingDir = Path.Combine(tempDir, "staging");
+            ZipFile.ExtractToDirectory(zipPath, stagingDir, true);
+
+            // Write update batch script
+            var installDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+            var exePath = Path.Combine(installDir, "PocketIT.exe");
+            var batchPath = Path.Combine(tempDir, "update.bat");
+
+            var batchContent = "@echo off\r\n" +
+                "echo Pocket IT Updater - waiting for application to exit...\r\n" +
+                "timeout /t 3 /nobreak >nul\r\n" +
+                "\r\n" +
+                "echo Copying update files...\r\n" +
+                "robocopy \"" + stagingDir + "\" \"" + installDir + "\" /E /XF appsettings.json pocket-it.db /R:3 /W:2 >nul\r\n" +
+                "\r\n" +
+                "echo Fortifying installation...\r\n" +
+                "icacls \"" + installDir + "\" /inheritance:r /grant:r \"SYSTEM:(OI)(CI)F\" \"BUILTIN\\Administrators:(OI)(CI)F\" \"BUILTIN\\Users:(OI)(CI)RX\"\r\n" +
+                "\r\n" +
+                "echo Protecting config...\r\n" +
+                "attrib +R \"" + installDir + "\\appsettings.json\"\r\n" +
+                "\r\n" +
+                "echo Starting Pocket IT...\r\n" +
+                "start \"\" \"" + exePath + "\"\r\n" +
+                "\r\n" +
+                "echo Cleaning up...\r\n" +
+                "rmdir /S /Q \"" + stagingDir + "\" 2>nul\r\n" +
+                "del \"" + zipPath + "\" 2>nul\r\n" +
+                "\r\n" +
+                "exit /b 0\r\n";
+
+            File.WriteAllText(batchPath, batchContent);
+
+            Logger.Info("Launching updater script...");
+
+            // Launch batch script
             var process = new System.Diagnostics.Process
             {
                 StartInfo = new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = installerPath,
-                    Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS",
-                    UseShellExecute = true
+                    FileName = "cmd.exe",
+                    Arguments = $"/c \"{batchPath}\"",
+                    UseShellExecute = true,
+                    CreateNoWindow = true,
+                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
                 }
             };
             process.Start();
 
-            // The installer will kill this process, replace files, and relaunch
-            // Give it a moment to start, then exit gracefully
-            await Task.Delay(2000);
+            // Exit gracefully
+            await Task.Delay(1000);
             Environment.Exit(0);
 
             return true; // Won't reach here

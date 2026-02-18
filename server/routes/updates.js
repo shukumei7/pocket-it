@@ -17,8 +17,8 @@ const upload = multer({
   dest: uploadsDir,
   limits: { fileSize: 200 * 1024 * 1024 }, // 200MB max
   fileFilter: (req, file, cb) => {
-    if (path.extname(file.originalname).toLowerCase() !== '.exe') {
-      return cb(new Error('Only .exe files are allowed'));
+    if (path.extname(file.originalname).toLowerCase() !== '.zip') {
+      return cb(new Error('Only .zip files are allowed'));
     }
     cb(null, true);
   }
@@ -53,7 +53,7 @@ router.post('/upload', requireIT, upload.single('installer'), (req, res) => {
     const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
     // Rename to proper filename
-    const filename = `PocketIT-${version}-setup.exe`;
+    const filename = `PocketIT-${version}.zip`;
     const finalPath = path.join(uploadsDir, filename);
     fs.renameSync(req.file.path, finalPath);
 
@@ -265,7 +265,7 @@ router.get('/fleet-versions', requireIT, (req, res) => {
 });
 
 // POST /api/updates/publish-local — auto-register from build output (localhost only)
-router.post('/publish-local', (req, res) => {
+router.post('/publish-local', async (req, res) => {
   // Localhost only
   const ip = req.ip || req.connection.remoteAddress || '';
   const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
@@ -274,46 +274,41 @@ router.post('/publish-local', (req, res) => {
   }
 
   try {
+    const archiver = require('archiver');
     const db = req.app.locals.db;
-    const installerDir = path.join(__dirname, '..', '..', 'installer', 'output');
 
-    if (!fs.existsSync(installerDir)) {
-      return res.status(404).json({ error: 'Installer output directory not found' });
+    const publishDir = path.join(__dirname, '..', '..', 'client', 'publish', 'win-x64');
+    if (!fs.existsSync(publishDir)) {
+      return res.status(404).json({ error: 'Publish directory not found. Run dotnet publish first.' });
     }
 
-    // Find latest PocketIT-*-setup.exe
-    const files = fs.readdirSync(installerDir)
-      .filter(f => /^PocketIT-\d+\.\d+\.\d+-setup\.exe$/i.test(f))
-      .sort()
-      .reverse();
-
-    if (files.length === 0) {
-      return res.status(404).json({ error: 'No installer found in output directory' });
-    }
-
-    const filename = files[0];
-    const versionMatch = filename.match(/PocketIT-(\d+\.\d+\.\d+)-setup\.exe/i);
+    // Read version from csproj
+    const csprojPath = path.join(__dirname, '..', '..', 'client', 'PocketIT', 'PocketIT.csproj');
+    const csprojContent = fs.readFileSync(csprojPath, 'utf8');
+    const versionMatch = csprojContent.match(/<Version>(\d+\.\d+\.\d+)<\/Version>/);
     if (!versionMatch) {
-      return res.status(400).json({ error: 'Could not extract version from filename' });
+      return res.status(400).json({ error: 'Could not read version from PocketIT.csproj' });
     }
-
     const version = versionMatch[1];
-    const sourcePath = path.join(installerDir, filename);
+
+    const filename = `PocketIT-${version}.zip`;
     const destPath = path.join(uploadsDir, filename);
-    const fileBuffer = fs.readFileSync(sourcePath);
+
+    // Create ZIP from publish directory
+    await new Promise((resolve, reject) => {
+      const output = fs.createWriteStream(destPath);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      output.on('close', resolve);
+      archive.on('error', reject);
+      archive.pipe(output);
+      archive.directory(publishDir, false);
+      archive.finalize();
+    });
+
+    // Compute SHA-256
+    const fileBuffer = fs.readFileSync(destPath);
     const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
     const fileSize = fileBuffer.length;
-
-    // Compute EXE hash from publish directory
-    let exeHash = null;
-    const publishExe = path.join(__dirname, '..', '..', 'publish', 'win-x64', 'PocketIT.exe');
-    if (fs.existsSync(publishExe)) {
-      const exeBuffer = fs.readFileSync(publishExe);
-      exeHash = crypto.createHash('sha256').update(exeBuffer).digest('hex');
-    }
-
-    // Copy installer to server/updates/
-    fs.copyFileSync(sourcePath, destPath);
 
     // Upsert into DB (delete + insert to allow rebuilds of same version)
     const existing = db.prepare('SELECT id FROM update_packages WHERE version = ?').get(version);
@@ -323,7 +318,7 @@ router.post('/publish-local', (req, res) => {
 
     db.prepare(
       'INSERT INTO update_packages (version, filename, file_size, sha256, release_notes, uploaded_by, exe_hash) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(version, filename, fileSize, sha256, 'Auto-published from build', 'build-script', exeHash);
+    ).run(version, filename, fileSize, sha256, 'Auto-published from build', 'build-script', null);
 
     // Audit log
     try {

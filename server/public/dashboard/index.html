@@ -800,6 +800,7 @@
                     <button class="diag-btn" onclick="loadEventLog()">Query</button>
                     <button class="sys-filter-bar preset-btn" onclick="presetEventLog('error','24','System')">Errors 24h</button>
                     <button class="sys-filter-bar preset-btn" onclick="presetEventLog('error','168','System')">Critical 7d</button>
+                    <input type="text" id="evt-search" placeholder="Search ID, source, message..." oninput="filterEventsLocal()" style="width:200px;" />
                     <span id="evt-count" style="font-size:12px; color:#8f98a0; margin-left:auto;"></span>
                   </div>
                   <div id="evt-table-container" style="max-height:400px; overflow-y:auto;">
@@ -1960,8 +1961,10 @@
             // Reset and auto-load system tools
             cachedProcessList = null;
             cachedServiceList = null;
+            cachedEventList = null;
             document.getElementById('svc-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Click Refresh to load services</div>';
             document.getElementById('evt-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Select filters and click Query</div>';
+            if (document.getElementById('evt-search')) document.getElementById('evt-search').value = '';
             switchSysTab('processes');
             loadProcesses();
             // Reset and load activity history
@@ -3030,6 +3033,11 @@
         let procSortCol = 'cpuPercent';
         let procSortAsc = false;
         let cachedServiceList = null;
+        let svcSortCol = 'displayName';
+        let svcSortAsc = true;
+        let cachedEventList = null;
+        let evtSortCol = 'time';
+        let evtSortAsc = false;
 
         function switchSysTab(tab) {
             document.querySelectorAll('.sys-tools-tab').forEach(t => t.classList.remove('active'));
@@ -3133,12 +3141,30 @@
             renderServiceTable(cachedServiceList);
         }
 
+        function sortServices(col) {
+            if (svcSortCol === col) { svcSortAsc = !svcSortAsc; }
+            else { svcSortCol = col; svcSortAsc = col === 'displayName' || col === 'name'; }
+            if (cachedServiceList) renderServiceTable(cachedServiceList);
+        }
+
         function renderServiceTable(services) {
             const search = (document.getElementById('svc-search').value || '').toLowerCase();
             const filtered = search ? services.filter(s => s.displayName.toLowerCase().includes(search) || s.name.toLowerCase().includes(search)) : services;
+            filtered.sort((a, b) => {
+                let va = a[svcSortCol] ?? '', vb = b[svcSortCol] ?? '';
+                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+                if (va < vb) return svcSortAsc ? -1 : 1;
+                if (va > vb) return svcSortAsc ? 1 : -1;
+                return 0;
+            });
+            const arrow = col => svcSortCol === col ? (svcSortAsc ? ' ▲' : ' ▼') : '';
             const container = document.getElementById('svc-table-container');
             let html = `<table class="sys-table"><thead><tr>
-                <th>Display Name</th><th>Name</th><th>Status</th><th>Start Type</th><th>Actions</th>
+                <th onclick="sortServices('displayName')">Display Name${arrow('displayName')}</th>
+                <th onclick="sortServices('name')">Name${arrow('name')}</th>
+                <th onclick="sortServices('status')">Status${arrow('status')}</th>
+                <th onclick="sortServices('startType')">Start Type${arrow('startType')}</th>
+                <th>Actions</th>
             </tr></thead><tbody>`;
             filtered.forEach(s => {
                 const isRunning = s.status === 'Running';
@@ -3199,16 +3225,54 @@
                 container.innerHTML = `<div style="color:#ef5350; font-size:13px;">Error: ${escapeHtml(data.error || 'Unknown')}</div>`;
                 return;
             }
-            const events = data.data.events || [];
-            document.getElementById('evt-count').textContent = events.length + ' events';
+            cachedEventList = data.data.events || [];
+            document.getElementById('evt-count').textContent = cachedEventList.length + ' events';
+            renderEventTable();
+        }
+
+        function sortEvents(col) {
+            if (evtSortCol === col) { evtSortAsc = !evtSortAsc; }
+            else { evtSortCol = col; evtSortAsc = col === 'source'; }
+            renderEventTable();
+        }
+
+        function filterEventsLocal() {
+            renderEventTable();
+        }
+
+        function renderEventTable() {
+            if (!cachedEventList) return;
+            const search = (document.getElementById('evt-search')?.value || '').trim();
+            let events = cachedEventList;
+            if (search) {
+                const lower = search.toLowerCase();
+                events = events.filter(e =>
+                    String(e.eventId).includes(search) ||
+                    (e.source || '').toLowerCase().includes(lower) ||
+                    (e.message || '').toLowerCase().includes(lower)
+                );
+            }
             if (events.length === 0) {
-                container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">No events found matching filters</div>';
+                document.getElementById('evt-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">No events found matching filters</div>';
                 return;
             }
+            const sorted = [...events].sort((a, b) => {
+                let va = a[evtSortCol] ?? '', vb = b[evtSortCol] ?? '';
+                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+                if (va < vb) return evtSortAsc ? -1 : 1;
+                if (va > vb) return evtSortAsc ? 1 : -1;
+                return 0;
+            });
+            const arrow = col => evtSortCol === col ? (evtSortAsc ? ' ▲' : ' ▼') : '';
+            const container = document.getElementById('evt-table-container');
             let html = `<table class="sys-table"><thead><tr>
-                <th>Time</th><th>Level</th><th>Source</th><th>Event ID</th><th>Message</th>
+                <th onclick="sortEvents('time')">Time${arrow('time')}</th>
+                <th onclick="sortEvents('level')">Level${arrow('level')}</th>
+                <th onclick="sortEvents('source')">Source${arrow('source')}</th>
+                <th onclick="sortEvents('eventId')">Event ID${arrow('eventId')}</th>
+                <th>Message</th>
             </tr></thead><tbody>`;
-            events.forEach(e => {
+            sorted.forEach(e => {
                 const lvlClass = e.level === 'Error' ? 'evt-level-error' : e.level === 'Warning' ? 'evt-level-warning' : 'evt-level-information';
                 const time = new Date(e.time).toLocaleString();
                 const msg = (e.message || '').substring(0, 150);

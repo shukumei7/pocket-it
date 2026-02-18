@@ -607,6 +607,33 @@
             padding: 4px 10px; font-size: 11px; border-radius: 3px; cursor: pointer; border: 1px solid #2a475e; background: #1b2838; color: #8f98a0;
         }
         .sys-filter-bar .preset-btn:hover { color: #66c0f4; border-color: #66c0f4; }
+
+        /* Activity History */
+        .activity-filter-bar {
+            display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;
+        }
+        .activity-filter-bar select, .activity-filter-bar input {
+            background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; padding: 6px 10px; border-radius: 4px; font-size: 12px;
+        }
+        .activity-table {
+            width: 100%; border-collapse: collapse; font-size: 13px;
+        }
+        .activity-table th {
+            text-align: left; padding: 8px 10px; color: #8f98a0; border-bottom: 1px solid #2a475e; font-weight: 600;
+        }
+        .activity-table td {
+            padding: 7px 10px; border-bottom: 1px solid rgba(42,71,94,0.3); vertical-align: top;
+        }
+        .activity-table tr:hover td { background: rgba(102,192,244,0.05); }
+        .activity-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; color: #fff; white-space: nowrap;
+        }
+        .activity-timestamp {
+            white-space: nowrap; font-size: 12px; color: #8f98a0;
+        }
+        .activity-details {
+            font-size: 12px; color: #8f98a0; max-width: 300px; word-break: break-word;
+        }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -873,6 +900,49 @@
               <span id="terminal-status" style="color:#8f98a0; font-size:13px;">Not connected</span>
             </div>
             <div id="terminal-container" style="display:none; height:400px;"></div>
+          </div>
+
+          <!-- Full-width: Activity History -->
+          <h2 class="section-title" style="margin-top:20px;">Activity History</h2>
+          <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
+            <div class="activity-filter-bar">
+              <select id="activity-category-filter" style="min-width:160px;">
+                <option value="">All</option>
+                <option value="script_requested,script_completed">Scripts</option>
+                <option value="terminal_session_started,terminal_session_ended">Terminal</option>
+                <option value="desktop_session_started,desktop_session_ended">Desktop</option>
+                <option value="file_browse_requested,file_browse_completed,file_read_requested,file_read_completed">Files</option>
+                <option value="system_tool_requested,system_tool_completed">System Tools</option>
+                <option value="diagnostic_requested,diagnostic_completed">Diagnostics</option>
+                <option value="remediation_requested,remediation_executed,auto_remediation_triggered">Remediation</option>
+                <option value="ticket_created,ticket_updated,ticket_comment_added">Tickets</option>
+                <option value="alert_acknowledged,alert_resolved">Alerts</option>
+              </select>
+              <label style="font-size:12px; color:#8f98a0;">From</label>
+              <input type="date" id="activity-date-from" />
+              <label style="font-size:12px; color:#8f98a0;">To</label>
+              <input type="date" id="activity-date-to" />
+              <button class="diag-btn" onclick="applyActivityFilter()">Apply</button>
+              <button class="diag-btn" onclick="loadDeviceActivity(currentDeviceId, 1, false)" style="background:none; border-color:#2a475e; color:#8f98a0;">Reset</button>
+            </div>
+            <div style="max-height:500px; overflow-y:auto;" id="activity-table-wrapper">
+              <table class="activity-table">
+                <thead>
+                  <tr>
+                    <th style="width:160px;">Timestamp</th>
+                    <th style="width:180px;">Action</th>
+                    <th style="width:120px;">Actor</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody id="activity-tbody">
+                  <tr><td colspan="4" style="color:#8f98a0; text-align:center; padding:24px;">No activity loaded.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div id="activity-load-more" style="display:none; margin-top:12px; text-align:center;">
+              <button class="diag-btn" onclick="loadMoreActivity()">Load More</button>
+            </div>
           </div>
 
           <!-- Danger zone -->
@@ -1576,6 +1646,17 @@
                     case 'event_log_query': renderEventLog(data); break;
                 }
             });
+
+            // Activity audit events: prepend new rows in real-time
+            socket.on('audit_event', (data) => {
+                if (!currentDeviceId || data.deviceId !== currentDeviceId) return;
+                const tbody = document.getElementById('activity-tbody');
+                if (!tbody) return;
+                // Remove the "no activity" placeholder if present
+                if (tbody.querySelector('td[colspan]')) tbody.innerHTML = '';
+                const row = renderActivityRow(data);
+                tbody.insertAdjacentHTML('afterbegin', row);
+            });
         }
 
         // ---- Fleet ----
@@ -1847,6 +1928,12 @@
             document.getElementById('evt-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Select filters and click Query</div>';
             switchSysTab('processes');
             loadProcesses();
+            // Reset and load activity history
+            document.getElementById('activity-category-filter').value = '';
+            document.getElementById('activity-date-from').value = '';
+            document.getElementById('activity-date-to').value = '';
+            activityCurrentPage = 1;
+            loadDeviceActivity(deviceId);
         }
 
         function backToFleet() {
@@ -3296,6 +3383,187 @@
                 alert('Download failed: ' + err.message);
             }
         }
+
+        // ========== ACTIVITY HISTORY ==========
+        let activityCurrentPage = 1;
+        const ACTIVITY_LIMIT = 50;
+
+        const ACTIVITY_ACTION_MAP = {
+            'script_requested':          { label: 'Script Executed',         color: '#3b82f6' },
+            'script_completed':          { label: 'Script Completed',        color: '#22c55e' }, // overridden by exitCode
+            'terminal_session_started':  { label: 'Terminal Started',        color: '#3b82f6' },
+            'terminal_session_ended':    { label: 'Terminal Ended',          color: '#6b7280' },
+            'desktop_session_started':   { label: 'Desktop Started',         color: '#3b82f6' },
+            'desktop_session_ended':     { label: 'Desktop Ended',           color: '#6b7280' },
+            'file_browse_requested':     { label: 'File Browsed',            color: '#14b8a6' },
+            'file_browse_completed':     { label: 'File Browsed',            color: '#14b8a6' },
+            'file_read_requested':       { label: 'File Read',               color: '#14b8a6' },
+            'file_read_completed':       { label: 'File Read',               color: '#14b8a6' },
+            'diagnostic_requested':      { label: 'Diagnostic Requested',    color: '#eab308' },
+            'diagnostic_completed':      { label: 'Diagnostic Completed',    color: '#22c55e' },
+            'remediation_requested':     { label: 'Remediation Requested',   color: '#f97316' },
+            'remediation_executed':      { label: 'Remediation Executed',    color: '#22c55e' }, // overridden by success
+            'system_tool_requested':     { label: 'System Tool',             color: '#a855f7' },
+            'system_tool_completed':     { label: 'System Tool',             color: '#a855f7' },
+            'auto_remediation_triggered':{ label: 'Auto-Remediation',        color: '#f97316' },
+            'terminal_denied':           { label: 'Access Denied',           color: '#ef4444' },
+            'desktop_denied':            { label: 'Access Denied',           color: '#ef4444' },
+            'ticket_created':            { label: 'Ticket Created',          color: '#3b82f6' },
+            'ticket_updated':            { label: 'Ticket Updated',          color: '#6b7280' },
+            'ticket_comment_added':      { label: 'Comment Added',           color: '#6b7280' },
+            'alert_acknowledged':        { label: 'Alert Acknowledged',      color: '#eab308' },
+            'alert_resolved':            { label: 'Alert Resolved',          color: '#22c55e' },
+        };
+
+        function formatActivityTimestamp(ts) {
+            if (!ts) return '—';
+            const d = new Date(ts);
+            return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+        }
+
+        function formatActivityDetails(action, detailsJson) {
+            let details = {};
+            if (detailsJson) {
+                try { details = typeof detailsJson === 'string' ? JSON.parse(detailsJson) : detailsJson; } catch (e) { return escapeHtml(String(detailsJson)); }
+            }
+            if (action === 'script_requested' || action === 'script_completed') {
+                const parts = [];
+                if (details.scriptName) parts.push(escapeHtml(details.scriptName));
+                if (details.exitCode !== undefined && details.exitCode !== null) parts.push('exit ' + details.exitCode);
+                if (details.durationMs) parts.push(details.durationMs + 'ms');
+                return parts.join(' &middot; ') || '—';
+            }
+            if (action === 'file_browse_requested' || action === 'file_browse_completed' ||
+                action === 'file_read_requested' || action === 'file_read_completed') {
+                return details.path ? escapeHtml(details.path) : '—';
+            }
+            if (action === 'system_tool_requested' || action === 'system_tool_completed') {
+                return details.tool ? escapeHtml(details.tool) : '—';
+            }
+            if (action === 'diagnostic_requested' || action === 'diagnostic_completed') {
+                return details.checkType ? escapeHtml(details.checkType) : '—';
+            }
+            if (action === 'remediation_requested' || action === 'remediation_executed' || action === 'auto_remediation_triggered') {
+                const parts = [];
+                if (details.actionId || details.action) parts.push(escapeHtml(details.actionId || details.action));
+                if (details.success !== undefined) parts.push(details.success ? 'success' : 'failed');
+                return parts.join(' &middot; ') || '—';
+            }
+            if (action === 'ticket_created' || action === 'ticket_updated' || action === 'ticket_comment_added') {
+                const parts = [];
+                if (details.ticketId) parts.push('#' + details.ticketId);
+                if (details.title) parts.push(escapeHtml(details.title));
+                if (details.status) parts.push(escapeHtml(details.status));
+                return parts.join(' &middot; ') || '—';
+            }
+            if (action === 'alert_acknowledged' || action === 'alert_resolved') {
+                const parts = [];
+                if (details.alertId) parts.push('#' + details.alertId);
+                if (details.message) parts.push(escapeHtml(String(details.message).substring(0, 80)));
+                return parts.join(' &middot; ') || '—';
+            }
+            // Default: render top-level keys as key=value
+            const keys = Object.keys(details);
+            if (keys.length === 0) return '—';
+            return keys.slice(0, 4).map(k => `${escapeHtml(k)}=${escapeHtml(String(details[k]).substring(0, 40))}`).join(', ');
+        }
+
+        function getActivityBadgeColor(action, detailsJson) {
+            const map = ACTIVITY_ACTION_MAP[action];
+            if (!map) return '#6b7280';
+            let color = map.color;
+            // Override for exit-code-dependent actions
+            if (action === 'script_completed') {
+                let details = {};
+                try { details = typeof detailsJson === 'string' ? JSON.parse(detailsJson) : (detailsJson || {}); } catch (e) {}
+                color = (details.exitCode === 0 || details.exitCode === undefined) ? '#22c55e' : '#ef4444';
+            }
+            if (action === 'remediation_executed') {
+                let details = {};
+                try { details = typeof detailsJson === 'string' ? JSON.parse(detailsJson) : (detailsJson || {}); } catch (e) {}
+                color = details.success !== false ? '#22c55e' : '#ef4444';
+            }
+            return color;
+        }
+
+        function renderActivityRow(activity) {
+            const action = activity.action || '';
+            const map = ACTIVITY_ACTION_MAP[action];
+            const label = map ? map.label : escapeHtml(action);
+            const color = getActivityBadgeColor(action, activity.details);
+            const ts = formatActivityTimestamp(activity.created_at || activity.timestamp);
+            const actor = escapeHtml(activity.actor || activity.performed_by || '—');
+            const detailsHtml = formatActivityDetails(action, activity.details);
+
+            return `<tr>
+                <td class="activity-timestamp">${ts}</td>
+                <td><span class="activity-badge" style="background:${color};">${label}</span></td>
+                <td style="font-size:13px; color:#c7d5e0;">${actor}</td>
+                <td class="activity-details">${detailsHtml}</td>
+            </tr>`;
+        }
+
+        async function loadDeviceActivity(deviceId, page = 1, append = false) {
+            if (!deviceId) return;
+            const tbody = document.getElementById('activity-tbody');
+            const loadMoreBtn = document.getElementById('activity-load-more');
+
+            if (!append) {
+                tbody.innerHTML = '<tr><td colspan="4" style="color:#8f98a0; text-align:center; padding:24px;">Loading...</td></tr>';
+                loadMoreBtn.style.display = 'none';
+            }
+
+            try {
+                const category = document.getElementById('activity-category-filter').value;
+                const dateFrom = document.getElementById('activity-date-from').value;
+                const dateTo = document.getElementById('activity-date-to').value;
+
+                let url = `${API}/api/devices/${deviceId}/activity?page=${page}&limit=${ACTIVITY_LIMIT}`;
+                if (category) url += `&actions=${encodeURIComponent(category)}`;
+                if (dateFrom) url += `&from=${encodeURIComponent(dateFrom)}`;
+                if (dateTo) url += `&to=${encodeURIComponent(dateTo)}`;
+
+                const res = await fetchWithAuth(url);
+                if (!res.ok) {
+                    if (!append) tbody.innerHTML = '<tr><td colspan="4" style="color:#8f98a0; text-align:center; padding:24px;">Failed to load activity.</td></tr>';
+                    return;
+                }
+                const activities = await res.json();
+
+                if (!append) {
+                    if (activities.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="color:#8f98a0; text-align:center; padding:24px;">No activity found.</td></tr>';
+                        loadMoreBtn.style.display = 'none';
+                        return;
+                    }
+                    tbody.innerHTML = activities.map(a => renderActivityRow(a)).join('');
+                } else {
+                    if (activities.length === 0) {
+                        loadMoreBtn.style.display = 'none';
+                        return;
+                    }
+                    tbody.insertAdjacentHTML('beforeend', activities.map(a => renderActivityRow(a)).join(''));
+                }
+
+                activityCurrentPage = page;
+                loadMoreBtn.style.display = activities.length < ACTIVITY_LIMIT ? 'none' : 'block';
+            } catch (err) {
+                console.error('Failed to load activity:', err);
+                if (!append) tbody.innerHTML = '<tr><td colspan="4" style="color:#8f98a0; text-align:center; padding:24px;">Error loading activity.</td></tr>';
+            }
+        }
+
+        function loadMoreActivity() {
+            loadDeviceActivity(currentDeviceId, activityCurrentPage + 1, true);
+        }
+
+        function applyActivityFilter() {
+            activityCurrentPage = 1;
+            loadDeviceActivity(currentDeviceId, 1, false);
+        }
+
+        // Real-time: prepend new audit events for the current device
+        // Hooked into socket setup after initSocket() is called (see initSocket addition below)
     </script>
 </body>
 </html>

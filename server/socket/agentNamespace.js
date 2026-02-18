@@ -243,6 +243,14 @@ function setup(io, app) {
         if (response.action && response.action.type === 'remediate') {
           const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service'];
           if (VALID_ACTIONS.includes(response.action.actionId)) {
+            // Audit log: AI remediation requested
+            try {
+              db.prepare('INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))')
+                .run('ai', 'remediation_requested', deviceId, JSON.stringify({ action: response.action.actionId, params: response.action.parameter || null }));
+            } catch (err) {
+              console.error('[Agent] Audit log error:', err.message);
+            }
+
             // Validate parameters for parameterized actions
             const param = response.action.parameter || null;
             if (response.action.actionId === 'kill_process') {

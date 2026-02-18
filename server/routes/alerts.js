@@ -85,8 +85,12 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
 
   router.post('/:id/acknowledge', (req, res) => {
     try {
-      const alert = alertService.acknowledgeAlert(req.params.id, req.body.acknowledgedBy || 'IT Staff');
+      const acknowledgedBy = req.body.acknowledgedBy || 'IT Staff';
+      const alert = alertService.acknowledgeAlert(req.params.id, acknowledgedBy);
       if (!alert) return res.status(404).json({ error: 'Alert not found' });
+      req.app.locals.db.prepare(
+        "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+      ).run('it_staff', 'alert_acknowledged', alert.device_id, JSON.stringify({ acknowledgedBy }));
       res.json(alert);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -97,6 +101,9 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
     try {
       const alert = alertService.resolveAlert(req.params.id);
       if (!alert) return res.status(404).json({ error: 'Alert not found' });
+      req.app.locals.db.prepare(
+        "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+      ).run('it_staff', 'alert_resolved', alert.device_id, JSON.stringify({}));
       res.json(alert);
     } catch (err) {
       res.status(500).json({ error: err.message });

@@ -66,6 +66,10 @@ router.post('/', requireDevice, (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(device_id, title, description, safePriority, category, now, now);
 
+  db.prepare(
+    "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+  ).run('it_staff', 'ticket_created', device_id, JSON.stringify({ title, priority: safePriority, deviceId: device_id }));
+
   res.status(201).json({ id: result.lastInsertRowid, device_id, title });
 });
 
@@ -119,6 +123,10 @@ router.patch('/:id', requireIT, resolveClientScope, (req, res) => {
   const query = `UPDATE tickets SET ${updates.join(', ')} WHERE id = ?`;
   db.prepare(query).run(...params);
 
+  db.prepare(
+    "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+  ).run('it_staff', 'ticket_updated', ticket.device_id, JSON.stringify({ status, assigned_to, priority }));
+
   res.json({ success: true });
 });
 
@@ -143,6 +151,10 @@ router.post('/:id/comments', requireIT, resolveClientScope, (req, res) => {
     INSERT INTO ticket_comments (ticket_id, author, content)
     VALUES (?, ?, ?)
   `).run(req.params.id, author || 'anonymous', content);
+
+  db.prepare(
+    "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+  ).run('it_staff', 'ticket_comment_added', ticket.device_id, JSON.stringify({ author: author || 'anonymous' }));
 
   res.status(201).json({ id: result.lastInsertRowid });
 });

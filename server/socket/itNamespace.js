@@ -200,6 +200,15 @@ function setup(io, app) {
 
       console.log(`[IT] Requesting diagnostic ${checkType} from ${deviceId}`);
 
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'diagnostic_requested', deviceId, JSON.stringify({ checkType }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
       const connectedDevices = app.locals.connectedDevices;
       if (connectedDevices) {
         const deviceSocket = connectedDevices.get(deviceId);

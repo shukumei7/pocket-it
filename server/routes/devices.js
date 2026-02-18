@@ -50,6 +50,49 @@ router.get('/:id/diagnostics', requireIT, resolveClientScope, (req, res) => {
   res.json(diagnostics);
 });
 
+router.get('/:id/activity', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const deviceId = req.params.id;
+
+  if (!isDeviceInScope(db, deviceId, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  const conditions = ['target = ?'];
+  const params = [deviceId];
+
+  if (req.query.action) {
+    const actions = req.query.action.split(',').map(a => a.trim()).filter(Boolean);
+    if (actions.length > 0) {
+      conditions.push(`action IN (${actions.map(() => '?').join(',')})`);
+      params.push(...actions);
+    }
+  }
+
+  if (req.query.from) {
+    conditions.push('created_at >= ?');
+    params.push(req.query.from);
+  }
+
+  if (req.query.to) {
+    conditions.push('created_at <= ?');
+    params.push(req.query.to);
+  }
+
+  const whereClause = conditions.join(' AND ');
+
+  const total = db.prepare(`SELECT COUNT(*) as count FROM audit_log WHERE ${whereClause}`).get(...params).count;
+  const activities = db.prepare(
+    `SELECT id, actor, action, details, created_at FROM audit_log WHERE ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset);
+
+  res.json({ activities, total, page, limit });
+});
+
 router.delete('/:id', requireAdmin, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const deviceId = req.params.id;

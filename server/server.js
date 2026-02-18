@@ -117,6 +117,27 @@ const diagnosticAI = new DiagnosticAI(llmService, db);
 app.locals.diagnosticAI = diagnosticAI;
 app.locals.llmService = llmService;
 
+// Load saved settings from DB and reconfigure LLM service
+try {
+  const savedSettings = db.prepare('SELECT key, value FROM server_settings').all();
+  if (savedSettings.length > 0) {
+    const s = {};
+    for (const row of savedSettings) s[row.key] = row.value;
+    llmService.reconfigure({
+      provider: s['llm.provider'] || llmService.provider,
+      ollamaUrl: s['llm.ollama.url'] || llmService.ollamaUrl,
+      ollamaModel: s['llm.ollama.model'] || llmService.ollamaModel,
+      openaiKey: s['llm.openai.apiKey'] || llmService.openaiKey,
+      openaiModel: s['llm.openai.model'] || llmService.openaiModel,
+      anthropicKey: s['llm.anthropic.apiKey'] || llmService.anthropicKey,
+      anthropicModel: s['llm.anthropic.model'] || llmService.anthropicModel,
+      claudeCliModel: s['llm.claudeCli.model'] || llmService.claudeCliModel
+    });
+  }
+} catch (err) {
+  console.error('[Settings] Failed to load saved settings:', err.message);
+}
+
 const AlertService = require('./services/alertService');
 const NotificationService = require('./services/notificationService');
 

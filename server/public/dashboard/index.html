@@ -663,6 +663,7 @@
         <a href="#" class="nav-link" data-page="alerts">Alerts <span id="nav-alert-badge" style="display:none; background:#ef5350; color:#fff; font-size:10px; padding:2px 6px; border-radius:8px; margin-left:4px;">0</span></a>
         <a href="#" class="nav-link" data-page="reports">Reports</a>
         <a href="#" class="nav-link" data-page="updates">Updates</a>
+        <a href="#" class="nav-link" data-page="settings">Settings</a>
         <a href="#" class="nav-link" data-page="clients" id="nav-clients" style="display:none;">Clients</a>
         <span class="spacer"></span>
         <span class="status-badge" id="server-status">Connected</span>
@@ -1309,6 +1310,87 @@
                 <tbody id="updates-table-body"></tbody>
             </table>
         </div>
+
+        <!-- Settings page -->
+        <div class="page" id="page-settings">
+            <h2 class="section-title">Server Settings</h2>
+
+            <!-- Server Configuration -->
+            <div class="client-form" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 12px; color: #c7d5e0;">Server Configuration</h3>
+                <label>Public URL <span style="font-size:11px;color:#8f98a0;">(how clients reach this server)</span></label>
+                <input type="text" id="setting-server-url" placeholder="e.g. http://10.0.0.5:9100" style="max-width:400px;">
+            </div>
+
+            <!-- AI/LLM Configuration -->
+            <div class="client-form" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 12px; color: #c7d5e0;">AI / LLM Configuration</h3>
+
+                <label>Provider</label>
+                <select id="setting-llm-provider" style="max-width:250px;padding:6px 10px;background:#1b2838;color:#c7d5e0;border:1px solid #2a475e;border-radius:4px;">
+                    <option value="ollama">Ollama (Local)</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="claude-cli">Claude CLI</option>
+                </select>
+
+                <!-- Ollama settings -->
+                <div id="llm-ollama-settings" style="margin-top:12px;">
+                    <label>Ollama URL</label>
+                    <input type="text" id="setting-ollama-url" placeholder="http://localhost:11434" style="max-width:400px;">
+                    <label>Ollama Model</label>
+                    <input type="text" id="setting-ollama-model" placeholder="llama3.2" style="max-width:250px;">
+                </div>
+
+                <!-- OpenAI settings -->
+                <div id="llm-openai-settings" style="margin-top:12px;display:none;">
+                    <label>API Key</label>
+                    <input type="password" id="setting-openai-key" placeholder="sk-..." style="max-width:400px;">
+                    <label>Model</label>
+                    <input type="text" id="setting-openai-model" placeholder="gpt-4o-mini" style="max-width:250px;">
+                </div>
+
+                <!-- Anthropic settings -->
+                <div id="llm-anthropic-settings" style="margin-top:12px;display:none;">
+                    <label>API Key</label>
+                    <input type="password" id="setting-anthropic-key" placeholder="sk-ant-..." style="max-width:400px;">
+                    <label>Model</label>
+                    <input type="text" id="setting-anthropic-model" placeholder="claude-sonnet-4-5-20250929" style="max-width:250px;">
+                </div>
+
+                <!-- Claude CLI settings -->
+                <div id="llm-claude-cli-settings" style="margin-top:12px;display:none;">
+                    <label>Model <span style="font-size:11px;color:#8f98a0;">(leave empty for default)</span></label>
+                    <input type="text" id="setting-claude-cli-model" placeholder="(default)" style="max-width:250px;">
+                </div>
+
+                <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+                    <button class="diag-btn" onclick="testLLMConnection()" id="test-llm-btn" style="background:#1a3a5c;">Test Connection</button>
+                    <span id="test-llm-status" style="font-size:12px;color:#8f98a0;"></span>
+                </div>
+            </div>
+
+            <!-- System Info (read-only) -->
+            <div class="client-form" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 12px; color: #c7d5e0;">System Information</h3>
+                <div style="display:grid;grid-template-columns:150px 1fr;gap:8px;font-size:13px;">
+                    <span style="color:#8f98a0;">Server Port:</span>
+                    <span id="sys-info-port" style="color:#c7d5e0;">-</span>
+                    <span style="color:#8f98a0;">Database Size:</span>
+                    <span id="sys-info-db-size" style="color:#c7d5e0;">-</span>
+                    <span style="color:#8f98a0;">Active Provider:</span>
+                    <span id="sys-info-provider" style="color:#c7d5e0;">-</span>
+                    <span style="color:#8f98a0;">Online Devices:</span>
+                    <span id="sys-info-devices" style="color:#c7d5e0;">-</span>
+                </div>
+            </div>
+
+            <!-- Save button -->
+            <div style="display:flex;align-items:center;gap:12px;">
+                <button class="diag-btn" onclick="saveSettings()" style="padding:10px 24px;font-size:14px;">Save Settings</button>
+                <span id="save-settings-status" style="font-size:12px;color:#8f98a0;"></span>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
@@ -1410,6 +1492,7 @@
             if (page === 'reports') loadReports();
             if (page === 'updates') loadUpdates();
             if (page === 'clients') loadClients();
+            if (page === 'settings') loadSettings();
         }
 
         function navigateTo(page) {
@@ -1456,7 +1539,7 @@
                     return true;
                 }
             }
-            const validPages = ['fleet', 'tickets', 'enrollment', 'alerts', 'reports'];
+            const validPages = ['fleet', 'tickets', 'enrollment', 'alerts', 'reports', 'updates', 'settings'];
             if (validPages.includes(hash)) {
                 showPage(hash);
                 history.replaceState({ page: hash }, '', '#' + hash);
@@ -3889,6 +3972,115 @@
             } catch (err) {
                 alert('Push error: ' + err.message);
             }
+        }
+
+        // ========== SETTINGS ==========
+
+        function loadSettings() {
+            fetchWithAuth(`${API}/api/admin/settings`)
+                .then(res => res.json())
+                .then(settings => {
+                    document.getElementById('setting-server-url').value = settings['server.publicUrl'] || '';
+                    document.getElementById('setting-llm-provider').value = settings['llm.provider'] || 'ollama';
+                    document.getElementById('setting-ollama-url').value = settings['llm.ollama.url'] || '';
+                    document.getElementById('setting-ollama-model').value = settings['llm.ollama.model'] || '';
+                    document.getElementById('setting-openai-key').value = settings['llm.openai.apiKey'] || '';
+                    document.getElementById('setting-openai-model').value = settings['llm.openai.model'] || '';
+                    document.getElementById('setting-anthropic-key').value = settings['llm.anthropic.apiKey'] || '';
+                    document.getElementById('setting-anthropic-model').value = settings['llm.anthropic.model'] || '';
+                    document.getElementById('setting-claude-cli-model').value = settings['llm.claudeCli.model'] || '';
+
+                    toggleLLMProvider();
+                    updateSystemInfo(settings);
+                })
+                .catch(err => console.error('Failed to load settings:', err));
+        }
+
+        function toggleLLMProvider() {
+            const provider = document.getElementById('setting-llm-provider').value;
+            document.getElementById('llm-ollama-settings').style.display = provider === 'ollama' ? 'block' : 'none';
+            document.getElementById('llm-openai-settings').style.display = provider === 'openai' ? 'block' : 'none';
+            document.getElementById('llm-anthropic-settings').style.display = provider === 'anthropic' ? 'block' : 'none';
+            document.getElementById('llm-claude-cli-settings').style.display = provider === 'claude-cli' ? 'block' : 'none';
+        }
+
+        // Wire up provider change
+        document.getElementById('setting-llm-provider')?.addEventListener('change', toggleLLMProvider);
+
+        async function saveSettings() {
+            const statusEl = document.getElementById('save-settings-status');
+            statusEl.textContent = 'Saving...';
+            statusEl.style.color = '#66c0f4';
+
+            const settings = {
+                'server.publicUrl': document.getElementById('setting-server-url').value.trim(),
+                'llm.provider': document.getElementById('setting-llm-provider').value,
+                'llm.ollama.url': document.getElementById('setting-ollama-url').value.trim(),
+                'llm.ollama.model': document.getElementById('setting-ollama-model').value.trim(),
+                'llm.openai.apiKey': document.getElementById('setting-openai-key').value.trim(),
+                'llm.openai.model': document.getElementById('setting-openai-model').value.trim(),
+                'llm.anthropic.apiKey': document.getElementById('setting-anthropic-key').value.trim(),
+                'llm.anthropic.model': document.getElementById('setting-anthropic-model').value.trim(),
+                'llm.claudeCli.model': document.getElementById('setting-claude-cli-model').value.trim()
+            };
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/settings`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                if (res.ok) {
+                    statusEl.textContent = 'Settings saved successfully!';
+                    statusEl.style.color = '#66bb6a';
+                    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+                } else {
+                    const data = await res.json();
+                    statusEl.textContent = data.error || 'Save failed';
+                    statusEl.style.color = '#ef5350';
+                }
+            } catch (err) {
+                statusEl.textContent = 'Save error: ' + err.message;
+                statusEl.style.color = '#ef5350';
+            }
+        }
+
+        async function testLLMConnection() {
+            const btn = document.getElementById('test-llm-btn');
+            const statusEl = document.getElementById('test-llm-status');
+            btn.disabled = true;
+            btn.textContent = 'Testing...';
+            statusEl.textContent = '';
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/settings/test-llm`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    statusEl.textContent = `Connected! Provider: ${data.provider}, Model: ${data.model}`;
+                    statusEl.style.color = '#66bb6a';
+                } else {
+                    statusEl.textContent = `Failed: ${data.error}`;
+                    statusEl.style.color = '#ef5350';
+                }
+            } catch (err) {
+                statusEl.textContent = 'Test error: ' + err.message;
+                statusEl.style.color = '#ef5350';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Test Connection';
+            }
+        }
+
+        function updateSystemInfo(settings) {
+            document.getElementById('sys-info-port').textContent = location.port || '9100';
+            document.getElementById('sys-info-provider').textContent = settings['llm.provider'] || 'ollama';
+            // Fetch online device count from stats
+            fetchWithAuth(`${API}/api/admin/stats`)
+                .then(r => r.json())
+                .then(stats => {
+                    document.getElementById('sys-info-devices').textContent = `${stats.onlineDevices || 0} online / ${stats.totalDevices || 0} total`;
+                })
+                .catch(() => {});
         }
     </script>
 </body>

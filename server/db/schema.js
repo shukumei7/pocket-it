@@ -314,6 +314,15 @@ function initDatabase(dbPath) {
     );
   `);
 
+  // v0.12.0: Server settings (key-value store, overrides env vars)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS server_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // Seed default alert thresholds (only if table is empty)
   const thresholdCount = db.prepare('SELECT COUNT(*) as count FROM alert_thresholds').get().count;
   if (thresholdCount === 0) {

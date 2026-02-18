@@ -185,4 +185,141 @@ router.post('/auto-login', async (req, res) => {
   });
 });
 
+// Get all server settings (admin only)
+router.get('/settings', requireAdmin, (req, res) => {
+  const db = req.app.locals.db;
+  const rows = db.prepare('SELECT key, value, updated_at FROM server_settings').all();
+  const settings = {};
+  for (const row of rows) {
+    settings[row.key] = row.value;
+  }
+
+  // Merge with env defaults (DB overrides env)
+  const defaults = {
+    'server.publicUrl': process.env.POCKET_IT_PUBLIC_URL || '',
+    'llm.provider': process.env.POCKET_IT_LLM_PROVIDER || 'ollama',
+    'llm.ollama.url': process.env.POCKET_IT_OLLAMA_URL || 'http://localhost:11434',
+    'llm.ollama.model': process.env.POCKET_IT_OLLAMA_MODEL || 'llama3.2',
+    'llm.openai.apiKey': process.env.POCKET_IT_OPENAI_API_KEY || '',
+    'llm.openai.model': process.env.POCKET_IT_OPENAI_MODEL || 'gpt-4o-mini',
+    'llm.anthropic.apiKey': process.env.POCKET_IT_ANTHROPIC_API_KEY || '',
+    'llm.anthropic.model': process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
+    'llm.claudeCli.model': process.env.POCKET_IT_CLAUDE_CLI_MODEL || ''
+  };
+
+  // Fill in defaults for keys not in DB
+  for (const [key, defaultVal] of Object.entries(defaults)) {
+    if (!(key in settings)) {
+      settings[key] = defaultVal;
+    }
+  }
+
+  // Mask API keys in response
+  const masked = { ...settings };
+  for (const key of ['llm.openai.apiKey', 'llm.anthropic.apiKey']) {
+    if (masked[key] && masked[key].length > 8) {
+      masked[key] = masked[key].substring(0, 4) + '****' + masked[key].substring(masked[key].length - 4);
+    }
+  }
+
+  res.json(masked);
+});
+
+// Update server settings (admin only)
+router.put('/settings', requireAdmin, (req, res) => {
+  const db = req.app.locals.db;
+  const updates = req.body;
+
+  if (!updates || typeof updates !== 'object') {
+    return res.status(400).json({ error: 'Settings object required' });
+  }
+
+  const allowedKeys = [
+    'server.publicUrl',
+    'llm.provider', 'llm.ollama.url', 'llm.ollama.model',
+    'llm.openai.apiKey', 'llm.openai.model',
+    'llm.anthropic.apiKey', 'llm.anthropic.model',
+    'llm.claudeCli.model'
+  ];
+
+  const upsert = db.prepare(
+    "INSERT INTO server_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+  );
+
+  const updateMany = db.transaction((entries) => {
+    for (const [key, value] of entries) {
+      if (!allowedKeys.includes(key)) continue;
+      // Don't overwrite API keys with masked values
+      if ((key === 'llm.openai.apiKey' || key === 'llm.anthropic.apiKey') && value && value.includes('****')) {
+        continue;
+      }
+      upsert.run(key, value || '');
+    }
+  });
+
+  updateMany(Object.entries(updates));
+
+  // Reconfigure LLM service with new settings
+  const llmService = req.app.locals.llmService;
+  if (llmService) {
+    // Read fresh settings from DB (to get actual API keys, not masked)
+    const rows = db.prepare('SELECT key, value FROM server_settings').all();
+    const fresh = {};
+    for (const row of rows) fresh[row.key] = row.value;
+
+    llmService.reconfigure({
+      provider: fresh['llm.provider'] || process.env.POCKET_IT_LLM_PROVIDER || 'ollama',
+      ollamaUrl: fresh['llm.ollama.url'] || process.env.POCKET_IT_OLLAMA_URL || 'http://localhost:11434',
+      ollamaModel: fresh['llm.ollama.model'] || process.env.POCKET_IT_OLLAMA_MODEL || 'llama3.2',
+      openaiKey: fresh['llm.openai.apiKey'] || process.env.POCKET_IT_OPENAI_API_KEY || '',
+      openaiModel: fresh['llm.openai.model'] || process.env.POCKET_IT_OPENAI_MODEL || 'gpt-4o-mini',
+      anthropicKey: fresh['llm.anthropic.apiKey'] || process.env.POCKET_IT_ANTHROPIC_API_KEY || '',
+      anthropicModel: fresh['llm.anthropic.model'] || process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
+      claudeCliModel: fresh['llm.claudeCli.model'] || process.env.POCKET_IT_CLAUDE_CLI_MODEL || ''
+    });
+  }
+
+  // Audit log
+  try {
+    db.prepare(
+      "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+    ).run(req.user?.username || 'admin', 'settings_updated', 'server', JSON.stringify(Object.keys(updates)));
+  } catch (err) {
+    console.error('[Settings] Audit log error:', err.message);
+  }
+
+  res.json({ success: true });
+});
+
+// Test LLM connection (admin only)
+router.post('/settings/test-llm', requireAdmin, async (req, res) => {
+  const llmService = req.app.locals.llmService;
+  if (!llmService) {
+    return res.status(500).json({ error: 'LLM service not available' });
+  }
+
+  try {
+    const response = await llmService.chat([
+      { role: 'system', content: 'You are a test assistant. Respond with exactly: "LLM connection successful"' },
+      { role: 'user', content: 'Test' }
+    ]);
+
+    res.json({
+      success: true,
+      provider: llmService.provider,
+      model: llmService.provider === 'ollama' ? llmService.ollamaModel
+        : llmService.provider === 'openai' ? llmService.openaiModel
+        : llmService.provider === 'anthropic' ? llmService.anthropicModel
+        : llmService.claudeCliModel || 'default',
+      response: response.substring(0, 200)
+    });
+  } catch (err) {
+    res.json({
+      success: false,
+      provider: llmService.provider,
+      error: err.message
+    });
+  }
+});
+
 module.exports = router;

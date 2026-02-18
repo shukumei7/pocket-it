@@ -12,6 +12,18 @@ class LLMService {
     this.claudeCliModel = config.claudeCliModel || ''; // empty = use default
   }
 
+  reconfigure(config) {
+    if (config.provider !== undefined) this.provider = config.provider;
+    if (config.ollamaUrl !== undefined) this.ollamaUrl = config.ollamaUrl;
+    if (config.ollamaModel !== undefined) this.ollamaModel = config.ollamaModel;
+    if (config.openaiKey !== undefined) this.openaiKey = config.openaiKey;
+    if (config.openaiModel !== undefined) this.openaiModel = config.openaiModel;
+    if (config.anthropicKey !== undefined) this.anthropicKey = config.anthropicKey;
+    if (config.anthropicModel !== undefined) this.anthropicModel = config.anthropicModel;
+    if (config.claudeCliModel !== undefined) this.claudeCliModel = config.claudeCliModel;
+    console.log(`[LLM] Reconfigured: provider=${this.provider}`);
+  }
+
   async chat(messages) {
     switch (this.provider) {
       case 'openai': return this._openaiChat(messages);

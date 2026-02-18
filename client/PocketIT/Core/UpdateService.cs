@@ -115,7 +115,7 @@ public class UpdateService : IDisposable
             response.EnsureSuccessStatusCode();
 
             using (var stream = await response.Content.ReadAsStreamAsync())
-            using (var fileStream = new FileStream(installerPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var fileStream = new FileStream(installerPath, FileMode.Create, System.IO.FileAccess.Write, FileShare.None))
             {
                 await stream.CopyToAsync(fileStream);
             }

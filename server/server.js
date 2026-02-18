@@ -146,6 +146,8 @@ const clientsRouter = require('./routes/clients');
 app.use('/api/clients', clientsRouter);
 const updatesRouter = require('./routes/updates');
 app.use('/api/updates', updatesRouter);
+const installerRouter = require('./routes/installer');
+app.use('/api/installer', installerRouter);
 
 const createAlertsRouter = require('./routes/alerts');
 app.use('/api/alerts', createAlertsRouter(alertService, notificationService));

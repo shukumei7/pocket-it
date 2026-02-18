@@ -166,6 +166,7 @@ router.delete('/:id/users/:userId', requireAdmin, (req, res) => {
 });
 
 // Per-client installer download (admin only)
+// Serves bootstrapper EXE with embedded config, or falls back to ZIP
 router.get('/:id/installer', requireAdmin, async (req, res) => {
   const db = req.app.locals.db;
   const clientId = parseInt(req.params.id);
@@ -191,7 +192,26 @@ router.get('/:id/installer', requireAdmin, async (req, res) => {
   // Determine server URL
   const serverUrl = process.env.POCKET_IT_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
 
-  // Build ZIP with archiver
+  // Check if bootstrapper EXE exists
+  const setupExePath = path.join(__dirname, '..', '..', 'installer', 'online', 'PocketIT.Setup', 'bin', 'Release', 'net8.0-windows', 'win-x64', 'publish', 'PocketIT.Setup.exe');
+  if (fs.existsSync(setupExePath)) {
+    // Serve bootstrapper EXE with embedded config
+    const exeBytes = fs.readFileSync(setupExePath);
+    const config = JSON.stringify({ ServerUrl: serverUrl, EnrollmentToken: token });
+    const configBytes = Buffer.from(config, 'utf8');
+    const lengthBytes = Buffer.alloc(4);
+    lengthBytes.writeInt32LE(configBytes.length, 0);
+    const magic = Buffer.from('PKIT_CFG', 'ascii');
+
+    const result = Buffer.concat([exeBytes, configBytes, lengthBytes, magic]);
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="PocketIT-${client.slug}-setup.exe"`);
+    res.setHeader('Content-Length', result.length);
+    return res.send(result);
+  }
+
+  // Fallback: serve ZIP package (no bootstrapper built)
   const archiver = require('archiver');
   const archive = archiver('zip', { zlib: { level: 5 } });
 

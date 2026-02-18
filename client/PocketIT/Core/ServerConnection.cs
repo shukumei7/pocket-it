@@ -19,6 +19,7 @@ public class ServerConnection : IDisposable
     private readonly ConcurrentQueue<object> _offlineQueue = new();
     private bool _isConnected;
     public bool IsConnected => _isConnected;
+    public string LastSeenChat { get; set; } = "";
 
     public event Action<string>? OnChatResponse;
     public event Action<string, string, bool>? OnDiagnosticRequest; // checkType, requestId, itInitiated
@@ -75,7 +76,8 @@ public class ServerConnection : IDisposable
                 new("hostname", DeviceIdentity.GetHostname()),
                 new("deviceSecret", _deviceSecret),
                 new("clientVersion", AppVersion.Current),
-                new("exeHash", IntegrityCheck.GetExeHash())
+                new("exeHash", IntegrityCheck.GetExeHash()),
+                new("lastSeenChat", LastSeenChat)
             },
             Reconnection = true,
             ReconnectionAttempts = 50,

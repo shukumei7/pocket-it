@@ -39,6 +39,7 @@ function setup(io, app) {
     const hostname = socket.handshake.query.hostname;
     const clientVersion = socket.handshake.query.clientVersion;
     const exeHash = socket.handshake.query.exeHash;
+    const lastSeenChat = socket.handshake.query.lastSeenChat;
 
     if (!deviceId) {
       console.log('[Agent] Connection rejected: no deviceId');
@@ -107,11 +108,18 @@ function setup(io, app) {
       socket.emit('agent_info', { agentName });
     }
 
-    // Send recent chat history on reconnect
+    // Send recent chat history on reconnect (only unseen messages)
     try {
-      const recentMessages = db.prepare(
-        'SELECT sender, content, created_at FROM chat_messages WHERE device_id = ? ORDER BY created_at DESC LIMIT 20'
-      ).all(deviceId).reverse();
+      let recentMessages;
+      if (lastSeenChat) {
+        recentMessages = db.prepare(
+          'SELECT sender, content, created_at FROM chat_messages WHERE device_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT 20'
+        ).all(deviceId, lastSeenChat).reverse();
+      } else {
+        recentMessages = db.prepare(
+          'SELECT sender, content, created_at FROM chat_messages WHERE device_id = ? ORDER BY created_at DESC LIMIT 20'
+        ).all(deviceId).reverse();
+      }
       if (recentMessages.length > 0) {
         socket.emit('chat_history', { messages: recentMessages });
       }

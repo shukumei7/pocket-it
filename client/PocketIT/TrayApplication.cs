@@ -37,6 +37,7 @@ public class TrayApplication : ApplicationContext
     private UpdateInfo? _pendingUpdate;
     private bool _isEnrolled;
     private bool _wasConnected;
+    private Icon? _remoteActiveIcon;
 
     public TrayApplication()
     {
@@ -149,6 +150,21 @@ public class TrayApplication : ApplicationContext
         return File.Exists(iconPath) ? new Icon(iconPath) : SystemIcons.Application;
     }
 
+    private Icon GetRemoteActiveIcon()
+    {
+        if (_remoteActiveIcon != null) return _remoteActiveIcon;
+        var baseIcon = LoadTrayIcon();
+        using var bmp = baseIcon.ToBitmap();
+        using var g = Graphics.FromImage(bmp);
+        int dotSize = Math.Max(6, bmp.Width / 3);
+        using var brush = new SolidBrush(Color.Lime);
+        using var pen = new Pen(Color.DarkGreen, 1);
+        g.FillEllipse(brush, bmp.Width - dotSize - 1, bmp.Height - dotSize - 1, dotSize, dotSize);
+        g.DrawEllipse(pen, bmp.Width - dotSize - 1, bmp.Height - dotSize - 1, dotSize, dotSize);
+        _remoteActiveIcon = Icon.FromHandle(bmp.GetHicon());
+        return _remoteActiveIcon;
+    }
+
     private bool ValidateConfig()
     {
         var serverUrl = _config["Server:Url"];
@@ -217,6 +233,7 @@ public class TrayApplication : ApplicationContext
             Logger.Info("Device enrolled, connecting to server");
 
             // Connect to server
+            _serverConnection.LastSeenChat = _localDb.GetSetting("last_seen_chat") ?? "";
             await _serverConnection.ConnectAsync();
 
             // Start scheduled diagnostic monitoring
@@ -332,7 +349,31 @@ public class TrayApplication : ApplicationContext
         var wrapped = json.TrimStart().StartsWith("{")
             ? "{\"type\":\"chat_response\"," + json.TrimStart().Substring(1)
             : json;
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(wrapped), null);
+        _uiContext.Post(_ =>
+        {
+            _chatWindow?.SendToWebView(wrapped);
+
+            // Show balloon notification if chat window is not visible or not focused
+            bool windowFocused = _chatWindow != null && !_chatWindow.IsDisposed
+                && _chatWindow.Visible && _chatWindow.ContainsFocus;
+            if (!windowFocused)
+            {
+                string preview = "New message received";
+                try
+                {
+                    using var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("text", out var textProp))
+                    {
+                        var text = textProp.GetString() ?? "";
+                        preview = text.Length > 100 ? text[..100] + "..." : text;
+                    }
+                }
+                catch { }
+                _trayIcon.ShowBalloonTip(5000, "Pocket IT", preview, ToolTipIcon.Info);
+            }
+            // Update last seen timestamp
+            _localDb.SetSetting("last_seen_chat", DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"));
+        }, null);
     }
 
     private void OnServerChatHistory(string json)
@@ -340,7 +381,11 @@ public class TrayApplication : ApplicationContext
         var wrapped = json.TrimStart().StartsWith("{")
             ? "{\"type\":\"chat_history\"," + json.TrimStart().Substring(1)
             : json;
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(wrapped), null);
+        _uiContext.Post(_ =>
+        {
+            _chatWindow?.SendToWebView(wrapped);
+            _localDb.SetSetting("last_seen_chat", DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"));
+        }, null);
     }
 
     private void OnServerConnectionChanged(bool connected)
@@ -365,6 +410,7 @@ public class TrayApplication : ApplicationContext
                     _remoteDesktop.StopSession();
                     _remoteDesktop.Dispose();
                     _remoteDesktop = null;
+                    _trayIcon.Icon = LoadTrayIcon();
                 }
             }
             _wasConnected = connected;
@@ -636,10 +682,12 @@ public class TrayApplication : ApplicationContext
                 _ = _serverConnection.SendDesktopStopped(requestId, "session_ended");
                 _remoteDesktop?.Dispose();
                 _remoteDesktop = null;
+                _uiContext.Post(_ => _trayIcon.Icon = LoadTrayIcon(), null);
             };
 
             _remoteDesktop.StartSession();
             _ = _serverConnection.SendDesktopStarted(requestId);
+            _uiContext.Post(_ => _trayIcon.Icon = GetRemoteActiveIcon(), null);
             return;
         }
 
@@ -663,6 +711,7 @@ public class TrayApplication : ApplicationContext
         _remoteDesktop?.StopSession();
         _remoteDesktop?.Dispose();
         _remoteDesktop = null;
+        _uiContext.Post(_ => _trayIcon.Icon = LoadTrayIcon(), null);
     }
 
     private void OnServerDesktopQualityUpdate(int quality, int fps, float scale)
@@ -946,6 +995,7 @@ public class TrayApplication : ApplicationContext
                             _chatWindow?.SendToWebView(JsonSerializer.Serialize(new { type = "agent_info", agentName = "Pocket IT" }));
                         }, null);
                         // Connect to server now that we have a secret
+                        _serverConnection.LastSeenChat = _localDb.GetSetting("last_seen_chat") ?? "";
                         await _serverConnection.ConnectAsync();
                     }
                     break;
@@ -1016,6 +1066,10 @@ public class TrayApplication : ApplicationContext
             var info = _pendingUpdate;
             _pendingUpdate = null;
             await _updateService.DownloadAndApplyAsync(info);
+        }
+        else
+        {
+            ShowChatWindow();
         }
     }
 

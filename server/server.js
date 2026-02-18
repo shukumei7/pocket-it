@@ -144,6 +144,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/llm', createLLMRouter(llmService));
 const clientsRouter = require('./routes/clients');
 app.use('/api/clients', clientsRouter);
+const updatesRouter = require('./routes/updates');
+app.use('/api/updates', updatesRouter);
 
 const createAlertsRouter = require('./routes/alerts');
 app.use('/api/alerts', createAlertsRouter(alertService, notificationService));

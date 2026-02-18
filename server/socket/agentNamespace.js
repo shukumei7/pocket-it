@@ -37,6 +37,7 @@ function setup(io, app) {
   agentNs.on('connection', (socket) => {
     const deviceId = socket.handshake.query.deviceId;
     const hostname = socket.handshake.query.hostname;
+    const clientVersion = socket.handshake.query.clientVersion;
 
     if (!deviceId) {
       console.log('[Agent] Connection rejected: no deviceId');
@@ -82,8 +83,8 @@ function setup(io, app) {
 
     // Update device status in DB (device already verified above)
     try {
-      db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\'), hostname = COALESCE(?, hostname) WHERE device_id = ?')
-        .run('online', hostname, deviceId);
+      db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\'), hostname = COALESCE(?, hostname), client_version = COALESCE(?, client_version) WHERE device_id = ?')
+        .run('online', hostname, clientVersion || null, deviceId);
     } catch (err) {
       console.error('[Agent] DB error on connect:', err.message);
     }

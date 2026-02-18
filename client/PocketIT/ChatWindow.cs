@@ -16,9 +16,12 @@ public class ChatWindow : Form
     private readonly Queue<string> _pendingMessages = new();
     private bool _webViewReady;
 
+    public string CurrentPage { get; private set; }
+
     public ChatWindow(string initialPage = "chat.html")
     {
         _initialPage = initialPage;
+        CurrentPage = initialPage;
         Text = "Pocket IT";
         Width = 420;
         Height = 600;
@@ -104,6 +107,7 @@ public class ChatWindow : Form
 
     public void NavigateTo(string page)
     {
+        CurrentPage = page;
         _webViewReady = false;
         var uiPath = Path.Combine(AppContext.BaseDirectory, "WebUI", page);
         if (_webView.CoreWebView2 != null && File.Exists(uiPath))

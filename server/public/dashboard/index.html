@@ -662,6 +662,7 @@
         <a href="#" class="nav-link" data-page="enrollment">Enrollment</a>
         <a href="#" class="nav-link" data-page="alerts">Alerts <span id="nav-alert-badge" style="display:none; background:#ef5350; color:#fff; font-size:10px; padding:2px 6px; border-radius:8px; margin-left:4px;">0</span></a>
         <a href="#" class="nav-link" data-page="reports">Reports</a>
+        <a href="#" class="nav-link" data-page="updates">Updates</a>
         <a href="#" class="nav-link" data-page="clients" id="nav-clients" style="display:none;">Clients</a>
         <span class="spacer"></span>
         <span class="status-badge" id="server-status">Connected</span>
@@ -1276,6 +1277,37 @@
   <h2 class="section-title" style="margin-top:24px;">Report History</h2>
   <div id="report-history-list"></div>
         </div>
+
+        <!-- Updates page -->
+        <div class="page" id="page-updates">
+            <h2 class="section-title">Update Management</h2>
+
+            <!-- Upload form -->
+            <div class="client-form" style="margin-bottom: 24px;">
+                <h3 style="margin-bottom: 12px; color: #c7d5e0;">Upload New Update</h3>
+                <label>Version *</label>
+                <input type="text" id="update-version" placeholder="e.g. 0.11.0" style="width:auto; max-width:200px;">
+                <label>Installer (.exe) *</label>
+                <input type="file" id="update-file" accept=".exe" style="margin-top:4px; margin-bottom:12px; color:#c7d5e0;">
+                <label>Release Notes</label>
+                <textarea id="update-notes" rows="3" placeholder="What's new in this version..."></textarea>
+                <div style="display:flex; align-items:center; gap:12px; margin-top:8px;">
+                    <button class="diag-btn" onclick="uploadUpdate()">Upload</button>
+                    <span id="upload-status" style="font-size:12px; color:#8f98a0;"></span>
+                </div>
+            </div>
+
+            <!-- Fleet version distribution -->
+            <h2 class="section-title">Fleet Versions</h2>
+            <div class="stats-row" id="fleet-versions-row" style="margin-bottom: 24px;"></div>
+
+            <!-- Uploaded packages -->
+            <h2 class="section-title">Uploaded Packages</h2>
+            <table class="client-table">
+                <thead><tr><th>Version</th><th>File Size</th><th>SHA-256</th><th>Uploaded</th><th>Actions</th></tr></thead>
+                <tbody id="updates-table-body"></tbody>
+            </table>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
@@ -1375,6 +1407,7 @@
             if (page === 'tickets') loadTickets();
             if (page === 'alerts') loadAlerts();
             if (page === 'reports') loadReports();
+            if (page === 'updates') loadUpdates();
             if (page === 'clients') loadClients();
         }
 
@@ -1674,6 +1707,7 @@
                 <div class="last-seen">Last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Never'}</div>
                 <div class="health-bar"><div class="fill ${healthClass}" style="width: ${hs !== null && hs !== undefined ? hs : 0}%"></div></div>
                 <div style="font-size: 11px; color: #8f98a0; margin-top: 4px;">Health: ${healthLabel}</div>
+                <div style="font-size: 11px; margin-top: 4px; ${d.client_version ? 'color: #8f98a0;' : 'color: #ef5350;'}">${d.client_version ? 'v' + escapeHtml(d.client_version) : 'No version'}</div>
             </div>`;
         }
 
@@ -3564,6 +3598,133 @@
 
         // Real-time: prepend new audit events for the current device
         // Hooked into socket setup after initSocket() is called (see initSocket addition below)
+
+        // ---- Updates Management ----
+        async function loadUpdates() {
+            try {
+                const [pkgRes, fleetRes] = await Promise.all([
+                    fetchWithAuth(`${API}/api/updates`),
+                    fetchWithAuth(`${API}/api/updates/fleet-versions`)
+                ]);
+                const packages = await pkgRes.json();
+                const fleetVersions = await fleetRes.json();
+
+                // Fleet version distribution
+                const row = document.getElementById('fleet-versions-row');
+                row.innerHTML = fleetVersions.map(v => `
+                    <div class="stat-card">
+                        <div class="value" style="font-size: 20px;">${v.count}</div>
+                        <div class="label">${escapeHtml(v.version)}</div>
+                    </div>
+                `).join('') || '<div style="color:#8f98a0; padding:16px;">No version data yet.</div>';
+
+                // Packages table
+                const tbody = document.getElementById('updates-table-body');
+                if (packages.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="color:#8f98a0; text-align:center; padding:24px;">No update packages uploaded yet.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = packages.map(p => `
+                    <tr>
+                        <td><strong>v${escapeHtml(p.version)}</strong>${p.release_notes ? '<br><span style="font-size:11px;color:#8f98a0;">' + escapeHtml(p.release_notes).substring(0, 100) + '</span>' : ''}</td>
+                        <td>${formatFileSize(p.file_size)}</td>
+                        <td style="font-size:11px; font-family:monospace; color:#8f98a0;">${p.sha256.substring(0, 16)}...</td>
+                        <td style="font-size:12px;color:#8f98a0;">${p.uploaded_by || ''}<br>${p.created_at ? new Date(p.created_at).toLocaleString() : ''}</td>
+                        <td>
+                            <button class="diag-btn" onclick="pushUpdateToFleet('${escapeHtml(p.version)}')" style="font-size:11px;padding:4px 8px;">Push to Fleet</button>
+                            <button class="diag-btn" onclick="deleteUpdate('${escapeHtml(p.version)}')" style="font-size:11px;padding:4px 8px;margin-left:4px;background:#5c2020;">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load updates:', err);
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return bytes + ' B';
+        }
+
+        async function uploadUpdate() {
+            const version = document.getElementById('update-version').value.trim();
+            const fileInput = document.getElementById('update-file');
+            const notes = document.getElementById('update-notes').value.trim();
+            const statusEl = document.getElementById('upload-status');
+
+            if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
+                statusEl.textContent = 'Enter a valid version (X.Y.Z)';
+                statusEl.style.color = '#ef5350';
+                return;
+            }
+            if (!fileInput.files.length) {
+                statusEl.textContent = 'Select an installer file';
+                statusEl.style.color = '#ef5350';
+                return;
+            }
+
+            statusEl.textContent = 'Uploading...';
+            statusEl.style.color = '#66c0f4';
+
+            const formData = new FormData();
+            formData.append('version', version);
+            formData.append('installer', fileInput.files[0]);
+            if (notes) formData.append('release_notes', notes);
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/updates/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    statusEl.textContent = `v${version} uploaded successfully (SHA-256: ${data.sha256.substring(0, 16)}...)`;
+                    statusEl.style.color = '#66bb6a';
+                    document.getElementById('update-version').value = '';
+                    document.getElementById('update-notes').value = '';
+                    fileInput.value = '';
+                    loadUpdates();
+                } else {
+                    statusEl.textContent = data.error || 'Upload failed';
+                    statusEl.style.color = '#ef5350';
+                }
+            } catch (err) {
+                statusEl.textContent = 'Upload error: ' + err.message;
+                statusEl.style.color = '#ef5350';
+            }
+        }
+
+        async function deleteUpdate(version) {
+            if (!confirm(`Delete update package v${version}? This cannot be undone.`)) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/updates/${version}`, { method: 'DELETE' });
+                if (res.ok) {
+                    loadUpdates();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Delete failed');
+                }
+            } catch (err) {
+                alert('Delete error: ' + err.message);
+            }
+        }
+
+        async function pushUpdateToFleet(version) {
+            if (!confirm(`Push update v${version} notification to all outdated online devices?`)) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/updates/push/${version}`, { method: 'POST' });
+                if (res.ok) {
+                    const data = await res.json();
+                    alert(`Update notification sent to ${data.notified} device(s).`);
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Push failed');
+                }
+            } catch (err) {
+                alert('Push error: ' + err.message);
+            }
+        }
     </script>
 </body>
 </html>

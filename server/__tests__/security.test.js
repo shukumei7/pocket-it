@@ -44,8 +44,24 @@ function createMocks(options = {}) {
 }
 
 // Helper to create test database
+// Pre-create tables with client_id to work around schema ordering issue
+// (CREATE INDEX references client_id before ALTER TABLE adds it)
 function createTestDb() {
   const dbPath = path.join(__dirname, `test-${Date.now()}.db`);
+  const rawDb = new Database(dbPath);
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS devices (
+      device_id TEXT PRIMARY KEY, hostname TEXT, os_version TEXT,
+      status TEXT DEFAULT 'online', certificate_fingerprint TEXT,
+      device_secret TEXT, enrolled_at TEXT, last_seen TEXT, client_id INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS enrollment_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE NOT NULL,
+      created_by TEXT, expires_at TEXT, used_by_device TEXT,
+      status TEXT DEFAULT 'active', client_id INTEGER
+    );
+  `);
+  rawDb.close();
   const db = initDatabase(dbPath);
   return { db, dbPath };
 }

@@ -33,6 +33,8 @@ public class TrayApplication : ApplicationContext
     private RemoteTerminalService? _remoteTerminal;
     private RemoteDesktopService? _remoteDesktop;
     private readonly SystemToolsEngine _systemTools = new();
+    private UpdateService? _updateService;
+    private UpdateInfo? _pendingUpdate;
     private bool _isEnrolled;
     private bool _wasConnected;
 
@@ -97,12 +99,14 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnDesktopStopRequest += OnServerDesktopStopRequest;
         _serverConnection.OnDesktopQualityUpdate += OnServerDesktopQualityUpdate;
         _serverConnection.OnSystemToolRequest += OnServerSystemToolRequest;
+        _serverConnection.OnUpdateAvailable += OnServerUpdateAvailable;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("Run Diagnostics", null, OnRunDiagnostics);
         contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add("Check for Updates", null, OnCheckForUpdates);
         contextMenu.Items.Add("About", null, OnAbout);
         var startupItem = new ToolStripMenuItem("Start with Windows")
         {
@@ -125,6 +129,7 @@ public class TrayApplication : ApplicationContext
             ContextMenuStrip = contextMenu
         };
         _trayIcon.MouseClick += OnTrayMouseClick;
+        _trayIcon.BalloonTipClicked += OnBalloonTipClicked;
 
         // Auto-register for Windows startup on first run
         if (!StartupManager.IsRegistered())
@@ -215,6 +220,13 @@ public class TrayApplication : ApplicationContext
             // Start scheduled diagnostic monitoring
             _scheduledChecks.Start();
 
+            // Start update service
+            var deviceSecret2 = _localDb.GetSetting("device_secret") ?? "";
+            var serverUrl2 = _config["Server:Url"] ?? "http://localhost:9100";
+            _updateService = new UpdateService(serverUrl2, DeviceIdentity.GetMachineId(), deviceSecret2);
+            _updateService.OnUpdateAvailable += OnUpdateAvailableNotification;
+            _updateService.Start();
+
             // Purge old offline messages
             try
             {
@@ -239,6 +251,12 @@ public class TrayApplication : ApplicationContext
         {
             ShowEnrollmentWindow();
             return;
+        }
+
+        if (_chatWindow != null && !_chatWindow.IsDisposed && _chatWindow.CurrentPage != "chat.html")
+        {
+            _chatWindow.Dispose();
+            _chatWindow = null;
         }
 
         if (_chatWindow == null || _chatWindow.IsDisposed)
@@ -971,9 +989,46 @@ public class TrayApplication : ApplicationContext
         }
     }
 
+    private void OnUpdateAvailableNotification(UpdateInfo info)
+    {
+        _pendingUpdate = info;
+        _uiContext.Post(_ =>
+        {
+            _trayIcon.ShowBalloonTip(10000, "Pocket IT Update Available",
+                $"Version {info.LatestVersion} is available. Click to install.", ToolTipIcon.Info);
+        }, null);
+    }
+
+    private void OnServerUpdateAvailable(string json)
+    {
+        Logger.Info("Server pushed update_available event");
+        _ = _updateService?.CheckForUpdateAsync();
+    }
+
+    private async void OnBalloonTipClicked(object? sender, EventArgs e)
+    {
+        if (_pendingUpdate != null && _updateService != null)
+        {
+            var info = _pendingUpdate;
+            _pendingUpdate = null;
+            await _updateService.DownloadAndApplyAsync(info);
+        }
+    }
+
+    private async void OnCheckForUpdates(object? sender, EventArgs e)
+    {
+        if (_updateService == null)
+        {
+            MessageBox.Show("Update service not initialized. Please wait for connection.", "Check for Updates",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        await _updateService.CheckForUpdateAsync();
+    }
+
     private void OnAbout(object? sender, EventArgs e)
     {
-        MessageBox.Show("Pocket IT v0.9.0\nAI-Powered IT Helpdesk", "About Pocket IT",
+        MessageBox.Show($"Pocket IT v{AppVersion.Current}\nAI-Powered IT Helpdesk", "About Pocket IT",
             MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
@@ -994,6 +1049,7 @@ public class TrayApplication : ApplicationContext
             _remoteDesktop?.Dispose();
             _remoteTerminal?.Dispose();
             _scheduledChecks?.Dispose();
+            _updateService?.Dispose();
             _serverConnection?.Dispose();
             _localDb?.Dispose();
         }

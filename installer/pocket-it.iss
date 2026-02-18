@@ -1,5 +1,5 @@
 #define MyAppName "Pocket IT"
-#define MyAppVersion "0.2.1"
+#define MyAppVersion "0.11.0"
 #define MyAppPublisher "Pocket IT"
 #define MyAppExeName "PocketIT.exe"
 #define MyAppURL "https://github.com/pocket-it"
@@ -56,6 +56,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 ; Launch after install
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; Auto-relaunch after silent update
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall skipifnotsilent
 
 [UninstallDelete]
 ; Clean up local database and logs on uninstall

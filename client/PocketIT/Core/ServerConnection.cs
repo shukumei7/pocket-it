@@ -38,6 +38,7 @@ public class ServerConnection : IDisposable
     public event Action<string>? OnDesktopStopRequest;    // requestId
     public event Action<int, int, float>? OnDesktopQualityUpdate; // quality, fps, scale
     public event Action<string, string, string>? OnSystemToolRequest; // requestId, tool, paramsJson
+    public event Action<string>? OnUpdateAvailable; // json payload
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -72,7 +73,8 @@ public class ServerConnection : IDisposable
             {
                 new("deviceId", _deviceId),
                 new("hostname", DeviceIdentity.GetHostname()),
-                new("deviceSecret", _deviceSecret)
+                new("deviceSecret", _deviceSecret),
+                new("clientVersion", AppVersion.Current)
             },
             Reconnection = true,
             ReconnectionAttempts = 50,
@@ -242,6 +244,12 @@ public class ServerConnection : IDisposable
             var paramsValue = json.TryGetProperty("params", out var pp) ? pp.GetRawText() : null;
             Logger.Info($"System tool request: {tool} (requestId: {requestId})");
             OnSystemToolRequest?.Invoke(requestId, tool, paramsValue ?? "");
+        });
+
+        _socket.On("update_available", response =>
+        {
+            var data = response.GetValue<JsonElement>();
+            OnUpdateAvailable?.Invoke(data.GetRawText());
         });
 
         try

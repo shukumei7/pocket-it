@@ -178,6 +178,27 @@ function initDatabase(dbPath) {
     // Column already exists
   }
 
+  // v0.11.0: Client version tracking
+  try {
+    db.prepare('ALTER TABLE devices ADD COLUMN client_version TEXT').run();
+  } catch (err) {
+    // Column already exists
+  }
+
+  // v0.11.0: Update packages table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS update_packages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      version TEXT UNIQUE NOT NULL,
+      filename TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      sha256 TEXT NOT NULL,
+      release_notes TEXT,
+      uploaded_by TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // v0.4.0: Alert monitoring tables
   db.exec(`
     CREATE TABLE IF NOT EXISTS alert_thresholds (

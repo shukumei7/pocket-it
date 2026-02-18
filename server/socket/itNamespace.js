@@ -1,5 +1,6 @@
 const { verifyToken } = require('../auth/userAuth');
 const jwt = require('jsonwebtoken');
+const { emitToScoped } = require('./scopedEmit');
 
 // Rate limiter for sensitive operations
 const opRateLimits = new Map(); // key: `${socketId}:${eventType}` → { count, resetTime }
@@ -187,6 +188,12 @@ function setup(io, app) {
           });
         }
       }
+
+      // Notify IT dashboard watchers so the sent message appears in Live Chat
+      emitToScoped(itNs, db, deviceId, 'device_chat_update', {
+        deviceId,
+        message: { sender: 'it_tech', content }
+      });
     });
 
     // Request diagnostic from device

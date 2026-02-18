@@ -5,3 +5,4 @@ db/*.db-shm
 db/*.db-wal
 *.log
 .DS_Store
+updates/

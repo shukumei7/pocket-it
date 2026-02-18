@@ -1958,7 +1958,9 @@
             document.getElementById('file-browser-area').innerHTML = '';
             document.getElementById('script-output-area').innerHTML = '';
             // Reset and auto-load system tools
-            document.getElementById('svc-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Loading services...</div>';
+            cachedProcessList = null;
+            cachedServiceList = null;
+            document.getElementById('svc-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Click Refresh to load services</div>';
             document.getElementById('evt-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Select filters and click Query</div>';
             switchSysTab('processes');
             loadProcesses();
@@ -3024,6 +3026,9 @@
 
         // ---- System Tools ----
         let procAutoRefreshTimer = null;
+        let cachedProcessList = null;
+        let procSortCol = 'cpuPercent';
+        let procSortAsc = false;
         let cachedServiceList = null;
 
         function switchSysTab(tab) {
@@ -3031,6 +3036,8 @@
             document.querySelectorAll('.sys-tools-panel').forEach(p => p.classList.remove('active'));
             document.querySelector(`.sys-tools-tab[onclick*="${tab}"]`).classList.add('active');
             document.getElementById('sys-panel-' + tab).classList.add('active');
+            if (tab === 'processes' && !cachedProcessList) loadProcesses();
+            if (tab === 'services' && !cachedServiceList) loadServices();
         }
 
         function loadProcesses() {
@@ -3046,10 +3053,35 @@
                 container.innerHTML = `<div style="color:#ef5350; font-size:13px;">Error: ${escapeHtml(data.error || 'Unknown')}</div>`;
                 return;
             }
-            const procs = data.data.processes || [];
-            document.getElementById('proc-count').textContent = procs.length + ' processes';
+            cachedProcessList = data.data.processes || [];
+            document.getElementById('proc-count').textContent = cachedProcessList.length + ' processes';
+            renderProcessTable();
+        }
+
+        function sortProcesses(col) {
+            if (procSortCol === col) { procSortAsc = !procSortAsc; }
+            else { procSortCol = col; procSortAsc = col === 'name' || col === 'user'; }
+            renderProcessTable();
+        }
+
+        function renderProcessTable() {
+            const procs = [...cachedProcessList];
+            procs.sort((a, b) => {
+                let va = a[procSortCol] ?? '', vb = b[procSortCol] ?? '';
+                if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+                if (va < vb) return procSortAsc ? -1 : 1;
+                if (va > vb) return procSortAsc ? 1 : -1;
+                return 0;
+            });
+            const arrow = col => procSortCol === col ? (procSortAsc ? ' ▲' : ' ▼') : '';
+            const container = document.getElementById('proc-table-container');
             let html = `<table class="sys-table"><thead><tr>
-                <th>Name</th><th>PID</th><th>CPU%</th><th>Memory</th><th>User</th><th></th>
+                <th onclick="sortProcesses('name')">Name${arrow('name')}</th>
+                <th onclick="sortProcesses('pid')">PID${arrow('pid')}</th>
+                <th onclick="sortProcesses('cpuPercent')">CPU%${arrow('cpuPercent')}</th>
+                <th onclick="sortProcesses('memoryMB')">Memory${arrow('memoryMB')}</th>
+                <th onclick="sortProcesses('user')">User${arrow('user')}</th>
+                <th></th>
             </tr></thead><tbody>`;
             procs.forEach(p => {
                 const cpuClass = p.cpuPercent > 50 ? 'cpu-high' : p.cpuPercent > 20 ? 'cpu-med' : '';

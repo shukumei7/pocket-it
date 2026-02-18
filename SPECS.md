@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.10.0
+Version: 0.11.0
 
 ## System Architecture
 
@@ -45,17 +45,17 @@ Version: 0.10.0
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  Express REST API                                            │   │
 │  │  /api/enrollment, /api/devices, /api/tickets, /api/chat,    │   │
-│  │  /api/clients                                               │   │
+│  │  /api/clients, /api/updates                                │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  SQLite Database (better-sqlite3)                            │   │
-│  │  17 tables: devices, enrollment_tokens, it_users,            │   │
+│  │  18 tables: devices, enrollment_tokens, it_users,            │   │
 │  │  chat_messages, tickets, ticket_comments,                    │   │
 │  │  diagnostic_results, audit_log, alert_thresholds, alerts,   │   │
 │  │  notification_channels, auto_remediation_policies,           │   │
 │  │  script_library, report_schedules, report_history,           │   │
-│  │  clients, user_client_assignments                            │   │
+│  │  clients, user_client_assignments, update_packages           │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -162,6 +162,45 @@ function getAgentName(deviceId) {
 **Consistency:** The same device always gets the same agent name across sessions and server restarts. This creates a familiar, consistent support experience.
 
 **First message behavior:** The system prompt includes a special instruction on the first message to introduce the agent by name with varied greetings.
+
+## Updates API
+
+The self-update system allows IT admins to upload installer packages and push them to managed devices. Clients poll the server periodically and apply updates silently.
+
+### Endpoints
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| `POST` | `/api/updates/upload` | IT/admin | Upload installer `.exe` (multipart `file` field + optional `version`, `release_notes`) |
+| `GET` | `/api/updates/latest` | any | Latest package version info (`{ version, sha256, file_size, release_notes }`) |
+| `GET` | `/api/updates` | IT/admin | List all packages sorted by version descending |
+| `DELETE` | `/api/updates/:version` | IT/admin | Delete a package and its file from disk |
+| `POST` | `/api/updates/push/:version` | IT/admin | Emit update notification to all connected devices older than `:version` |
+| `GET` | `/api/updates/check?version=X.Y.Z` | device | Returns `{ updateAvailable, version, sha256, downloadUrl }` or `{ updateAvailable: false }` |
+| `GET` | `/api/updates/download/:version` | device | Stream installer file as `application/octet-stream` |
+| `GET` | `/api/updates/fleet-versions` | IT/admin | Returns `{ versions: [{ version, count }] }` across all enrolled devices |
+
+### Self-Update Flow (Client)
+
+```
+1. On connect / every 4 hours:
+   GET /api/updates/check?version=<current>
+         ↓
+   { updateAvailable: true, version: "0.12.0", sha256: "...", downloadUrl: "..." }
+         ↓
+2. Download to %TEMP%\PocketIT-Update\PocketIT-<version>-setup.exe
+         ↓
+3. Compute SHA-256 of downloaded file
+   Compare to sha256 from check response
+   Abort if mismatch
+         ↓
+4. Launch installer:
+   PocketIT-<version>-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS
+```
+
+### Client Version Reporting
+
+The client passes `clientVersion` as a Socket.IO query parameter on connect. The `/agent` namespace handler reads this value and persists it to `devices.client_version`. This column feeds the fleet-versions endpoint.
 
 ## Socket.IO Protocol Specification
 
@@ -561,7 +600,9 @@ CREATE TABLE devices (
   logged_in_users TEXT,                        -- JSON array of logged-in usernames
   network_adapters TEXT,                       -- JSON array of adapter objects
   -- Multi-tenancy (v0.10.0)
-  client_id INTEGER REFERENCES clients(id)     -- Owning client (NULL = Default)
+  client_id INTEGER REFERENCES clients(id),    -- Owning client (NULL = Default)
+  -- Self-update (v0.11.0)
+  client_version TEXT                          -- Last reported client application version
 );
 ```
 
@@ -765,6 +806,35 @@ CREATE INDEX idx_uca_client_id ON user_client_assignments(client_id);
 - Index on `client_id` for per-client user listings
 
 **Admin behavior:** Admin role users bypass this table entirely — admins always see all clients and all devices.
+
+### Table: `update_packages`
+
+Installer packages available for client self-update. Packages are stored on disk in `server/updates/` and tracked in this table.
+
+```sql
+CREATE TABLE update_packages (
+  id INTEGER PRIMARY KEY,
+  version TEXT UNIQUE NOT NULL,                -- Semver string, e.g. "0.11.0"
+  filename TEXT NOT NULL,                      -- Installer filename, e.g. "PocketIT-0.11.0-setup.exe"
+  file_size INTEGER,                           -- File size in bytes
+  sha256 TEXT NOT NULL,                        -- SHA-256 hex digest for integrity verification
+  release_notes TEXT,                          -- Free-form release notes
+  uploaded_by TEXT,                            -- Username of the IT admin who uploaded the package
+  created_at TEXT DEFAULT (datetime('now'))
+);
+```
+
+**Indexes:**
+- Unique index on `version` (only one package per version)
+
+**Update flow:**
+1. IT admin uploads installer via `POST /api/updates/upload` (multipart)
+2. Server computes SHA-256 of uploaded file and stores package metadata
+3. Client sends current version via Socket.IO query param `clientVersion` on connect
+4. Client polls `GET /api/updates/check?version=X.Y.Z` every 4 hours and on each connect
+5. If server returns a newer version, client downloads from `GET /api/updates/download/:version`
+6. Client verifies downloaded file's SHA-256 against the value from the check response
+7. Client launches installer with `/VERYSILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS`
 
 ## Whitelisted Remediation Actions
 
@@ -1041,6 +1111,28 @@ public async Task<DiagnosticResult> RunAsync()
     };
 }
 ```
+
+## Admin Elevation & Auto-Start (v0.11.0)
+
+### Elevation
+
+`client/PocketIT/app.manifest` declares `requestedExecutionLevel="requireAdministrator"`. Windows prompts for UAC consent once at first launch (or installation). All subsequent operations — including diagnostic checks, service management, and process kill — run with full administrator rights without per-action prompts.
+
+### Auto-Start via Task Scheduler
+
+`StartupManager.cs` registers a scheduled task on enrollment/first-run instead of a registry Run key:
+
+```
+schtasks /Create /TN "PocketIT" /TR "<exe_path>" /SC ONLOGON /RL HIGHEST /F
+```
+
+- `/RL HIGHEST` — task runs at highest available privilege; combined with the manifest, this means full administrator rights on login without UAC
+- `/SC ONLOGON` — triggers for the logged-in user on each login
+- `/F` — overwrites existing task silently
+
+**Uninstall:** `pocket-it.iss` [UninstallRun] calls `schtasks /Delete /TN "PocketIT" /F` to clean up.
+
+**Previous behavior (before v0.11.0):** Registry key `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` was used; this did not support elevated execution.
 
 ## Authentication Model
 
@@ -1448,21 +1540,14 @@ System tools follow the `ISystemTool` interface. Each tool receives a `params` d
 
 ## Testing Strategy
 
-### Unit Tests (34 tests)
+### Unit Tests (203 tests across 5 test files)
 
-**Server security tests:**
-- JWT secret requirement on startup
-- Device secret validation (Socket.IO and HTTP)
-- Re-enrollment protection
-- Prompt injection defense
-- XSS prevention (escapeHtml utility)
-- Socket.IO rate limiting (chat messages)
-- CORS configuration
-- Body size limits
-- Account lockout
-- LLM timeouts
-- Server-side action whitelist
-- Ticket status/priority validation
+**Test files:**
+- `security.test.js` (34 tests) — JWT secret requirement, device secret validation, re-enrollment protection, prompt injection defense, XSS prevention, Socket.IO rate limiting, CORS, body size limits, account lockout, LLM timeouts, server-side action whitelist, ticket status/priority validation
+- `updates.test.js` (57 tests) — Upload, check, download, list, delete, push, fleet-versions endpoints; SHA-256 verification; version comparison logic
+- `enrollment.test.js` (27 tests) — Token creation with client_id, enrollment flow, scope assignment, expiry and single-use enforcement
+- `alertService.test.js` (54 tests) — Alert threshold evaluation, consecutive hit tracking, auto-resolve, notification dispatch
+- `clientScope.test.js` (47 tests) — `resolveClientScope` middleware, `scopeSQL` helper, `isDeviceInScope` for all admin/tech/unassigned combinations
 
 **Run tests:**
 ```bash
@@ -1529,10 +1614,26 @@ dotnet publish -c Release -r win-x64 --self-contained
 - ZIP archive with enrollment token included
 
 **Auto-start:**
-- Registry key: `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`
-- Startup folder shortcut
+- Task Scheduler task at `HIGHEST` privilege level via `schtasks /RL HIGHEST /SC ONLOGON` (v0.11.0+); no UAC prompt on login
+- Previous: registry key `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` (replaced in v0.11.0)
+- Startup folder shortcut (manual alternative)
 
 ## Version History
+
+**0.11.0**
+- Self-update system: server hosts installer packages in `server/updates/`; tracked in new `update_packages` table (version, filename, file_size, sha256, release_notes, uploaded_by)
+- Client `UpdateService.cs`: polls `GET /api/updates/check` every 4 hours and on connect; downloads to `%TEMP%\PocketIT-Update\`; verifies SHA-256 before launch; launches installer with `/VERYSILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS`
+- Client `AppVersion.cs`: reads application version from assembly attribute
+- New `client_version TEXT` column on `devices` table; populated from Socket.IO `clientVersion` query param on connect
+- New `server/routes/updates.js`: 8 endpoints — upload (multer multipart), check, download, list, delete, push, fleet-versions, latest
+- Admin elevation: `app.manifest` sets `requestedExecutionLevel="requireAdministrator"`
+- `StartupManager.cs`: replaced registry Run key with Task Scheduler (`schtasks /RL HIGHEST /SC ONLOGON`) for elevated auto-start without UAC prompt
+- `pocket-it.iss`: creates scheduled task in `[Run]`; removes task in `[UninstallRun]`
+- Dashboard: Updates management page (upload form, fleet version stats, package table, push-to-fleet)
+- Dashboard: column sorting on Processes, Services, Event Log tables; event log search input; services auto-load on tab switch
+- Security: `sanitizeDevice()` helper in `devices.js` strips `device_secret` and `certificate_fingerprint` from all device API responses
+- Test suite expanded to 219 total tests: `updates.test.js` (57), `enrollment.test.js` (27), `alertService.test.js` (54), `clientScope.test.js` (47); fixed pre-existing schema ordering bug in test helpers
+- DEPS: Added `multer` ^1.4.5
 
 **0.10.0**
 - Client-based multi-tenancy (MSP model): devices organized by client, IT technicians scoped to assigned clients

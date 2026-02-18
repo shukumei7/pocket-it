@@ -256,7 +256,7 @@ PocketIT-0.2.0-setup.exe /SILENT /DIR="C:\PocketIT"
 ### What the Installer Does
 
 - Installs self-contained app to Program Files (no .NET runtime needed)
-- Optional auto-start on Windows login (registry Run key, enabled by default)
+- Auto-start on Windows login via Task Scheduler at `HIGHEST` privilege (no UAC prompt); replaces registry Run key
 - Preserves `appsettings.json` on upgrade (IT config not overwritten)
 - WebView2 runtime check (pre-installed on Win10 21H2+ / Win11)
 - Clean uninstall removes app + local database
@@ -364,6 +364,16 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `DELETE /api/clients/:id/users/:userId` — Unassign technician from client (admin)
 - `GET /api/clients/:id/installer` — Download pre-configured installer ZIP (admin)
 
+### Updates
+- `POST /api/updates/upload` — Upload installer .exe package (IT/admin auth, multipart form)
+- `GET /api/updates/latest` — Latest version info (any auth)
+- `GET /api/updates` — List all update packages (IT/admin auth)
+- `DELETE /api/updates/:version` — Delete update package (IT/admin auth)
+- `POST /api/updates/push/:version` — Push update to all outdated devices (IT/admin auth)
+- `GET /api/updates/check?version=X.Y.Z` — Check if update is available (device auth)
+- `GET /api/updates/download/:version` — Download installer (device auth)
+- `GET /api/updates/fleet-versions` — Version distribution across fleet (IT/admin auth)
+
 ### Reports
 - `GET /api/reports/fleet/health-trend?days=7` — Fleet average health per day
 - `GET /api/reports/device/:id/metrics?check_type=cpu&days=30` — Device metric trend
@@ -435,11 +445,11 @@ All endpoints accept `localhost` without authentication for MVP development.
 
 ## Database Schema
 
-The server uses SQLite with 17 tables:
+The server uses SQLite with 18 tables:
 
 | Table | Purpose |
 |-------|---------|
-| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, enrolled_at, last_seen, client_id, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters) |
+| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, client_version, enrolled_at, last_seen, client_id, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters) |
 | `enrollment_tokens` | One-time enrollment tokens (token, expires_at, status, used_by_device, client_id) |
 | `it_users` | IT staff accounts (username, password_hash, role, last_login) |
 | `chat_messages` | Chat history (device_id, sender, content, message_type, metadata) |
@@ -456,6 +466,7 @@ The server uses SQLite with 17 tables:
 | `report_history` | History of generated reports with export links |
 | `clients` | Client organizations for MSP multi-tenancy (name, slug, contact_name, contact_email, notes) |
 | `user_client_assignments` | Many-to-many mapping of IT technicians to clients |
+| `update_packages` | Self-update installer packages (version, filename, file_size, sha256, release_notes, uploaded_by) |
 
 ## AI Personality System
 
@@ -625,7 +636,8 @@ pocket-it/
 │   │   ├── chat.js               # Chat history
 │   │   ├── llm.js                # LLM config endpoints
 │   │   ├── admin.js              # Admin stats
-│   │   └── clients.js            # Client CRUD, user assignment, installer download
+│   │   ├── clients.js            # Client CRUD, user assignment, installer download
+│   │   └── updates.js            # Self-update: upload, check, download, list, delete, push, fleet-versions
 │   ├── auth/
 │   │   ├── middleware.js         # Auth middleware (localhost bypass)
 │   │   └── clientScope.js        # resolveClientScope middleware, scopeSQL, isDeviceInScope
@@ -638,10 +650,13 @@ pocket-it/
         ├── TrayApplication.cs    # System tray icon and context menu
         ├── ChatWindow.cs         # WebView2 form window
         ├── appsettings.json      # Configuration
+        ├── app.manifest          # requestedExecutionLevel="requireAdministrator"
         ├── Core/
         │   ├── DeviceIdentity.cs # Generate device ID from hardware
         │   ├── ServerConnection.cs # Socket.IO connection manager
-        │   └── LocalDatabase.cs  # SQLite for offline queue
+        │   ├── LocalDatabase.cs  # SQLite for offline queue
+        │   ├── AppVersion.cs     # Read version from assembly attribute
+        │   └── UpdateService.cs  # 4-hour polling, SHA-256 verification, silent installer launch
         ├── Diagnostics/
         │   ├── DiagnosticsEngine.cs  # Coordinate checks
         │   ├── IDiagnosticCheck.cs   # Check interface
@@ -675,7 +690,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.10.0)
+## Current Status (v0.11.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -704,7 +719,7 @@ pocket-it/
 - Device removal with cascade delete (chat messages, diagnostics)
 - Chat history on reconnect (last 20 messages)
 - Full ticket detail view with comments and status/priority editing
-- 50+ tests (34 security unit tests + 16 E2E smoke tests)
+- 219 tests (unit tests covering security, updates, enrollment, alert service, client scope + 16 E2E smoke tests)
 - **Multi-tenancy (MSP model)**: devices organized by client; IT technicians scoped to assigned clients; admins see everything
 - **Client management**: full CRUD for client organizations with contact info, notes, and auto-generated slugs
 - **User-client assignment**: assign/unassign IT technicians to clients; unassigned techs see zero devices
@@ -712,6 +727,10 @@ pocket-it/
 - **Scoped Socket.IO**: `emitToScoped()` restricts real-time device events to in-scope IT dashboard connections
 - **Per-client installer download**: admin can generate a pre-configured installer ZIP per client with pre-seeded enrollment token
 - **Dashboard client selector**: filter entire dashboard by client; fleet page shows grouped device view under client headers when all clients selected
+- **Self-update system**: server hosts installer packages; clients poll every 4 hours and check on connect, verify downloads via SHA-256, and launch installer silently; fleet version distribution visible in dashboard
+- **Admin elevation**: client runs with administrator privileges via `app.manifest`; auto-start uses Task Scheduler at `HIGHEST` privilege instead of registry Run key (no UAC prompt)
+- **Dashboard enhancements**: column sorting on Processes, Services, and Event Log tables; event log search input; services auto-load on tab switch
+- **Security fix**: device API responses no longer leak `device_secret` or `certificate_fingerprint`
 
 ### Setup
 
@@ -766,6 +785,7 @@ dotnet run
 | v0.8.0 | Remote Desktop | Real-time screen view and control, GDI+ frame streaming, mouse/keyboard relay, configurable quality/FPS/scale |
 | v0.9.0 | System Tools & Enhanced Device Info | System Tools Engine (process_list, process_kill, service_list, service_action, event_log_query), 12 new device profile fields, dashboard System Tools tab |
 | v0.10.0 | Multi-Tenancy (MSP Model) | Client organizations, technician-to-client assignment, scope middleware, scoped Socket.IO broadcasts, per-client installer download, dashboard client management |
+| v0.11.0 | Self-Update & Admin Elevation | Server-hosted update packages, client auto-update with SHA-256 verification, admin elevation via manifest, Task Scheduler auto-start, fleet version tracking, dashboard column sorting and event log search |
 
 ### Planned
 | Version | Theme | Key Capabilities |
@@ -803,7 +823,7 @@ curl -X POST http://localhost:9100/api/enrollment/token
 **Run tests:**
 ```bash
 cd server
-npm test                    # Security unit tests (34)
+npm test                    # Unit tests (203 across security, updates, enrollment, alert service, client scope)
 npm run test:e2e           # E2E smoke tests (16)
 ```
 

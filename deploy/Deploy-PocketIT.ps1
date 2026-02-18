@@ -246,23 +246,17 @@ process {
                 } -ArgumentList $InstallPath, $appSettingsJson
                 Write-Host " OK" -ForegroundColor Green
 
-                # Create startup shortcut (all users)
-                Write-Host "  Creating startup shortcut..." -NoNewline
+                # Register elevated auto-start via Task Scheduler
+                Write-Host "  Registering auto-start task..." -NoNewline
                 Invoke-Command -Session $session -ScriptBlock {
                     param($installPath)
+                    $exePath = Join-Path $installPath 'PocketIT.exe'
+                    # Remove old startup shortcut if exists (migration)
                     $startupFolder = [Environment]::GetFolderPath('CommonStartup')
-                    $shortcutPath  = Join-Path $startupFolder 'Pocket IT.lnk'
-                    $exePath       = Join-Path $installPath 'PocketIT.exe'
-
-                    $shell    = New-Object -ComObject WScript.Shell
-                    $shortcut = $shell.CreateShortcut($shortcutPath)
-                    $shortcut.TargetPath       = $exePath
-                    $shortcut.WorkingDirectory = $installPath
-                    $shortcut.Description      = 'Pocket IT - AI IT Support Assistant'
-                    $shortcut.Save()
-
-                    # Release COM
-                    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+                    $oldShortcut = Join-Path $startupFolder 'Pocket IT.lnk'
+                    if (Test-Path $oldShortcut) { Remove-Item $oldShortcut -Force }
+                    # Create scheduled task for elevated auto-start
+                    schtasks /Create /TN "PocketIT" /TR "`"$exePath`"" /SC ONLOGON /RL HIGHEST /F | Out-Null
                 } -ArgumentList $InstallPath
                 Write-Host " OK" -ForegroundColor Green
 
@@ -287,7 +281,7 @@ process {
                         # Start as the logged-in user via scheduled task (one-shot)
                         $action  = New-ScheduledTaskAction -Execute $exePath -WorkingDirectory $installPath
                         $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(5)
-                        Register-ScheduledTask -TaskName 'PocketIT-Launch' -Action $action -Trigger $trigger -RunLevel Limited -Force | Out-Null
+                        Register-ScheduledTask -TaskName 'PocketIT-Launch' -Action $action -Trigger $trigger -RunLevel Highest -Force | Out-Null
                         Start-Sleep -Seconds 6
                         Unregister-ScheduledTask -TaskName 'PocketIT-Launch' -Confirm:$false -ErrorAction SilentlyContinue
                     } -ArgumentList $InstallPath

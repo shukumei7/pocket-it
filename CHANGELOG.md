@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-02-17
+
+### Added
+- **Self-Update System** — Server can host installer packages; clients poll every 4 hours and check on connect, download updates with SHA-256 verification, and launch installer silently (`/VERYSILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS`)
+- **Updates Management Dashboard Page** — Upload form, fleet version distribution stats, package table, and push-to-fleet button
+- **Fleet Version Stats** — `GET /api/updates/fleet-versions` returns version distribution across all enrolled devices
+- **Admin Elevation** — Client now runs as administrator via `app.manifest` `requestedExecutionLevel="requireAdministrator"`
+- **Task Scheduler Auto-Start** — Elevated auto-start on login via `schtasks /RL HIGHEST /SC ONLOGON`, replacing registry Run key; no UAC prompt on startup
+- **Column Sorting** — Processes, Services, and Event Log tables in dashboard support clickable column headers with sort direction indicators (▲/▼)
+- **Event Log Search** — Filter event log entries by Event ID, source, or message text
+- **Services Auto-Load** — Services tab now loads automatically on first switch (was requiring manual Refresh click)
+- `multer` dependency added for multipart file upload handling
+
+### Changed
+- **Client version tracking** — Client sends `clientVersion` via Socket.IO query params on connect; value saved to `devices.client_version` column
+- **Installer uses Task Scheduler** — `pocket-it.iss` creates a scheduled task at `HIGHEST` privilege level instead of a registry Run key; uninstall removes the task
+
+### Fixed
+- **Device credential leakage** — `GET /api/devices` and `GET /api/devices/:id` no longer include `device_secret` or `certificate_fingerprint` in API responses; a `sanitizeDevice()` helper strips these fields before returning data
+
+### Technical
+- NEW: `server/routes/updates.js` — 8 endpoints: upload, check, download, list, delete, push, fleet-versions, latest
+- NEW: `client/PocketIT/Core/UpdateService.cs` — 4-hour polling loop, on-connect check, SHA-256 verification, downloads to `%TEMP%\PocketIT-Update\`, launches installer
+- NEW: `client/PocketIT/Core/AppVersion.cs` — Reads application version from assembly attribute
+- NEW: `client/PocketIT/app.manifest` — `requestedExecutionLevel="requireAdministrator"`
+- NEW: `server/updates/` — Directory where update packages are stored on disk
+- EDIT: `server/routes/devices.js` — Added `sanitizeDevice()` helper; applied to all device list and detail responses
+- EDIT: `server/db/schema.js` — Added `client_version TEXT` column to `devices` table; new `update_packages` table
+- EDIT: `server/server.js` — Register `/api/updates` routes
+- EDIT: `server/socket/agentNamespace.js` — Read `clientVersion` from Socket.IO query params, persist to `devices.client_version`
+- EDIT: `client/PocketIT/Core/ServerConnection.cs` — Pass `clientVersion` in Socket.IO query params; wire update check events
+- EDIT: `client/PocketIT/TrayApplication.cs` — Instantiate and start `UpdateService`
+- EDIT: `client/PocketIT/Core/StartupManager.cs` — Replace registry Run key with Task Scheduler via `schtasks`
+- EDIT: `installer/pocket-it.iss` — Create scheduled task in `[Run]` section, remove task in `[UninstallRun]`
+- EDIT: `client/PocketIT/PocketIT.csproj` — Reference `app.manifest`
+- EDIT: `server/public/dashboard/index.html` — Updates management page; column sorting on Processes/Services/Event Log; event log search input; services auto-load on tab switch
+- DEPS: Added `multer` ^1.4.5
+- TEST: 219 total tests (was ~34); new files: `updates.test.js` (57), `enrollment.test.js` (27), `alertService.test.js` (54), `clientScope.test.js` (47)
+
 ## [0.10.0] - 2026-02-17
 
 ### Added
@@ -283,7 +322,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/example/pocket-it/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/example/pocket-it/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/example/pocket-it/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/example/pocket-it/compare/v0.7.0...v0.8.0

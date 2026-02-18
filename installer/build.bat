@@ -41,8 +41,8 @@ if errorlevel 1 (
 
 echo.
 echo === Build complete! ===
-echo Installer: %~dp0output\PocketIT-0.2.1-setup.exe
+echo Installer: %~dp0output\PocketIT-0.11.0-setup.exe
 echo.
-echo Silent install:  PocketIT-0.2.1-setup.exe /SILENT
-echo Very silent:     PocketIT-0.2.1-setup.exe /VERYSILENT /SUPPRESSMSGBOXES
-echo Custom config:   PocketIT-0.2.1-setup.exe /SILENT /DIR="C:\PocketIT"
+echo Silent install:  PocketIT-0.11.0-setup.exe /SILENT
+echo Very silent:     PocketIT-0.11.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES
+echo Custom config:   PocketIT-0.11.0-setup.exe /SILENT /DIR="C:\PocketIT"

@@ -1842,11 +1842,11 @@
             document.getElementById('file-browse-path').value = '';
             document.getElementById('file-browser-area').innerHTML = '';
             document.getElementById('script-output-area').innerHTML = '';
-            // Reset system tools
-            document.getElementById('proc-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Click Refresh to load processes</div>';
-            document.getElementById('svc-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Click Refresh to load services</div>';
+            // Reset and auto-load system tools
+            document.getElementById('svc-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Loading services...</div>';
             document.getElementById('evt-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Select filters and click Query</div>';
             switchSysTab('processes');
+            loadProcesses();
         }
 
         function backToFleet() {

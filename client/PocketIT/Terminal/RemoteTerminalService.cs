@@ -191,6 +191,10 @@ public class RemoteTerminalService : IDisposable
 
         if (text != null)
         {
+            // Collapse consecutive blank lines from PowerShell's extra newline output
+            while (text.Contains("\r\n\r\n"))
+                text = text.Replace("\r\n\r\n", "\r\n");
+
             OnOutput?.Invoke(text);
         }
     }

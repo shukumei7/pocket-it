@@ -34,12 +34,15 @@ public class ServiceListTool : ISystemTool
                 if (filter == "running" && svc.Status != ServiceControllerStatus.Running) continue;
                 if (filter == "stopped" && svc.Status != ServiceControllerStatus.Stopped) continue;
 
+                string startType = "Unknown";
+                try { startType = svc.StartType.ToString(); } catch { }
+
                 result.Add(new
                 {
                     name = svc.ServiceName,
                     displayName = svc.DisplayName,
                     status = status,
-                    startType = svc.StartType.ToString()
+                    startType
                 });
 
                 svc.Dispose();

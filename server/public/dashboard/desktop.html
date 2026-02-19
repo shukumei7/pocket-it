@@ -71,7 +71,7 @@
             overflow: hidden;
         }
         .sidebar {
-            width: 280px;
+            width: 220px;
             background: #1b2838;
             border-right: 1px solid #2a475e;
             overflow-y: auto;
@@ -81,7 +81,7 @@
             flex-direction: column;
         }
         .sidebar.collapsed {
-            margin-left: -280px;
+            margin-left: -220px;
         }
         .sidebar-section {
             border-bottom: 1px solid #2a475e;
@@ -143,29 +143,13 @@
         .sb-btn:active { background: #4a7a99; }
         .sb-btn.active { background: #1a5276; border: 1px solid #66c0f4; }
         .tool-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
-        .tool-grid .sb-btn { text-align: center; padding: 8px 4px; font-size: 11px; }
         .monitor-list { display: flex; flex-direction: column; gap: 4px; }
         .monitor-btn.active { background: #1a5276; border: 1px solid #66c0f4; }
-        .paste-area {
-            width: 100%;
-            min-height: 60px;
-            background: #0f1923;
-            border: 1px solid #2a475e;
-            color: #c7d5e0;
-            border-radius: 4px;
-            padding: 6px 8px;
-            font-size: 12px;
-            font-family: 'Consolas', monospace;
-            resize: vertical;
-            margin-bottom: 6px;
-        }
-        .paste-area:focus { border-color: #66c0f4; outline: none; }
-        .paste-actions { display: flex; gap: 6px; }
-        .paste-actions .sb-btn { flex: 1; text-align: center; }
+        .paste-status { font-size: 11px; margin-top: 4px; color: #8f98a0; }
         .upload-zone {
             border: 2px dashed #2a475e;
             border-radius: 6px;
@@ -289,12 +273,9 @@
                     Actions <span class="arrow">&#9660;</span>
                 </div>
                 <div class="sidebar-section-body">
-                    <button class="sb-btn" onclick="sendCtrlAltDel()" style="margin-bottom:8px;">Send Ctrl+Alt+Del</button>
-                    <textarea class="paste-area" id="paste-text" placeholder="Text to type on remote..."></textarea>
-                    <div class="paste-actions">
-                        <button class="sb-btn" onclick="pasteFromClipboard()">Clipboard</button>
-                        <button class="sb-btn" onclick="sendPasteText()">Send</button>
-                    </div>
+                    <button class="sb-btn" onclick="sendCtrlAltDel()" style="margin-bottom:4px;">Send Ctrl+Alt+Del</button>
+                    <button class="sb-btn" onclick="pasteClipboardAsKeystrokes()">Paste Clipboard as Keystrokes</button>
+                    <div class="paste-status" id="paste-status"></div>
                 </div>
             </div>
             <!-- Tools -->
@@ -441,22 +422,20 @@
             socket.emit('desktop_ctrl_alt_del', { deviceId });
         }
 
-        // Paste text
-        async function pasteFromClipboard() {
+        // Paste clipboard as keystrokes
+        async function pasteClipboardAsKeystrokes() {
+            if (!active || !socket) return;
+            const el = document.getElementById('paste-status');
             try {
                 const text = await navigator.clipboard.readText();
-                document.getElementById('paste-text').value = text;
+                if (!text) { el.textContent = 'Clipboard empty'; return; }
+                socket.emit('desktop_paste_text', { deviceId, text });
+                el.textContent = 'Sent ' + text.length + ' chars';
+                el.style.color = '#66bb6a';
             } catch (e) {
-                document.getElementById('paste-text').placeholder = 'Clipboard access denied';
+                el.textContent = 'Clipboard access denied';
+                el.style.color = '#ef5350';
             }
-        }
-
-        function sendPasteText() {
-            if (!active || !socket) return;
-            const text = document.getElementById('paste-text').value;
-            if (!text) return;
-            socket.emit('desktop_paste_text', { deviceId, text });
-            document.getElementById('paste-text').value = '';
         }
 
         // Tool launcher

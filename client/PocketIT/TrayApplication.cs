@@ -398,9 +398,10 @@ public class TrayApplication : ApplicationContext
         {
             _chatWindow?.SendToWebView(wrapped);
 
-            // Show balloon notification if chat window is not visible or not focused
+            // Show balloon notification if chat window is not visible or not foreground
+            // Note: ContainsFocus doesn't work with WebView2 (focus is inside browser control)
             bool windowFocused = _chatWindow != null && !_chatWindow.IsDisposed
-                && _chatWindow.Visible && _chatWindow.ContainsFocus;
+                && _chatWindow.Visible && Form.ActiveForm == _chatWindow;
             if (!windowFocused)
             {
                 string preview = "New message received";

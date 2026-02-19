@@ -1037,6 +1037,33 @@ function setup(io, app) {
       });
     });
 
+    // v0.10.0: Remote desktop sidebar events from client
+    socket.on('desktop_monitors', (data) => {
+      emitToScoped(itNs, db, deviceId, 'desktop_monitors', {
+        deviceId,
+        monitors: data.monitors
+      });
+    });
+
+    socket.on('desktop_perf_data', (data) => {
+      emitToScoped(itNs, db, deviceId, 'desktop_perf_data', {
+        deviceId,
+        cpu: data.cpu,
+        memoryPercent: data.memoryPercent,
+        diskPercent: data.diskPercent
+      });
+    });
+
+    socket.on('desktop_file_upload_ack', (data) => {
+      emitToScoped(itNs, db, deviceId, 'desktop_file_upload_ack', {
+        deviceId,
+        success: data.success,
+        fileName: data.fileName,
+        path: data.path,
+        error: data.error
+      });
+    });
+
     // v0.9.0: System tool results from client
     socket.on('system_tool_result', (data) => {
       console.log(`[Agent] System tool result from ${deviceId}: ${data.tool} (${data.success ? 'success' : 'failed'})`);

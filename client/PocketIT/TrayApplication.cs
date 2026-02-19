@@ -105,6 +105,12 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnDesktopKeyboardInput += OnServerDesktopKeyboardInput;
         _serverConnection.OnDesktopStopRequest += OnServerDesktopStopRequest;
         _serverConnection.OnDesktopQualityUpdate += OnServerDesktopQualityUpdate;
+        _serverConnection.OnDesktopSwitchMonitor += OnServerDesktopSwitchMonitor;
+        _serverConnection.OnDesktopPasteText += OnServerDesktopPasteText;
+        _serverConnection.OnDesktopCtrlAltDel += OnServerDesktopCtrlAltDel;
+        _serverConnection.OnDesktopLaunchTool += OnServerDesktopLaunchTool;
+        _serverConnection.OnDesktopFileUpload += OnServerDesktopFileUpload;
+        _serverConnection.OnDesktopToggle += OnServerDesktopToggle;
         _serverConnection.OnSystemToolRequest += OnServerSystemToolRequest;
         _serverConnection.OnUpdateAvailable += OnServerUpdateAvailable;
         _serverConnection.OnFileDeleteRequest += OnServerFileDeleteRequest;
@@ -732,6 +738,11 @@ public class TrayApplication : ApplicationContext
                 _ = _serverConnection.SendDesktopFrame(base64, width, height);
             };
 
+            _remoteDesktop.OnPerfData += (cpu, mem, disk) =>
+            {
+                _ = _serverConnection.SendDesktopPerfData(cpu, mem, disk);
+            };
+
             _remoteDesktop.OnSessionEnded += () =>
             {
                 _ = _serverConnection.SendDesktopStopped(requestId, "session_ended");
@@ -742,6 +753,8 @@ public class TrayApplication : ApplicationContext
 
             _remoteDesktop.StartSession();
             _ = _serverConnection.SendDesktopStarted(requestId);
+            // Send initial monitor list
+            _ = _serverConnection.SendDesktopMonitors(_remoteDesktop.GetMonitors());
             _uiContext.Post(_ => { _remoteDesktopActive = true; UpdateTrayIcon(); }, null);
             return;
         }
@@ -772,6 +785,40 @@ public class TrayApplication : ApplicationContext
     private void OnServerDesktopQualityUpdate(int quality, int fps, float scale)
     {
         _remoteDesktop?.UpdateQuality(quality, fps, scale);
+    }
+
+    private void OnServerDesktopSwitchMonitor(int monitorIndex)
+    {
+        if (_remoteDesktop == null) return;
+        _remoteDesktop.SwitchMonitor(monitorIndex);
+        _ = _serverConnection.SendDesktopMonitors(_remoteDesktop.GetMonitors());
+    }
+
+    private void OnServerDesktopPasteText(string text)
+    {
+        _remoteDesktop?.PasteText(text);
+    }
+
+    private void OnServerDesktopCtrlAltDel()
+    {
+        _remoteDesktop?.SendCtrlAltDel();
+    }
+
+    private void OnServerDesktopLaunchTool(string tool)
+    {
+        _remoteDesktop?.LaunchTool(tool);
+    }
+
+    private void OnServerDesktopFileUpload(string fileName, string data, string? targetPath)
+    {
+        if (_remoteDesktop == null) return;
+        var (success, path, error) = _remoteDesktop.ReceiveFileUpload(fileName, data, targetPath);
+        _ = _serverConnection.SendDesktopFileUploadAck(success, fileName, path, error);
+    }
+
+    private void OnServerDesktopToggle(string toggle, bool enabled)
+    {
+        _remoteDesktop?.HandleToggle(toggle, enabled);
     }
 
     private void OnServerSystemToolRequest(string requestId, string tool, string paramsJson)

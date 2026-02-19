@@ -65,6 +65,45 @@
         .toolbar .btn-disconnect:hover {
             background: #6a2222;
         }
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 280px;
+            background: #1b2838;
+            border-right: 1px solid #2a475e;
+            overflow-y: auto;
+            flex-shrink: 0;
+            transition: margin-left 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar.collapsed {
+            margin-left: -280px;
+        }
+        .sidebar-section {
+            border-bottom: 1px solid #2a475e;
+        }
+        .sidebar-section-header {
+            padding: 10px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #66c0f4;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+        }
+        .sidebar-section-header:hover { background: rgba(102,192,244,0.05); }
+        .sidebar-section-header .arrow { transition: transform 0.2s; font-size: 10px; }
+        .sidebar-section-header .arrow.collapsed { transform: rotate(-90deg); }
+        .sidebar-section-body { padding: 8px 12px 12px; }
+        .sidebar-section-body.collapsed { display: none; }
         .viewer {
             flex: 1;
             display: flex;
@@ -89,6 +128,118 @@
             font-size: 16px;
         }
         .viewer .overlay.hidden { display: none; }
+        .sb-btn {
+            background: #2a475e;
+            color: #c7d5e0;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+            text-align: left;
+        }
+        .sb-btn:hover { background: #3d6580; }
+        .sb-btn:active { background: #4a7a99; }
+        .sb-btn.active { background: #1a5276; border: 1px solid #66c0f4; }
+        .tool-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .tool-grid .sb-btn { text-align: center; padding: 8px 4px; font-size: 11px; }
+        .monitor-list { display: flex; flex-direction: column; gap: 4px; }
+        .monitor-btn.active { background: #1a5276; border: 1px solid #66c0f4; }
+        .paste-area {
+            width: 100%;
+            min-height: 60px;
+            background: #0f1923;
+            border: 1px solid #2a475e;
+            color: #c7d5e0;
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-size: 12px;
+            font-family: 'Consolas', monospace;
+            resize: vertical;
+            margin-bottom: 6px;
+        }
+        .paste-area:focus { border-color: #66c0f4; outline: none; }
+        .paste-actions { display: flex; gap: 6px; }
+        .paste-actions .sb-btn { flex: 1; text-align: center; }
+        .upload-zone {
+            border: 2px dashed #2a475e;
+            border-radius: 6px;
+            padding: 16px;
+            text-align: center;
+            color: #8f98a0;
+            font-size: 12px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: #66c0f4;
+            background: rgba(102,192,244,0.05);
+        }
+        .upload-zone input { display: none; }
+        .upload-status { font-size: 11px; margin-top: 6px; color: #8f98a0; }
+        .perf-bar-container { margin-bottom: 8px; }
+        .perf-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #8f98a0;
+            margin-bottom: 3px;
+        }
+        .perf-bar {
+            height: 6px;
+            background: #0f1923;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .perf-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s;
+            background: #66c0f4;
+        }
+        .perf-bar-fill.warn { background: #ffa726; }
+        .perf-bar-fill.crit { background: #ef5350; }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 0;
+        }
+        .toggle-row + .toggle-row { border-top: 1px solid rgba(42,71,94,0.5); }
+        .toggle-label { font-size: 12px; color: #c7d5e0; }
+        .toggle-switch {
+            position: relative;
+            width: 36px;
+            height: 20px;
+            background: #0f1923;
+            border: 1px solid #2a475e;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .toggle-switch.on {
+            background: #1a5276;
+            border-color: #66c0f4;
+        }
+        .toggle-switch .toggle-knob {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            background: #8f98a0;
+            border-radius: 50%;
+            transition: left 0.2s, background 0.2s;
+        }
+        .toggle-switch.on .toggle-knob {
+            left: 18px;
+            background: #66c0f4;
+        }
     </style>
 </head>
 <body>
@@ -116,11 +267,118 @@
             <option value="0.75">75%</option>
             <option value="1.0">100%</option>
         </select>
+        <button onclick="toggleSidebar()" id="btn-sidebar" title="Toggle sidebar">&#9776; Sidebar</button>
         <button class="btn-disconnect" onclick="disconnect()">Disconnect</button>
     </div>
-    <div class="viewer" id="viewer" tabindex="0">
-        <canvas id="canvas"></canvas>
-        <div class="overlay" id="overlay">Connecting to device...</div>
+    <div class="main-content">
+        <div class="sidebar" id="sidebar">
+            <!-- Monitors -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-header" onclick="toggleSection(this)">
+                    Monitors <span class="arrow">&#9660;</span>
+                </div>
+                <div class="sidebar-section-body">
+                    <div class="monitor-list" id="monitor-list">
+                        <div style="color:#8f98a0; font-size:12px;">Waiting for connection...</div>
+                    </div>
+                </div>
+            </div>
+            <!-- Actions -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-header" onclick="toggleSection(this)">
+                    Actions <span class="arrow">&#9660;</span>
+                </div>
+                <div class="sidebar-section-body">
+                    <button class="sb-btn" onclick="sendCtrlAltDel()" style="margin-bottom:8px;">Send Ctrl+Alt+Del</button>
+                    <textarea class="paste-area" id="paste-text" placeholder="Text to type on remote..."></textarea>
+                    <div class="paste-actions">
+                        <button class="sb-btn" onclick="pasteFromClipboard()">Clipboard</button>
+                        <button class="sb-btn" onclick="sendPasteText()">Send</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Tools -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-header" onclick="toggleSection(this)">
+                    System Tools <span class="arrow">&#9660;</span>
+                </div>
+                <div class="sidebar-section-body">
+                    <div class="tool-grid">
+                        <button class="sb-btn" onclick="launchTool('cmd')">&#9632; CMD</button>
+                        <button class="sb-btn" onclick="launchTool('powershell')">&#9654; PowerShell</button>
+                        <button class="sb-btn" onclick="launchTool('control')">&#9881; Control</button>
+                        <button class="sb-btn" onclick="launchTool('eventvwr')">&#9888; Events</button>
+                        <button class="sb-btn" onclick="launchTool('compmgmt')">&#9783; CompMgmt</button>
+                        <button class="sb-btn" onclick="launchTool('regedit')">&#9998; Registry</button>
+                        <button class="sb-btn" onclick="launchTool('services')">&#9874; Services</button>
+                        <button class="sb-btn" onclick="launchTool('taskmgr')">&#9776; TaskMgr</button>
+                    </div>
+                </div>
+            </div>
+            <!-- File Upload -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-header" onclick="toggleSection(this)">
+                    File Upload <span class="arrow">&#9660;</span>
+                </div>
+                <div class="sidebar-section-body">
+                    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('upload-input').click()">
+                        Drop file here or click to browse
+                        <input type="file" id="upload-input" onchange="handleFileSelect(this)">
+                    </div>
+                    <div class="upload-status" id="upload-status"></div>
+                </div>
+            </div>
+            <!-- Performance -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-header" onclick="toggleSection(this)">
+                    Performance <span class="arrow">&#9660;</span>
+                </div>
+                <div class="sidebar-section-body">
+                    <div class="perf-bar-container">
+                        <div class="perf-label"><span>CPU</span><span id="perf-cpu-val">&mdash;</span></div>
+                        <div class="perf-bar"><div class="perf-bar-fill" id="perf-cpu" style="width:0%"></div></div>
+                    </div>
+                    <div class="perf-bar-container">
+                        <div class="perf-label"><span>Memory</span><span id="perf-mem-val">&mdash;</span></div>
+                        <div class="perf-bar"><div class="perf-bar-fill" id="perf-mem" style="width:0%"></div></div>
+                    </div>
+                    <div class="perf-bar-container">
+                        <div class="perf-label"><span>Disk</span><span id="perf-disk-val">&mdash;</span></div>
+                        <div class="perf-bar"><div class="perf-bar-fill" id="perf-disk" style="width:0%"></div></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Toggles -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-header" onclick="toggleSection(this)">
+                    Interaction <span class="arrow">&#9660;</span>
+                </div>
+                <div class="sidebar-section-body">
+                    <div class="toggle-row">
+                        <span class="toggle-label">IT Input</span>
+                        <div class="toggle-switch on" id="toggle-it-input" onclick="handleToggle('it_input', this)">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </div>
+                    <div class="toggle-row">
+                        <span class="toggle-label">Block User Input</span>
+                        <div class="toggle-switch" id="toggle-user-input" onclick="handleToggle('user_input', this)">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </div>
+                    <div class="toggle-row">
+                        <span class="toggle-label">Privacy Screen</span>
+                        <div class="toggle-switch" id="toggle-privacy" onclick="handleToggle('privacy_screen', this)">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="viewer" id="viewer" tabindex="0">
+            <canvas id="canvas"></canvas>
+            <div class="overlay" id="overlay">Connecting to device...</div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js"></script>
@@ -145,6 +403,128 @@
         const img = new Image();
         let socket = null;
         let active = false;
+        let itInputEnabled = true;
+        let currentMonitor = 0;
+
+        // --- Sidebar functions ---
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+        }
+
+        function toggleSection(header) {
+            const body = header.nextElementSibling;
+            const arrow = header.querySelector('.arrow');
+            body.classList.toggle('collapsed');
+            arrow.classList.toggle('collapsed');
+        }
+
+        // Monitor selector
+        function renderMonitors(monitors) {
+            const list = document.getElementById('monitor-list');
+            list.innerHTML = '';
+            monitors.forEach(m => {
+                const btn = document.createElement('button');
+                btn.className = 'sb-btn monitor-btn' + (m.index === currentMonitor ? ' active' : '');
+                btn.textContent = (m.primary ? '\u2605 ' : '') + m.name + ' (' + m.width + 'x' + m.height + ')';
+                btn.onclick = () => {
+                    currentMonitor = m.index;
+                    socket.emit('desktop_switch_monitor', { deviceId, monitorIndex: m.index });
+                };
+                list.appendChild(btn);
+            });
+        }
+
+        // Ctrl+Alt+Del
+        function sendCtrlAltDel() {
+            if (!active || !socket) return;
+            socket.emit('desktop_ctrl_alt_del', { deviceId });
+        }
+
+        // Paste text
+        async function pasteFromClipboard() {
+            try {
+                const text = await navigator.clipboard.readText();
+                document.getElementById('paste-text').value = text;
+            } catch (e) {
+                document.getElementById('paste-text').placeholder = 'Clipboard access denied';
+            }
+        }
+
+        function sendPasteText() {
+            if (!active || !socket) return;
+            const text = document.getElementById('paste-text').value;
+            if (!text) return;
+            socket.emit('desktop_paste_text', { deviceId, text });
+            document.getElementById('paste-text').value = '';
+        }
+
+        // Tool launcher
+        function launchTool(tool) {
+            if (!active || !socket) return;
+            socket.emit('desktop_launch_tool', { deviceId, tool });
+        }
+
+        // File upload
+        const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+
+        function handleFileSelect(input) {
+            if (input.files.length > 0) uploadFile(input.files[0]);
+        }
+
+        function uploadFile(file) {
+            if (!active || !socket) return;
+            if (file.size > MAX_UPLOAD_SIZE) {
+                document.getElementById('upload-status').textContent = 'File too large (max 50MB)';
+                return;
+            }
+            const statusEl = document.getElementById('upload-status');
+            statusEl.textContent = 'Uploading ' + file.name + '...';
+            statusEl.style.color = '#8f98a0';
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64 = reader.result.split(',')[1];
+                socket.emit('desktop_file_upload', { deviceId, fileName: file.name, data: base64 });
+            };
+            reader.onerror = () => { statusEl.textContent = 'Read error'; };
+            reader.readAsDataURL(file);
+        }
+
+        // Drag and drop
+        const uploadZone = document.getElementById('upload-zone');
+        uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+        uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('dragover'); });
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) uploadFile(e.dataTransfer.files[0]);
+        });
+
+        // Performance bars
+        function updatePerfBar(id, value) {
+            const bar = document.getElementById(id);
+            const val = document.getElementById(id + '-val');
+            const pct = Math.round(value);
+            bar.style.width = pct + '%';
+            val.textContent = pct + '%';
+            bar.className = 'perf-bar-fill' + (pct > 90 ? ' crit' : pct > 70 ? ' warn' : '');
+        }
+
+        // Toggles
+        function handleToggle(name, el) {
+            if (!active || !socket) return;
+            const isOn = el.classList.contains('on');
+            const newState = !isOn;
+
+            if (name === 'it_input') {
+                itInputEnabled = newState;
+            }
+
+            el.classList.toggle('on');
+            socket.emit('desktop_toggle', { deviceId, toggle: name, enabled: newState });
+        }
+
+        // --- Socket connection ---
 
         async function init() {
             try {
@@ -223,7 +603,34 @@
                     active = false;
                 }
             });
+
+            // Sidebar socket events
+            socket.on('desktop_monitors', (data) => {
+                if (data.deviceId !== deviceId) return;
+                renderMonitors(data.monitors);
+            });
+
+            socket.on('desktop_perf_data', (data) => {
+                if (data.deviceId !== deviceId) return;
+                updatePerfBar('perf-cpu', data.cpu);
+                updatePerfBar('perf-mem', data.memoryPercent);
+                updatePerfBar('perf-disk', data.diskPercent);
+            });
+
+            socket.on('desktop_file_upload_ack', (data) => {
+                if (data.deviceId !== deviceId) return;
+                const el = document.getElementById('upload-status');
+                if (data.success) {
+                    el.textContent = 'Uploaded to: ' + data.path;
+                    el.style.color = '#66bb6a';
+                } else {
+                    el.textContent = 'Failed: ' + data.error;
+                    el.style.color = '#ef5350';
+                }
+            });
         }
+
+        // --- Input handling ---
 
         function getCanvasCoords(e) {
             const rect = canvas.getBoundingClientRect();
@@ -235,6 +642,7 @@
 
         canvas.addEventListener('mousedown', (e) => {
             if (!active || !socket) return;
+            if (!itInputEnabled) return;
             e.preventDefault();
             viewer.focus();
             const pos = getCanvasCoords(e);
@@ -244,6 +652,7 @@
 
         canvas.addEventListener('mouseup', (e) => {
             if (!active || !socket) return;
+            if (!itInputEnabled) return;
             e.preventDefault();
             const pos = getCanvasCoords(e);
             const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
@@ -253,6 +662,7 @@
         let lastMove = 0;
         canvas.addEventListener('mousemove', (e) => {
             if (!active || !socket) return;
+            if (!itInputEnabled) return;
             const now = Date.now();
             if (now - lastMove < 33) return;
             lastMove = now;
@@ -262,6 +672,7 @@
 
         canvas.addEventListener('wheel', (e) => {
             if (!active || !socket) return;
+            if (!itInputEnabled) return;
             e.preventDefault();
             const pos = getCanvasCoords(e);
             socket.emit('desktop_mouse', { deviceId, x: pos.x, y: pos.y, button: e.deltaY < 0 ? 'up' : 'down', action: 'scroll' });
@@ -271,12 +682,16 @@
 
         viewer.addEventListener('keydown', (e) => {
             if (!active || !socket) return;
+            if (!itInputEnabled) return;
+            if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
             e.preventDefault();
             socket.emit('desktop_keyboard', { deviceId, vkCode: e.keyCode, action: 'down' });
         });
 
         viewer.addEventListener('keyup', (e) => {
             if (!active || !socket) return;
+            if (!itInputEnabled) return;
+            if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
             e.preventDefault();
             socket.emit('desktop_keyboard', { deviceId, vkCode: e.keyCode, action: 'up' });
         });

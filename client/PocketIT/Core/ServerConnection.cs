@@ -38,6 +38,12 @@ public class ServerConnection : IDisposable
     public event Action<ushort, string>? OnDesktopKeyboardInput; // vkCode, action
     public event Action<string>? OnDesktopStopRequest;    // requestId
     public event Action<int, int, float>? OnDesktopQualityUpdate; // quality, fps, scale
+    public event Action<int>? OnDesktopSwitchMonitor;        // monitorIndex
+    public event Action<string>? OnDesktopPasteText;          // text
+    public event Action? OnDesktopCtrlAltDel;
+    public event Action<string>? OnDesktopLaunchTool;         // tool name
+    public event Action<string, string, string?>? OnDesktopFileUpload; // fileName, base64data, targetPath
+    public event Action<string, bool>? OnDesktopToggle;       // toggle name, enabled
     public event Action<string, string, string>? OnSystemToolRequest; // requestId, tool, paramsJson
     public event Action<string>? OnUpdateAvailable; // json payload
     public event Action<string, string[]>? OnFileDeleteRequest; // requestId, paths
@@ -245,6 +251,49 @@ public class ServerConnection : IDisposable
             int fps = json.TryGetProperty("fps", out var fp) ? fp.GetInt32() : 10;
             float scale = json.TryGetProperty("scale", out var sp) ? (float)sp.GetDouble() : 0.5f;
             OnDesktopQualityUpdate?.Invoke(quality, fps, scale);
+        });
+
+        _socket.On("desktop_switch_monitor", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            int monitorIndex = json.GetProperty("monitorIndex").GetInt32();
+            OnDesktopSwitchMonitor?.Invoke(monitorIndex);
+        });
+
+        _socket.On("desktop_paste_text", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            string text = json.GetProperty("text").GetString() ?? "";
+            OnDesktopPasteText?.Invoke(text);
+        });
+
+        _socket.On("desktop_ctrl_alt_del", response =>
+        {
+            OnDesktopCtrlAltDel?.Invoke();
+        });
+
+        _socket.On("desktop_launch_tool", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            string tool = json.GetProperty("tool").GetString() ?? "";
+            OnDesktopLaunchTool?.Invoke(tool);
+        });
+
+        _socket.On("desktop_file_upload", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            string fileName = json.GetProperty("fileName").GetString() ?? "";
+            string data = json.GetProperty("data").GetString() ?? "";
+            string? targetPath = json.TryGetProperty("targetPath", out var tp) ? tp.GetString() : null;
+            OnDesktopFileUpload?.Invoke(fileName, data, targetPath);
+        });
+
+        _socket.On("desktop_toggle", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            string toggle = json.GetProperty("toggle").GetString() ?? "";
+            bool enabled = json.GetProperty("enabled").GetBoolean();
+            OnDesktopToggle?.Invoke(toggle, enabled);
         });
 
         _socket.On("system_tool_request", response =>
@@ -480,6 +529,21 @@ public class ServerConnection : IDisposable
     public async Task SendDesktopDenied(string requestId)
     {
         await EmitAsync("desktop_denied", new { requestId });
+    }
+
+    public async Task SendDesktopMonitors(object monitors)
+    {
+        await EmitAsync("desktop_monitors", new { monitors });
+    }
+
+    public async Task SendDesktopPerfData(float cpu, float memoryPercent, float diskPercent)
+    {
+        await EmitAsync("desktop_perf_data", new { cpu, memoryPercent, diskPercent });
+    }
+
+    public async Task SendDesktopFileUploadAck(bool success, string fileName, string? path, string? error)
+    {
+        await EmitAsync("desktop_file_upload_ack", new { success, fileName, path, error });
     }
 
     public async Task SendSystemToolResult(string requestId, string tool, bool success, object? data, string? error)

@@ -630,6 +630,126 @@ function setup(io, app) {
       }
     });
 
+    // v0.10.0: Remote desktop sidebar actions
+    socket.on('desktop_switch_monitor', (data) => {
+      const { deviceId, monitorIndex } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('desktop_switch_monitor', { monitorIndex });
+        }
+      }
+    });
+
+    socket.on('desktop_paste_text', (data) => {
+      const { deviceId, text } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('desktop_paste_text', { text });
+        }
+      }
+    });
+
+    socket.on('desktop_ctrl_alt_del', (data) => {
+      const { deviceId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('desktop_ctrl_alt_del', {});
+        }
+      }
+    });
+
+    socket.on('desktop_launch_tool', (data) => {
+      const { deviceId, tool } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const allowedTools = ['cmd', 'powershell', 'control', 'eventvwr', 'compmgmt', 'regedit', 'services', 'taskmgr'];
+      if (!allowedTools.includes(tool)) {
+        socket.emit('error_message', { message: `Invalid tool: ${tool}` });
+        return;
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('desktop_launch_tool', { tool });
+        }
+      }
+    });
+
+    socket.on('desktop_file_upload', (data) => {
+      const { deviceId, fileName, data: fileData, targetPath } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      if (fileData.length > 70_000_000) {
+        socket.emit('error_message', { message: 'File too large (max 50MB)' });
+        return;
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('desktop_file_upload', { fileName, data: fileData, targetPath });
+        }
+      }
+    });
+
+    socket.on('desktop_toggle', (data) => {
+      const { deviceId, toggle, enabled } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const allowedToggles = ['it_input', 'user_input', 'privacy_screen'];
+      if (!allowedToggles.includes(toggle)) {
+        socket.emit('error_message', { message: `Invalid toggle: ${toggle}` });
+        return;
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('desktop_toggle', { toggle, enabled });
+        }
+      }
+    });
+
     // v0.9.0: System tools
     socket.on('system_tool_request', (data) => {
       const { deviceId, requestId, tool, params } = data;

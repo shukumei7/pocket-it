@@ -46,6 +46,7 @@ public class ServerConnection : IDisposable
     public event Action<string, string>? OnFileDownloadRequest; // requestId, path
     public event Action<string, string, string, string>? OnFileUploadRequest; // requestId, destinationPath, filename, base64data
     public event Action<string, string, string, string?, int>? OnInstallerRequest; // requestId, filename, fileData(base64), silentArgs, timeoutSeconds
+    public event Action<string, string>? OnScreenshotRequest; // requestId, reason
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -325,6 +326,14 @@ public class ServerConnection : IDisposable
             OnInstallerRequest?.Invoke(requestId, filename, fileData, silentArgs, timeoutSeconds);
         });
 
+        _socket.On("screenshot_request", response =>
+        {
+            var data = response.GetValue<JsonElement>();
+            var requestId = data.TryGetProperty("requestId", out var rid) ? rid.GetString() ?? "" : "";
+            var reason = data.TryGetProperty("reason", out var rProp) ? rProp.GetString() ?? "" : "";
+            OnScreenshotRequest?.Invoke(requestId, reason);
+        });
+
         try
         {
             await _socket.ConnectAsync();
@@ -494,6 +503,19 @@ public class ServerConnection : IDisposable
     public async Task SendInstallerResult(string requestId, bool success, string output = "", string errorOutput = "", int exitCode = -1, long durationMs = 0, bool timedOut = false, string? validationError = null)
     {
         await EmitAsync("installer_result", new { requestId, success, output, errorOutput, exitCode, durationMs, timedOut, validationError });
+    }
+
+    public async Task SendScreenshotResult(string requestId, bool approved, string? imageData = null, int width = 0, int height = 0)
+    {
+        if (_socket == null) return;
+        await _socket.EmitAsync("screenshot_result", new
+        {
+            requestId,
+            approved,
+            imageData,
+            width,
+            height
+        });
     }
 
     private async Task EmitAsync(string eventName, object data)

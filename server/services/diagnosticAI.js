@@ -117,6 +117,108 @@ class DiagnosticAI {
     }
   }
 
+  async processScreenshotResult(deviceId, imageBase64, width, height) {
+    const ctx = this.getOrCreateContext(deviceId, {});
+
+    // Check if provider supports vision
+    const provider = this.llm.provider;
+    const supportsVision = ['anthropic', 'openai'].includes(provider);
+
+    if (supportsVision) {
+      ctx.messages.push({
+        role: 'user',
+        content: '[SCREENSHOT received — analyze what you see on the user\'s screen. Describe any errors, issues, or relevant information visible.]',
+        images: [{ data: imageBase64, mediaType: 'image/jpeg' }]
+      });
+    } else {
+      ctx.messages.push({
+        role: 'user',
+        content: `[SCREENSHOT received (${width}x${height}) but your current provider (${provider}) does not support image analysis. Let the user know you received the screenshot but cannot visually analyze it. Ask them to describe what they see instead.]`
+      });
+    }
+
+    if (ctx.messages.length > this.maxContextMessages) {
+      ctx.messages = ctx.messages.slice(-this.maxContextMessages);
+    }
+
+    const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName);
+    const llmMessages = [
+      { role: 'system', content: systemPrompt },
+      ...ctx.messages
+    ];
+
+    try {
+      const rawResponse = await this.llm.chat(llmMessages);
+      const parsed = parseResponse(rawResponse);
+      ctx.messages.push({ role: 'assistant', content: rawResponse });
+      this._saveMessage(deviceId, 'ai', parsed.text, parsed.action);
+
+      return {
+        text: parsed.text,
+        action: parsed.action,
+        agentName: ctx.agentName
+      };
+    } catch (err) {
+      console.error('DiagnosticAI processScreenshotResult error:', err.message);
+      return {
+        text: 'I received the screenshot but had trouble analyzing it. Could you describe what you see on your screen?',
+        action: null,
+        agentName: ctx.agentName
+      };
+    }
+  }
+
+  async processITGuidanceScreenshotResult(deviceId, imageBase64, width, height) {
+    const ctx = this.getOrCreateITGuidanceContext(deviceId, {});
+
+    // Check if provider supports vision
+    const provider = this.llm.provider;
+    const supportsVision = ['anthropic', 'openai'].includes(provider);
+
+    if (supportsVision) {
+      ctx.messages.push({
+        role: 'user',
+        content: '[SCREENSHOT received — analyze what you see on the user\'s screen. Describe any errors, issues, or relevant information visible.]',
+        images: [{ data: imageBase64, mediaType: 'image/jpeg' }]
+      });
+    } else {
+      ctx.messages.push({
+        role: 'user',
+        content: `[SCREENSHOT received (${width}x${height}) but your current provider (${provider}) does not support image analysis. Let the user know you received the screenshot but cannot visually analyze it. Ask them to describe what they see instead.]`
+      });
+    }
+
+    if (ctx.messages.length > this.maxContextMessages) {
+      ctx.messages = ctx.messages.slice(-this.maxContextMessages);
+    }
+
+    const systemPrompt = getITGuidancePrompt(ctx.deviceInfo, ctx.agentName);
+    const llmMessages = [
+      { role: 'system', content: systemPrompt },
+      ...ctx.messages
+    ];
+
+    try {
+      const rawResponse = await this.llm.chat(llmMessages);
+      const parsed = parseResponse(rawResponse);
+      ctx.messages.push({ role: 'assistant', content: rawResponse });
+      this._saveMessage(deviceId, 'ai', parsed.text, parsed.action, 'it_guidance');
+
+      return {
+        text: parsed.text,
+        action: parsed.action,
+        agentName: ctx.agentName
+      };
+    } catch (err) {
+      console.error('DiagnosticAI processITGuidanceScreenshotResult error:', err.message);
+      return {
+        text: 'I received the screenshot but had trouble analyzing it. Could you describe what you see instead?',
+        action: null,
+        agentName: ctx.agentName
+      };
+    }
+  }
+
   // ---- IT Guidance Methods ----
 
   getOrCreateITGuidanceContext(deviceId, deviceInfo) {

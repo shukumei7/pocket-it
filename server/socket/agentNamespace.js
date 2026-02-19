@@ -106,6 +106,28 @@ function setup(io, app) {
       console.error('[Agent] DB error on connect:', err.message);
     }
 
+    // Auto-push update if client is outdated
+    try {
+      if (clientVersion) {
+        const latest = db.prepare('SELECT version FROM update_packages ORDER BY created_at DESC LIMIT 1').get();
+        if (latest && latest.version !== clientVersion) {
+          const pa = latest.version.split('.').map(Number);
+          const pb = clientVersion.split('.').map(Number);
+          let newer = false;
+          for (let i = 0; i < 3; i++) {
+            if ((pa[i] || 0) > (pb[i] || 0)) { newer = true; break; }
+            if ((pa[i] || 0) < (pb[i] || 0)) break;
+          }
+          if (newer) {
+            console.log(`[Agent] Device ${deviceId} (v${clientVersion}) outdated, pushing update v${latest.version}`);
+            socket.emit('update_available', { version: latest.version });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Agent] Auto-update check error:', err.message);
+    }
+
     // Send the assigned agent name to the client on connect
     const diagnosticAI = app.locals.diagnosticAI;
     if (diagnosticAI) {
@@ -163,6 +185,13 @@ function setup(io, app) {
     socket.on('system_profile', (data) => {
       console.log(`[Agent] System profile from ${deviceId}`);
       try {
+        // Track previous logged-in users
+        const newUsers = JSON.stringify(data.loggedInUsers || []);
+        const currentRow = db.prepare('SELECT logged_in_users FROM devices WHERE device_id = ?').get(deviceId);
+        if (currentRow && currentRow.logged_in_users && currentRow.logged_in_users !== newUsers) {
+          db.prepare('UPDATE devices SET previous_logged_in_users = ? WHERE device_id = ?').run(currentRow.logged_in_users, deviceId);
+        }
+
         db.prepare(`
           UPDATE devices SET
             cpu_model = ?, total_ram_gb = ?, total_disk_gb = ?, processor_count = ?,
@@ -323,6 +352,22 @@ function setup(io, app) {
           } else {
             console.warn(`[Agent] Blocked invalid remediation action: ${response.action.actionId}`);
           }
+        }
+
+        // If action is screenshot, request from client
+        if (response.action && response.action.type === 'screenshot') {
+          const requestId = `ss-${Date.now()}`;
+          try {
+            db.prepare('INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))')
+              .run('ai', 'screenshot_requested', deviceId, JSON.stringify({ requestId }));
+          } catch (err) {
+            console.error('[Agent] Audit log error:', err.message);
+          }
+
+          socket.emit('screenshot_request', {
+            requestId,
+            reason: 'AI needs to see your screen to help diagnose the issue'
+          });
         }
 
         // If action is ticket, create ticket in DB
@@ -688,6 +733,88 @@ function setup(io, app) {
         success: data.success,
         message: data.message
       });
+    });
+
+    // Screenshot result from client
+    socket.on('screenshot_result', async (data) => {
+      const { requestId, approved, imageData, width, height } = data;
+      console.log(`[Agent] Screenshot result from ${deviceId}: ${approved ? 'approved' : 'denied'} ${width || 0}x${height || 0}`);
+
+      try {
+        db.prepare('INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))')
+          .run(deviceId, 'screenshot_completed', deviceId, JSON.stringify({ requestId, approved, width, height }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      // Notify IT dashboard
+      emitToScoped(itNs, db, deviceId, 'device_screenshot_update', {
+        deviceId, approved, width, height,
+        imageData: approved ? imageData : null
+      });
+
+      // Check if this is an IT guidance screenshot
+      if (requestId && requestId.startsWith('itg-ss-')) {
+        if (approved && imageData) {
+          try {
+            const diagnosticAI = app.locals.diagnosticAI;
+            if (diagnosticAI) {
+              const response = await diagnosticAI.processITGuidanceScreenshotResult(deviceId, imageData, width, height);
+              emitToScoped(itNs, db, deviceId, 'it_guidance_response', {
+                deviceId,
+                text: response.text,
+                agentName: response.agentName,
+                action: response.action
+              });
+            }
+          } catch (err) {
+            console.error('[Agent] IT guidance screenshot analysis error:', err.message);
+          }
+        }
+        return; // Don't process as user chat
+      }
+
+      const diagnosticAI = app.locals.diagnosticAI;
+      if (!diagnosticAI) return;
+
+      if (approved && imageData) {
+        try {
+          const response = await diagnosticAI.processScreenshotResult(deviceId, imageData, width, height);
+
+          socket.emit('chat_response', {
+            text: response.text,
+            agentName: response.agentName,
+            action: response.action
+          });
+
+          emitToScoped(itNs, db, deviceId, 'device_chat_update', {
+            deviceId,
+            message: { sender: 'ai', content: response.text, action: response.action }
+          });
+
+          // Handle any follow-up actions from the AI's screenshot analysis
+          if (response.action && response.action.type === 'diagnose') {
+            socket.emit('diagnostic_request', {
+              checkType: response.action.checkType,
+              requestId: Date.now().toString()
+            });
+          }
+        } catch (err) {
+          console.error('[Agent] Screenshot AI analysis error:', err.message);
+        }
+      } else {
+        // User denied — tell AI
+        try {
+          const ctx = diagnosticAI.getOrCreateContext(deviceId, {});
+          ctx.messages.push({ role: 'user', content: '[The user declined the screenshot request.]' });
+        } catch (err) {}
+
+        socket.emit('chat_response', {
+          text: 'No problem! Could you describe what you see on your screen instead? Any error messages, unusual windows, or visual issues you can tell me about?',
+          agentName: diagnosticAI.getAgentNameForDevice(deviceId),
+          action: null
+        });
+      }
     });
 
     // Clear chat context

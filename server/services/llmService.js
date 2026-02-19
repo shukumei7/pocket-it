@@ -36,6 +36,22 @@ class LLMService {
   }
 
   async _openaiChat(messages) {
+    const formatted = messages.map(m => {
+      if (m.images && m.images.length > 0 && m.role !== 'system') {
+        const content = [
+          { type: 'text', text: m.content }
+        ];
+        for (const img of m.images) {
+          content.push({
+            type: 'image_url',
+            image_url: { url: `data:${img.mediaType || 'image/jpeg'};base64,${img.data}` }
+          });
+        }
+        return { role: m.role, content };
+      }
+      return { role: m.role, content: m.content };
+    });
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -47,7 +63,7 @@ class LLMService {
         },
         body: JSON.stringify({
           model: this.openaiModel,
-          messages,
+          messages: formatted,
           temperature: 0.7
         }),
         signal: controller.signal
@@ -66,10 +82,22 @@ class LLMService {
   async _anthropicChat(messages) {
     // Anthropic Messages API uses a separate system param
     const systemMsg = messages.find(m => m.role === 'system');
-    const chatMessages = messages.filter(m => m.role !== 'system').map(m => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: m.content
-    }));
+    const chatMessages = messages.filter(m => m.role !== 'system').map(m => {
+      if (m.images && m.images.length > 0) {
+        // Multimodal: text + images
+        const content = [
+          { type: 'text', text: m.content }
+        ];
+        for (const img of m.images) {
+          content.push({
+            type: 'image',
+            source: { type: 'base64', media_type: img.mediaType || 'image/jpeg', data: img.data }
+          });
+        }
+        return { role: m.role === 'assistant' ? 'assistant' : 'user', content };
+      }
+      return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content };
+    });
 
     const body = {
       model: this.anthropicModel,

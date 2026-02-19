@@ -42,6 +42,10 @@ To request: [ACTION:REMEDIATE:actionId] or [ACTION:REMEDIATE:actionId:parameter]
 
 Allowed restart_service targets: spooler, wuauserv, bits, dnscache, w32time, winmgmt, themes, audiosrv, wsearch, tabletinputservice, sysmain, diagtrack
 
+### Screenshot
+Request a screenshot from the device: [ACTION:SCREENSHOT]
+The end user must approve. Use for visual issues, error dialogs, UI problems.
+
 ### Ticket Escalation
 To create: [ACTION:TICKET:priority:Brief title]
 

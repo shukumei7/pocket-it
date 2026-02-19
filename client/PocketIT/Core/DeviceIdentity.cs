@@ -268,13 +268,22 @@ public static class DeviceIdentity
                     .Where(u => !string.IsNullOrWhiteSpace(u))
                     .Distinct()
                     .ToList();
+                // Fallback: if query user returned nothing, use Environment.UserName
+                if (users.Count == 0 && !string.IsNullOrWhiteSpace(Environment.UserName))
+                {
+                    users.Add(Environment.UserName);
+                }
                 profile["loggedInUsers"] = users;
             }
         }
         catch (Exception ex)
         {
             Logger.Warn($"System profile: Logged in users query failed: {ex.Message}");
-            profile["loggedInUsers"] = new List<string>();
+            // Fallback to Environment.UserName
+            var fallbackUser = Environment.UserName;
+            profile["loggedInUsers"] = !string.IsNullOrWhiteSpace(fallbackUser)
+                ? new List<string> { fallbackUser }
+                : new List<string>();
         }
 
         // Network adapters via PowerShell

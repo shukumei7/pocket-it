@@ -129,6 +129,7 @@ function initDatabase(dbPath) {
     { name: 'last_boot_time', type: 'TEXT' },
     { name: 'uptime_hours', type: 'REAL' },
     { name: 'logged_in_users', type: 'TEXT' },
+    { name: 'previous_logged_in_users', type: 'TEXT' },
     { name: 'network_adapters', type: 'TEXT' }
   ];
   for (const col of v09_columns) {

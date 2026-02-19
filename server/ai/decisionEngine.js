@@ -39,6 +39,13 @@ function parseResponse(responseText) {
     return result;
   }
 
+  const screenshotMatch = result.text.match(/\[ACTION:SCREENSHOT\]/);
+  if (screenshotMatch) {
+    result.action = { type: 'screenshot' };
+    result.text = result.text.replace(screenshotMatch[0], '').trim();
+    return result;
+  }
+
   const ticketMatch = result.text.match(/\[ACTION:TICKET:(\w+):(.+?)\]/);
   if (ticketMatch) {
     result.action = {

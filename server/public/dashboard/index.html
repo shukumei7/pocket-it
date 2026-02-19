@@ -2370,6 +2370,7 @@
                 <div class="health-bar"><div class="fill ${healthClass}" style="width: ${hs !== null && hs !== undefined ? hs : 0}%"></div></div>
                 <div style="font-size: 11px; color: #8f98a0; margin-top: 4px;">Health: ${healthLabel}</div>
                 <div style="font-size: 11px; margin-top: 4px; ${d.client_version ? 'color: #8f98a0;' : 'color: #ef5350;'}">${d.client_version ? 'v' + escapeHtml(d.client_version) : 'No version'}</div>
+                <div style="font-size: 11px; margin-top: 4px; color: #b0bec5;"><span style="color: #546e7a;">&#128100;</span> ${(() => { try { const users = typeof d.logged_in_users === 'string' ? JSON.parse(d.logged_in_users || '[]') : (d.logged_in_users || []); return users.length > 0 ? escapeHtml(users[0]) + (users.length > 1 ? ' +' + (users.length - 1) : '') : '<span style="color:#616161;">No user</span>'; } catch(e) { return '<span style="color:#616161;">No user</span>'; } })()}</div>
             </div>`;
         }
 
@@ -2679,9 +2680,34 @@
                     const uptimeStr = days > 0 ? `${days}d ${hrs}h` : `${hrs}h`;
                     infoHtml.push(`<div class="stat-card"><div class="value">${uptimeStr}</div><div class="label">Uptime</div></div>`);
                 }
+                // Current logged-in users
+                {
+                    let userLabel = '<span style="color:#616161;">No user</span>';
+                    try {
+                        let users = typeof d.logged_in_users === 'string' ? JSON.parse(d.logged_in_users || '[]') : (d.logged_in_users || []);
+                        if (Array.isArray(users) && users.length > 0) {
+                            userLabel = users.map(u => escapeHtml(u)).join(', ');
+                        }
+                    } catch(e) {}
+                    infoHtml.push(`<div class="stat-card"><div class="value" style="font-size:16px;">${userLabel}</div><div class="label">Current User</div></div>`);
+                }
+                // Previous logged-in users
+                {
+                    let prevLabel = '';
+                    try {
+                        let prevUsers = typeof d.previous_logged_in_users === 'string' ? JSON.parse(d.previous_logged_in_users || '[]') : (d.previous_logged_in_users || []);
+                        if (Array.isArray(prevUsers) && prevUsers.length > 0) {
+                            prevLabel = prevUsers.map(u => escapeHtml(u)).join(', ');
+                        }
+                    } catch(e) {}
+                    if (prevLabel) {
+                        infoHtml.push(`<div class="stat-card"><div class="value" style="font-size:14px; color:#8f98a0;">${prevLabel}</div><div class="label">Previous User</div></div>`);
+                    }
+                }
                 document.getElementById('detail-info').innerHTML = infoHtml.join('');
 
                 // Network adapters
+                document.querySelectorAll('.net-adapters').forEach(el => el.remove());
                 if (d.network_adapters) {
                     try {
                         let adapters = typeof d.network_adapters === 'string' ? JSON.parse(d.network_adapters) : d.network_adapters;

@@ -113,6 +113,7 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnFileDownloadRequest += OnServerFileDownloadRequest;
         _serverConnection.OnFileUploadRequest += OnServerFileUploadRequest;
         _serverConnection.OnInstallerRequest += OnServerInstallerRequest;
+        _serverConnection.OnScreenshotRequest += OnServerScreenshotRequest;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -950,6 +951,21 @@ public class TrayApplication : ApplicationContext
         });
     }
 
+    private void OnServerScreenshotRequest(string requestId, string reason)
+    {
+        Logger.Info($"Screenshot requested: {requestId} - {reason}");
+
+        // Send approval request to chat window
+        var msg = JsonSerializer.Serialize(new
+        {
+            type = "screenshot_request",
+            requestId,
+            reason,
+            requiresApproval = true
+        });
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
+    }
+
     private async void OnServerConnectedReady()
     {
         try
@@ -1131,6 +1147,38 @@ public class TrayApplication : ApplicationContext
                     {
                         await _serverConnection.SendScriptResult(requestId, scriptName, false, errorOutput: "Script execution denied by user");
                     });
+                    break;
+                }
+
+                case "approve_screenshot":
+                {
+                    var requestId = root.GetProperty("requestId").GetString() ?? "";
+                    Logger.Info($"Screenshot approved: {requestId}");
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var captureService = new PocketIT.Desktop.ScreenCaptureService();
+                            captureService.Quality = 40;
+                            captureService.Scale = 0.5f;
+                            var (base64, w, h) = captureService.CaptureScreen();
+                            await _serverConnection.SendScreenshotResult(requestId, true, base64, w, h);
+                            Logger.Info($"Screenshot sent: {w}x{h}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error("Screenshot capture failed", ex);
+                            await _serverConnection.SendScreenshotResult(requestId, false);
+                        }
+                    });
+                    break;
+                }
+
+                case "deny_screenshot":
+                {
+                    var requestId = root.GetProperty("requestId").GetString() ?? "";
+                    Logger.Info($"Screenshot denied: {requestId}");
+                    _ = Task.Run(async () => await _serverConnection.SendScreenshotResult(requestId, false));
                     break;
                 }
 

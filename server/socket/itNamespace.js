@@ -1196,6 +1196,20 @@ function setup(io, app) {
           }
         }
 
+        // If action is screenshot, request from device
+        if (response.action && response.action.type === 'screenshot') {
+          const connectedDevices = app.locals.connectedDevices;
+          if (connectedDevices) {
+            const deviceSocket = connectedDevices.get(deviceId);
+            if (deviceSocket) {
+              deviceSocket.emit('screenshot_request', {
+                requestId: `itg-ss-${Date.now()}`,
+                reason: 'IT technician needs to see your screen to diagnose an issue'
+              });
+            }
+          }
+        }
+
         // If action is ticket, create it
         if (response.action && response.action.type === 'ticket') {
           try {

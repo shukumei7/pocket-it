@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.11.0
+Version: 0.12.8
 
 ## System Architecture
 
@@ -126,6 +126,15 @@ Check for action tags:
       │     → Client executes whitelisted action          │
       │     → Client emits remediation_result to server   │
       │     → Server logs to audit_log                    │
+      │                                                    │
+      ├─ [ACTION:SCREENSHOT] ────────────────────────────┤
+      │     → Server emits screenshot_request to client   │
+      │     → Client shows user approval prompt           │
+      │     → User approves                               │
+      │     → Client captures screen (quality=40, 0.5f)  │
+      │     → Client emits screenshot_result to server    │
+      │     → Server passes image to AI (multimodal)      │
+      │     → Ollama/Claude CLI receive text fallback     │
       │                                                    │
       └─ [ACTION:TICKET:priority:title] ─────────────────┤
             → Server creates ticket in DB                 │
@@ -298,6 +307,19 @@ Client sends the result of a system tool execution requested by the server.
 }
 ```
 
+#### `screenshot_result`
+Client sends a captured screenshot after user approval. Added in v0.12.8.
+
+```json
+{
+  "requestId": "req_1707857234999",
+  "imageBase64": "<base64-encoded JPEG>",
+  "mimeType": "image/jpeg"
+}
+```
+
+Capture settings: quality=40 (JPEG compression), scale=0.5 (50% of native resolution). If the user denies the request, no event is emitted.
+
 **Server → Client Events:**
 
 #### `agent_info`
@@ -369,6 +391,27 @@ Request user approval for remediation action.
 {
   "actionId": "flush_dns",
   "requestId": "1707857234456"
+}
+```
+
+#### `screenshot_request`
+Request client to capture a screenshot after presenting user approval prompt. Added in v0.12.8.
+
+```json
+{
+  "requestId": "req_1707857234999"
+}
+```
+
+Client presents a consent dialog before capturing. If approved, responds with `screenshot_result`. If denied, no event is sent.
+
+#### `update_available`
+Notify client that a newer version is available on the server. Sent on connect when the connecting client version is outdated (v0.12.8). Previously only emitted via manual admin push or the 4-hour poll.
+
+```json
+{
+  "version": "0.12.8",
+  "downloadUrl": "/api/updates/download/0.12.8"
 }
 ```
 
@@ -602,7 +645,9 @@ CREATE TABLE devices (
   -- Multi-tenancy (v0.10.0)
   client_id INTEGER REFERENCES clients(id),    -- Owning client (NULL = Default)
   -- Self-update (v0.11.0)
-  client_version TEXT                          -- Last reported client application version
+  client_version TEXT,                         -- Last reported client application version
+  -- User tracking (v0.12.8)
+  previous_logged_in_users TEXT                -- JSON array saved when logged_in_users changes
 );
 ```
 
@@ -639,8 +684,8 @@ CREATE TABLE it_users (
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,                 -- bcrypt hash
   display_name TEXT,
-  role TEXT DEFAULT 'technician'               -- admin | technician | viewer
-    CHECK(role IN ('admin','technician','viewer')),
+  role TEXT DEFAULT 'technician'               -- superadmin | admin | technician | viewer
+    CHECK(role IN ('superadmin','admin','technician','viewer')),
   created_at TEXT,
   last_login TEXT
 );
@@ -1619,6 +1664,17 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut (manual alternative)
 
 ## Version History
+
+**0.12.8**
+- Current/previous user tracking: `previous_logged_in_users TEXT` column added to `devices`; `agentNamespace.js` saves old `logged_in_users` before overwriting; dashboard device cards show current user with 👤 icon; device detail shows "Current User" and "Previous User" stat cards
+- `DeviceIdentity.cs`: `Environment.UserName` fallback when `query user` fails
+- AI Screenshot Diagnostic: `[ACTION:SCREENSHOT]` in decision engine; server emits `screenshot_request` to client; client presents approval flow, captures at quality=40 scale=0.5f, emits `screenshot_result`; server routes image to AI (Anthropic/OpenAI: base64 multimodal; Ollama/Claude CLI: text fallback); `systemPrompt.js` updated with screenshot capability
+- Auto-push updates on connect: `agentNamespace.js` checks `update_packages` on device connect and emits `update_available` if client version is outdated
+- Users Management Page: admin-only dashboard page with full CRUD; `PUT /api/admin/users/:id` (update display_name, role, or password); `DELETE /api/admin/users/:id` (with self-deletion guard and audit log)
+- Admin Dropdown Navigation: Updates, Settings, Wishlist, Clients, and Users pages grouped under Admin dropdown; visible to `admin` and `superadmin` only; `navigateTo` guard prevents non-admin access
+- Superadmin Role: `it_users.role` CHECK constraint updated to include `superadmin`; role hierarchy: `superadmin > admin > technician > viewer`; superadmin has full client access same as admin
+- Network adapters duplication fix: `openDevice()` removes existing `.net-adapters` elements before inserting
+- Form controls normalization: global dashboard CSS for consistent height (36px), padding, font-size, border-radius, focus highlight
 
 **0.11.0**
 - Self-update system: server hosts installer packages in `server/updates/`; tracked in new `update_packages` table (version, filename, file_size, sha256, release_notes, uploaded_by)

@@ -32,9 +32,11 @@ client/PocketIT/
 ├── appsettings.json             # Configuration file
 │
 ├── Core/
-│   ├── DeviceIdentity.cs        # Generate unique device ID
+│   ├── DeviceIdentity.cs        # Generate unique device ID (Environment.UserName fallback v0.12.8)
 │   ├── ServerConnection.cs      # Socket.IO connection manager
-│   └── LocalDatabase.cs         # SQLite for offline queue
+│   ├── LocalDatabase.cs         # SQLite for offline queue
+│   ├── AppVersion.cs            # Read version from assembly attribute
+│   └── UpdateService.cs         # 4-hour polling, on-connect check, SHA-256 verification, silent installer
 │
 ├── Diagnostics/
 │   ├── IDiagnosticCheck.cs      # Interface for diagnostic checks
@@ -448,7 +450,18 @@ For common fixes you can suggest automated actions. Available actions:
 
 ### Auto-Start on Login
 
-**Registry method:**
+**Task Scheduler method (v0.11.0+, recommended):**
+
+The installer (`pocket-it.iss`) and `StartupManager.cs` register a Task Scheduler task at `HIGHEST` privilege level automatically. No UAC prompt appears on login.
+
+```powershell
+# Manual equivalent
+schtasks /Create /TN "PocketIT" /TR "C:\Path\To\PocketIT.exe" /SC ONLOGON /RL HIGHEST /F
+```
+
+This replaces the old registry Run key approach and is required for admin-elevated auto-start.
+
+**Legacy registry method (pre-v0.11.0, not recommended):**
 
 ```powershell
 $exePath = "C:\Path\To\PocketIT.exe"
@@ -501,7 +514,20 @@ This rebuilds and restarts the app on file save.
 - Set breakpoints
 - Run → Start Debugging
 
-### 5. Build Release
+### 5. Bump Client Version (when making client changes)
+
+Client version is stored in `PocketIT.csproj` as `<Version>` and read at runtime by `AppVersion.cs` from the assembly attribute. Always bump the version when making any client-side changes so the self-update system can detect and distribute the new build.
+
+```xml
+<!-- PocketIT.csproj -->
+<PropertyGroup>
+  <Version>0.12.8</Version>
+</PropertyGroup>
+```
+
+After bumping, build and upload the new installer via the dashboard Updates page (`POST /api/updates/upload`) or the admin API. Connected clients will be notified immediately on their next connect.
+
+### 6. Build Release
 
 ```bash
 dotnet build -c Release

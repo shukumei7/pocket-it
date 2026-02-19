@@ -93,6 +93,23 @@
         }
         nav .client-selector:focus { border-color: #66c0f4; outline: none; }
 
+        .nav-dropdown { display: inline-block; position: relative; }
+        .nav-dropdown-menu a.nav-dropdown-item {
+            display: block;
+            padding: 8px 16px;
+            color: #8f98a0;
+            text-decoration: none;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .nav-dropdown-menu a.nav-dropdown-item:hover {
+            background: #2a475e;
+            color: #fff;
+        }
+        .nav-dropdown-menu a.nav-dropdown-item.active {
+            color: #66c0f4;
+        }
+
         /* Client management page */
         .client-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
         .client-table th, .client-table td {
@@ -808,11 +825,17 @@
 
         <a href="#" class="nav-link" data-page="alerts">Alerts <span id="nav-alert-badge" style="display:none; background:#ef5350; color:#fff; font-size:10px; padding:2px 6px; border-radius:8px; margin-left:4px;">0</span></a>
         <a href="#" class="nav-link" data-page="reports">Reports</a>
-        <a href="#" class="nav-link" data-page="updates">Updates</a>
         <a href="#" class="nav-link" data-page="deploy">Deploy</a>
-        <a href="#" class="nav-link" data-page="settings">Settings</a>
-        <a href="#" class="nav-link" data-page="wishlist">Wishlist</a>
-        <a href="#" class="nav-link" data-page="clients" id="nav-clients" style="display:none;">Clients</a>
+        <div id="nav-admin-dropdown" class="nav-dropdown" style="display:none; position:relative;">
+            <a href="#" class="nav-link" id="nav-admin-toggle">Admin &#9662;</a>
+            <div class="nav-dropdown-menu" style="display:none; position:absolute; top:100%; left:0; z-index:100; min-width:160px; background:#1b2838; border:1px solid #2a475e; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.4); padding:4px 0;">
+                <a href="#" class="nav-dropdown-item" data-page="clients">Clients</a>
+                <a href="#" class="nav-dropdown-item" data-page="settings">Settings</a>
+                <a href="#" class="nav-dropdown-item" data-page="updates">Updates</a>
+                <a href="#" class="nav-dropdown-item" data-page="users">Users</a>
+                <a href="#" class="nav-dropdown-item" data-page="wishlist">Wishlist</a>
+            </div>
+        </div>
         <span class="spacer"></span>
         <span class="status-badge" id="server-status">Connected</span>
     </nav>
@@ -1803,6 +1826,48 @@
             </div>
             <div id="llm-test-result" style="display:none; margin-top:8px; padding:8px 12px; border-radius:6px; background:#1a1a2e; font-size:13px;"></div>
         </div>
+
+        <div class="page" id="page-users">
+            <h2 style="margin-bottom:16px;">IT Users</h2>
+            <div style="display:flex; gap:12px; margin-bottom:16px; align-items:flex-end; flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Username *</label>
+                    <input type="text" id="user-new-username" placeholder="Username" style="width:160px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Display Name</label>
+                    <input type="text" id="user-new-displayname" placeholder="Display Name" style="width:180px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Password *</label>
+                    <input type="password" id="user-new-password" placeholder="Password" style="width:160px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Role</label>
+                    <select id="user-new-role">
+                        <option value="viewer">Viewer</option>
+                        <option value="technician" selected>Technician</option>
+                        <option value="admin">Admin</option>
+                        <option value="superadmin">Superadmin</option>
+                    </select>
+                </div>
+                <button class="diag-btn" onclick="createUser()" style="height:36px;">Add User</button>
+            </div>
+            <div id="user-message" style="display:none; padding:8px 12px; border-radius:6px; margin-bottom:12px; font-size:13px;"></div>
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="border-bottom:1px solid #2a475e; text-align:left;">
+                        <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Username</th>
+                        <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Display Name</th>
+                        <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Role</th>
+                        <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Last Login</th>
+                        <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Created</th>
+                        <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="users-table-body"></tbody>
+            </table>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
@@ -1894,10 +1959,24 @@
         // Show a page without pushing history (used by popstate)
         function showPage(page) {
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.querySelectorAll('.nav-dropdown-item').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            const navLink = document.querySelector(`[data-page="${page}"]`);
-            if (navLink) navLink.classList.add('active');
+            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'users'];
+            if (adminPages.includes(page)) {
+                // Highlight the Admin toggle and the specific dropdown item
+                const adminToggle = document.getElementById('nav-admin-toggle');
+                if (adminToggle) adminToggle.classList.add('active');
+                const dropItem = document.querySelector(`.nav-dropdown-item[data-page="${page}"]`);
+                if (dropItem) dropItem.classList.add('active');
+            } else {
+                const navLink = document.querySelector(`.nav-link[data-page="${page}"]`);
+                if (navLink) navLink.classList.add('active');
+            }
             document.getElementById('page-' + page).classList.add('active');
+            // Superadmin-only pages
+            if (adminPages.includes(page) && currentUserRole !== 'superadmin' && currentUserRole !== 'admin') {
+                document.getElementById('page-' + page).innerHTML = '<div style="padding:40px; text-align:center; color:#8f98a0;"><h2>Access Denied</h2><p>This page is restricted to administrators.</p></div>';
+            }
             if (page === 'fleet') loadFleet();
             if (page === 'tickets') loadTickets();
             if (page === 'alerts') loadAlerts();
@@ -1906,20 +1985,53 @@
             if (page === 'clients') loadClients();
             if (page === 'settings') loadSettings();
             if (page === 'wishlist') loadWishes();
+            if (page === 'users') loadUsers();
             if (page === 'deploy') loadDeployPage();
         }
 
         function navigateTo(page) {
+            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'users'];
+            if (adminPages.includes(page) && currentUserRole !== 'superadmin' && currentUserRole !== 'admin') {
+                return; // Block non-admin navigation
+            }
             showPage(page);
             history.pushState({ page }, '', '#' + page);
         }
 
         document.querySelectorAll('.nav-link').forEach(link => {
+            if (link.id === 'nav-admin-toggle') return; // handled separately
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 navigateTo(link.dataset.page);
             });
         });
+
+        // Admin dropdown toggle
+        const adminToggle = document.getElementById('nav-admin-toggle');
+        const adminDropdown = document.getElementById('nav-admin-dropdown');
+        const adminMenu = adminDropdown ? adminDropdown.querySelector('.nav-dropdown-menu') : null;
+
+        if (adminToggle && adminMenu) {
+            adminToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                adminMenu.style.display = adminMenu.style.display === 'none' ? 'block' : 'none';
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', () => {
+                if (adminMenu) adminMenu.style.display = 'none';
+            });
+
+            // Dropdown item clicks
+            adminMenu.querySelectorAll('.nav-dropdown-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    adminMenu.style.display = 'none';
+                    navigateTo(item.dataset.page);
+                });
+            });
+        }
 
         // ---- History navigation (back/forward) ----
         window.addEventListener('popstate', (e) => {
@@ -2386,6 +2498,147 @@
         function updateWish(id, status) {
             if (!socket) return;
             socket.emit('update_feature_wish', { id, status });
+        }
+
+        // ========== USERS MANAGEMENT ==========
+
+        async function loadUsers() {
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/users`);
+                const users = await res.json();
+                const tbody = document.getElementById('users-table-body');
+                if (!users.length) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px; text-align:center; color:#8f98a0;">No users found</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = users.map(u => `
+                    <tr style="border-bottom:1px solid #1b2838;">
+                        <td style="padding:8px 12px; font-weight:600;">${escapeHtml(u.username)}</td>
+                        <td style="padding:8px 12px;">
+                            <input type="text" value="${escapeHtml(u.display_name || '')}"
+                                onchange="updateUser(${u.id}, 'display_name', this.value)"
+                                style="width:150px; background:#1b2838;">
+                        </td>
+                        <td style="padding:8px 12px;">
+                            <select onchange="updateUser(${u.id}, 'role', this.value)" style="background:#1b2838;">
+                                <option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>Viewer</option>
+                                <option value="technician" ${u.role === 'technician' ? 'selected' : ''}>Technician</option>
+                                <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+                                <option value="superadmin" ${u.role === 'superadmin' ? 'selected' : ''}>Superadmin</option>
+                            </select>
+                        </td>
+                        <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
+                        <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.created_at ? new Date(u.created_at).toLocaleString() : '-'}</td>
+                        <td style="padding:8px 12px;">
+                            <button class="diag-btn" onclick="resetUserPassword(${u.id}, '${escapeHtml(u.username)}')" style="font-size:11px; padding:3px 8px; margin-right:4px;">Reset PW</button>
+                            <button class="diag-btn" onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')" style="font-size:11px; padding:3px 8px; background:#ef5350; border-color:#ef5350;">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load users:', err);
+            }
+        }
+
+        async function createUser() {
+            const username = document.getElementById('user-new-username').value.trim();
+            const display_name = document.getElementById('user-new-displayname').value.trim();
+            const password = document.getElementById('user-new-password').value;
+            const role = document.getElementById('user-new-role').value;
+            const msgEl = document.getElementById('user-message');
+
+            if (!username || !password) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = '#ef535033';
+                msgEl.style.color = '#ef5350';
+                msgEl.textContent = 'Username and password are required';
+                return;
+            }
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, display_name: display_name || null, role })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = '#ef535033';
+                    msgEl.style.color = '#ef5350';
+                    msgEl.textContent = data.error || 'Failed to create user';
+                    return;
+                }
+                msgEl.style.display = 'block';
+                msgEl.style.background = '#66bb6a33';
+                msgEl.style.color = '#66bb6a';
+                msgEl.textContent = `User "${username}" created successfully`;
+                document.getElementById('user-new-username').value = '';
+                document.getElementById('user-new-displayname').value = '';
+                document.getElementById('user-new-password').value = '';
+                document.getElementById('user-new-role').value = 'technician';
+                setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+                loadUsers();
+            } catch (err) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = '#ef535033';
+                msgEl.style.color = '#ef5350';
+                msgEl.textContent = 'Network error: ' + err.message;
+            }
+        }
+
+        async function updateUser(userId, field, value) {
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [field]: value })
+                });
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to update user');
+                    loadUsers();
+                }
+            } catch (err) {
+                alert('Network error: ' + err.message);
+            }
+        }
+
+        async function resetUserPassword(userId, username) {
+            const newPassword = prompt(`Enter new password for "${username}":`);
+            if (!newPassword) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: newPassword })
+                });
+                if (res.ok) {
+                    alert(`Password for "${username}" has been reset.`);
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to reset password');
+                }
+            } catch (err) {
+                alert('Network error: ' + err.message);
+            }
+        }
+
+        async function deleteUser(userId, username) {
+            if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/users/${userId}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    loadUsers();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to delete user');
+                }
+            } catch (err) {
+                alert('Network error: ' + err.message);
+            }
         }
 
         // ---- Fleet ----
@@ -4505,9 +4758,9 @@
                 sel.querySelector('option[value=""]').style.display = 'none';
             }
 
-            // Show Clients nav and admin-only elements
-            if (currentUserRole === 'admin') {
-                document.getElementById('nav-clients').style.display = '';
+            // Show Admin dropdown (Updates, Settings, Wishlist, Clients)
+            if (currentUserRole === 'admin' || currentUserRole === 'superadmin') {
+                document.getElementById('nav-admin-dropdown').style.display = '';
             }
 
 

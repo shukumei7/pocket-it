@@ -352,6 +352,10 @@ All endpoints accept `localhost` without authentication for MVP development.
 
 ### Admin
 - `GET /api/admin/stats` — System statistics including average health and critical devices; scope-aware (admin auth)
+- `GET /api/admin/users` — List all IT staff users (admin auth)
+- `POST /api/admin/users` — Create IT staff user (admin auth)
+- `PUT /api/admin/users/:id` — Update user display_name, role, or password (admin auth)
+- `DELETE /api/admin/users/:id` — Delete user with self-deletion guard (admin auth)
 
 ### Clients
 - `GET /api/clients` — List clients (admin: all, tech: assigned only)
@@ -396,6 +400,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `diagnostic_result` — Diagnostic check results: `{ checkType, status, results }`
 - `remediation_result` — Remediation action result: `{ actionId, success, message }`
 - `system_tool_result` — System tool execution result: `{ requestId, tool, success, data, error }`
+- `screenshot_result` — Screenshot captured after user approval: `{ requestId, imageBase64, mimeType }`
 - `heartbeat` — Keep-alive ping
 - `desktop_started` — Confirms desktop session is active
 - `desktop_frame` — Encoded screen frame: `{ frame: base64 JPEG }`
@@ -408,6 +413,8 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `chat_response` — AI response: `{ text, sender, agentName, action }`
 - `diagnostic_request` — Request diagnostic check: `{ checkType, requestId }`
 - `remediation_request` — Request remediation approval: `{ actionId, requestId }`
+- `screenshot_request` — Request a screenshot with user approval: `{ requestId }`
+- `update_available` — Server notifies client an update is available: `{ version, downloadUrl }`
 - `start_desktop` — Start desktop capture session: `{ quality, fps, scale }`
 - `desktop_mouse` — Mouse input event: `{ type, x, y, button, delta }`
 - `desktop_keyboard` — Keyboard input event: `{ type, keyCode }`
@@ -449,9 +456,9 @@ The server uses SQLite with 18 tables:
 
 | Table | Purpose |
 |-------|---------|
-| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, client_version, enrolled_at, last_seen, client_id, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters) |
+| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, client_version, enrolled_at, last_seen, client_id, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters, previous_logged_in_users) |
 | `enrollment_tokens` | One-time enrollment tokens (token, expires_at, status, used_by_device, client_id) |
-| `it_users` | IT staff accounts (username, password_hash, role, last_login) |
+| `it_users` | IT staff accounts (username, password_hash, role CHECK superadmin/admin/technician/viewer, display_name, last_login) |
 | `chat_messages` | Chat history (device_id, sender, content, message_type, metadata) |
 | `tickets` | Support tickets (device_id, title, status, priority, assigned_to, ai_summary) |
 | `ticket_comments` | Ticket comments (ticket_id, author, content) |
@@ -690,7 +697,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.11.0)
+## Current Status (v0.12.8)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -731,6 +738,13 @@ pocket-it/
 - **Admin elevation**: client runs with administrator privileges via `app.manifest`; auto-start uses Task Scheduler at `HIGHEST` privilege instead of registry Run key (no UAC prompt)
 - **Dashboard enhancements**: column sorting on Processes, Services, and Event Log tables; event log search input; services auto-load on tab switch
 - **Security fix**: device API responses no longer leak `device_secret` or `certificate_fingerprint`
+- **Current/Previous User Tracking**: device cards show current logged-in user; device detail page shows "Current User" and "Previous User" stat cards; `previous_logged_in_users` column saved when user changes
+- **AI Screenshot Diagnostic**: AI can request a screenshot from the client for visual diagnosis; user approval required; multimodal support for Anthropic and OpenAI; text fallback for Ollama and Claude CLI
+- **Users Management Page**: admin-only page with full CRUD for IT staff users (create, inline edit, reset password, delete) accessible from the Admin dropdown
+- **Admin Dropdown Navigation**: Updates, Settings, Wishlist, Clients, and Users pages grouped under an Admin dropdown, visible only to `admin` and `superadmin` roles
+- **Superadmin Role**: new top-level role (`superadmin > admin > technician > viewer`) with full client access
+- **Auto-push updates on device connect**: server emits `update_available` immediately on connect if the client version is outdated, eliminating reliance on the 4-hour poll
+- **Form controls normalization**: consistent styling across all dashboard inputs, selects, and textareas (36px height, blue focus highlight)
 
 ### Setup
 
@@ -786,6 +800,7 @@ dotnet run
 | v0.9.0 | System Tools & Enhanced Device Info | System Tools Engine (process_list, process_kill, service_list, service_action, event_log_query), 12 new device profile fields, dashboard System Tools tab |
 | v0.10.0 | Multi-Tenancy (MSP Model) | Client organizations, technician-to-client assignment, scope middleware, scoped Socket.IO broadcasts, per-client installer download, dashboard client management |
 | v0.11.0 | Self-Update & Admin Elevation | Server-hosted update packages, client auto-update with SHA-256 verification, admin elevation via manifest, Task Scheduler auto-start, fleet version tracking, dashboard column sorting and event log search |
+| v0.12.8 | User Tracking, AI Screenshots & UX Polish | Current/previous user tracking, AI screenshot diagnostic with multimodal LLM support, Users management page, Admin dropdown nav, superadmin role, auto-push updates on connect, form controls normalization |
 
 ### Planned
 | Version | Theme | Key Capabilities |

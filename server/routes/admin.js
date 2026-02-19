@@ -82,7 +82,7 @@ router.post('/login', async (req, res) => {
 
   // Fetch clients for the user
   let clients;
-  if (user.role === 'admin') {
+  if (user.role === 'admin' || user.role === 'superadmin') {
     clients = db.prepare('SELECT id, name, slug FROM clients ORDER BY name').all();
   } else {
     clients = db.prepare(`
@@ -134,6 +134,62 @@ router.post('/users', requireAdmin, async (req, res) => {
     }
     throw error;
   }
+});
+
+router.put('/users/:id', requireAdmin, async (req, res) => {
+  const db = req.app.locals.db;
+  const { id } = req.params;
+  const { display_name, role, password } = req.body;
+
+  const user = db.prepare('SELECT id FROM it_users WHERE id = ?').get(id);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (role && !['superadmin', 'admin', 'technician', 'viewer'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role' });
+  }
+
+  if (display_name !== undefined) {
+    db.prepare('UPDATE it_users SET display_name = ? WHERE id = ?').run(display_name, id);
+  }
+  if (role !== undefined) {
+    db.prepare('UPDATE it_users SET role = ? WHERE id = ?').run(role, id);
+  }
+  if (password) {
+    const passwordHash = await hashPassword(password);
+    db.prepare('UPDATE it_users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
+  }
+
+  const updated = db.prepare('SELECT id, username, display_name, role, created_at, last_login FROM it_users WHERE id = ?').get(id);
+  res.json(updated);
+});
+
+router.delete('/users/:id', requireAdmin, (req, res) => {
+  const db = req.app.locals.db;
+  const { id } = req.params;
+
+  const user = db.prepare('SELECT id, username FROM it_users WHERE id = ?').get(id);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  // Prevent deleting yourself
+  if (req.user && req.user.id === parseInt(id)) {
+    return res.status(400).json({ error: 'Cannot delete your own account' });
+  }
+
+  db.prepare('DELETE FROM it_users WHERE id = ?').run(id);
+
+  try {
+    db.prepare(
+      "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+    ).run(req.user?.username || 'admin', 'user_deleted', user.username, JSON.stringify({ userId: id }));
+  } catch (err) {
+    console.error('[Admin] Audit log error:', err.message);
+  }
+
+  res.json({ success: true });
 });
 
 router.get('/stats', requireIT, resolveClientScope, (req, res) => {

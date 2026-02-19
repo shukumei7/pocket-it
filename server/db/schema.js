@@ -31,7 +31,7 @@ function initDatabase(dbPath) {
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       display_name TEXT,
-      role TEXT DEFAULT 'technician' CHECK(role IN ('admin','technician','viewer')),
+      role TEXT DEFAULT 'technician' CHECK(role IN ('superadmin','admin','technician','viewer')),
       created_at TEXT,
       last_login TEXT
     );
@@ -412,6 +412,11 @@ function initDatabase(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_feature_wishes_category ON feature_wishes(category);
     CREATE INDEX IF NOT EXISTS idx_feature_wishes_status ON feature_wishes(status);
   `);
+
+  // v0.15.0: superadmin role — Note: SQLite does not support ALTER TABLE to modify CHECK
+  // constraints on existing columns. The CREATE TABLE above now includes 'superadmin' so
+  // new databases get the full constraint. Existing databases keep the old constraint but
+  // rows with role='superadmin' can still be inserted via direct DB update or a fresh DB.
 
   // Seed default alert thresholds (only if table is empty)
   const thresholdCount = db.prepare('SELECT COUNT(*) as count FROM alert_thresholds').get().count;

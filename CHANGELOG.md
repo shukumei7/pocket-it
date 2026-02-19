@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.12.8] - 2026-02-19
+
+### Added
+- **Current/Previous User Tracking** — Device cards in the dashboard now show the currently logged-in user with a 👤 icon; device detail page shows "Current User" and "Previous User" stat cards
+- **AI Screenshot Diagnostic** — AI can now request a screenshot from the client for visual diagnosis; client presents a user approval flow before capturing; screenshot is sent to AI for multimodal analysis; providers that do not support vision (Ollama) receive a text fallback
+- **`[ACTION:SCREENSHOT]` decision engine action** — Added to the AI decision engine so the system prompt can instruct the LLM to request a screenshot; Anthropic and OpenAI providers receive the image as base64; Claude CLI and Ollama receive a descriptive text fallback
+- **Users Management Page** — New admin-only page in the dashboard under the Admin dropdown; supports full CRUD: create user (username, display name, password, role), inline edit (display name, role), reset password, and delete user
+- **Admin Dropdown Navigation** — Updates, Settings, Wishlist, Clients, and Users pages are now grouped under a single "Admin" dropdown in the nav bar, visible only to `admin` and `superadmin` roles; non-admin users cannot navigate to admin pages
+- **Superadmin Role** — New role added above admin in the hierarchy (`superadmin > admin > technician > viewer`); superadmin receives full client access identical to admin
+
+### Changed
+- **`DeviceIdentity.cs` user detection** — Falls back to `Environment.UserName` when the `query user` command fails (e.g., on headless or non-interactive sessions), ensuring `logged_in_users` is always populated
+- **Auto-push updates on device connect** — Server now checks `update_packages` on device connect and emits `update_available` if the connecting client version is outdated; clients no longer need to wait for the 4-hour poll or a manual admin push
+- **Form controls normalization** — Global CSS applied to all dashboard inputs, selects, and textareas: consistent 36px height, padding, margin, font-size, border-radius, `outline:none`, and blue focus highlight (`#66c0f4`)
+
+### Fixed
+- **Network adapters duplication** — `openDevice()` in the dashboard now removes existing `.net-adapters` elements before inserting new ones, preventing duplicate adapter sections when re-opening a device detail panel
+
+### Technical
+- EDIT: `server/db/schema.js` — Added `previous_logged_in_users TEXT` column to `devices` table; updated `it_users.role` CHECK constraint to include `superadmin`
+- EDIT: `server/socket/agentNamespace.js` — Saves old `logged_in_users` to `previous_logged_in_users` before overwriting; checks `update_packages` on connect and emits `update_available` to outdated clients
+- EDIT: `client/PocketIT/Core/DeviceIdentity.cs` — `Environment.UserName` fallback when `query user` fails
+- EDIT: `server/ai/decisionEngine.js` — Added `SCREENSHOT` action type parsing
+- EDIT: `server/services/llmService.js` — Multimodal support for Anthropic and OpenAI (base64 image); text fallback for Ollama and Claude CLI
+- EDIT: `server/ai/systemPrompt.js` — Documented screenshot capability for AI
+- EDIT: `server/socket/agentNamespace.js` — `screenshot_result` handler; routes captured image into AI context
+- EDIT: `client/PocketIT/Core/ServerConnection.cs` — `screenshot_request` event handler; user approval flow; captures screen at quality=40, scale=0.5f
+- EDIT: `server/routes/admin.js` — `PUT /api/admin/users/:id` (update display_name, role, or password); `DELETE /api/admin/users/:id` (with self-deletion guard and audit log)
+- EDIT: `server/public/dashboard/index.html` — Users management page; Admin dropdown nav; current/previous user display; network adapter deduplication fix; form controls CSS normalization
+- CLIENT: Version bumped to **v0.12.8**
+
 ## [0.11.0] - 2026-02-17
 
 ### Added
@@ -322,7 +353,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.12.8...HEAD
+[0.12.8]: https://github.com/example/pocket-it/compare/v0.11.0...v0.12.8
 [0.11.0]: https://github.com/example/pocket-it/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/example/pocket-it/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/example/pocket-it/compare/v0.8.0...v0.9.0

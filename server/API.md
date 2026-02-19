@@ -635,6 +635,7 @@ Create a new IT staff user.
 ```
 
 **Roles:**
+- `superadmin` — Full access identical to admin; top of role hierarchy
 - `admin` — Full access, user management
 - `technician` — View devices, manage tickets
 - `viewer` — Read-only access
@@ -663,6 +664,83 @@ curl -X POST http://localhost:9100/api/admin/users \
     "role": "technician"
   }'
 ```
+
+### PUT /api/admin/users/:id
+
+Update an existing IT staff user. At least one field must be provided. To reset a password, include `password` in the body; it will be hashed before storage.
+
+**Auth:** Admin (localhost bypass in MVP)
+
+**Request Body (all fields optional):**
+```json
+{
+  "display_name": "Jane Doe",
+  "role": "technician",
+  "password": "new-secure-password"
+}
+```
+
+**Fields:**
+- `display_name` (optional) — User's display name
+- `role` (optional) — New role: `superadmin` | `admin` | `technician` | `viewer`
+- `password` (optional) — New password; stored as bcrypt hash
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — No fields to update
+- `400` — Invalid role value
+- `403` — Admin role required
+- `404` — User not found
+
+**Example:**
+```bash
+# Change role
+curl -X PUT http://localhost:9100/api/admin/users/2 \
+  -H "Content-Type: application/json" \
+  -d '{"role": "admin"}'
+
+# Reset password
+curl -X PUT http://localhost:9100/api/admin/users/2 \
+  -H "Content-Type: application/json" \
+  -d '{"password": "new-secure-password"}'
+```
+
+---
+
+### DELETE /api/admin/users/:id
+
+Delete an IT staff user. A user cannot delete their own account.
+
+**Auth:** Admin (localhost bypass in MVP)
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — Cannot delete your own account
+- `403` — Admin role required
+- `404` — User not found
+
+**Notes:**
+- Deletion is logged to the `audit_log` table with the actor and target username.
+- Client assignments for the deleted user are removed via `ON DELETE CASCADE` on `user_client_assignments`.
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:9100/api/admin/users/2
+```
+
+---
 
 ### GET /api/admin/stats
 
@@ -1012,6 +1090,7 @@ Pocket IT uses Socket.IO for real-time bidirectional communication. See SPECS.md
 - `diagnostic_result` — Diagnostic check results
 - `remediation_result` — Remediation action outcome
 - `system_tool_result` — System tool execution result: `{ requestId, tool, success, data, error }`
+- `screenshot_result` — Screenshot captured after user approval: `{ requestId, imageBase64, mimeType }` (v0.12.8)
 - `heartbeat` — Keep-alive ping
 
 **Server → Client:**
@@ -1019,6 +1098,8 @@ Pocket IT uses Socket.IO for real-time bidirectional communication. See SPECS.md
 - `chat_response` — AI response with optional action
 - `diagnostic_request` — Request diagnostic check
 - `remediation_request` — Request remediation approval
+- `screenshot_request` — Request screenshot with user approval: `{ requestId }` (v0.12.8)
+- `update_available` — Notify client of available update on connect: `{ version, downloadUrl }` (v0.12.8)
 - `system_tool_request` — Request system tool execution: `{ requestId, tool, params }`
 
 ### Key Events — /it Namespace

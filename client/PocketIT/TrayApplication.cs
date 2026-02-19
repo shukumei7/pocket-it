@@ -14,6 +14,7 @@ using PocketIT.Remediation;
 using PocketIT.Terminal;
 using PocketIT.Desktop;
 using PocketIT.SystemTools;
+using PocketIT.Installers;
 
 namespace PocketIT;
 
@@ -34,6 +35,7 @@ public class TrayApplication : ApplicationContext
     private RemoteTerminalService? _remoteTerminal;
     private RemoteDesktopService? _remoteDesktop;
     private readonly SystemToolsEngine _systemTools = new();
+    private readonly InstallerExecutionService _installerExecution = new();
     private UpdateService? _updateService;
     private UpdateInfo? _pendingUpdate;
     private bool _isEnrolled;
@@ -110,6 +112,7 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnFilePasteRequest += OnServerFilePasteRequest;
         _serverConnection.OnFileDownloadRequest += OnServerFileDownloadRequest;
         _serverConnection.OnFileUploadRequest += OnServerFileUploadRequest;
+        _serverConnection.OnInstallerRequest += OnServerInstallerRequest;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -899,6 +902,50 @@ public class TrayApplication : ApplicationContext
             {
                 Logger.Error($"File upload failed: {filename}", ex);
                 await _serverConnection.SendFileUploadResult(requestId, false, null, ex.Message);
+            }
+        });
+    }
+
+    private void OnServerInstallerRequest(string requestId, string filename, string fileData, string? silentArgs, int timeoutSeconds)
+    {
+        Logger.Info($"Installer request: {filename} (requestId: {requestId})");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Validate filename
+                if (string.IsNullOrWhiteSpace(filename) || filename.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                {
+                    await _serverConnection.SendInstallerResult(requestId, false, validationError: "Invalid filename");
+                    return;
+                }
+
+                // Decode base64 and save to exec dir
+                var execDir = InstallerExecutionService.EnsureExecDir();
+                var filePath = Path.Combine(execDir, filename);
+                var bytes = Convert.FromBase64String(fileData);
+                await File.WriteAllBytesAsync(filePath, bytes);
+
+                Logger.Info($"Installer saved: {filePath} ({bytes.Length} bytes)");
+
+                // Execute
+                var result = await _installerExecution.ExecuteAsync(filePath, silentArgs, timeoutSeconds);
+                await _serverConnection.SendInstallerResult(requestId, result.Success,
+                    result.Output, result.ErrorOutput, result.ExitCode, result.DurationMs,
+                    result.TimedOut, result.ValidationError);
+
+                // Cleanup
+                try { File.Delete(filePath); } catch { }
+            }
+            catch (FormatException)
+            {
+                Logger.Error($"Installer base64 decode failed: {filename}");
+                await _serverConnection.SendInstallerResult(requestId, false, errorOutput: "Failed to decode installer data");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Installer execution failed: {filename}", ex);
+                await _serverConnection.SendInstallerResult(requestId, false, errorOutput: ex.Message);
             }
         });
     }

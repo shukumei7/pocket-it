@@ -139,7 +139,7 @@ function setup(io, app) {
           }
           // Send recent chat
           const messages = db.prepare(
-            'SELECT * FROM chat_messages WHERE device_id = ? ORDER BY id DESC LIMIT 50'
+            "SELECT * FROM chat_messages WHERE device_id = ? AND (channel = 'user' OR channel IS NULL) ORDER BY id DESC LIMIT 50"
           ).all(deviceId).reverse();
           socket.emit('device_chat_history', { deviceId, messages });
         } catch (err) {
@@ -878,6 +878,319 @@ function setup(io, app) {
           socket.emit('error_message', { message: 'Device is not connected' });
         }
       }
+    });
+
+    // v0.14.0: Remote Deployment
+    socket.on('create_deployment', (data) => {
+      const { name, type, scriptId, scriptContent, installerFilename, installerData,
+              silentArgs, timeoutSeconds, requiresElevation, targetDeviceIds, scheduledAt } = data || {};
+
+      // Validate
+      if (!name || typeof name !== 'string' || name.length > 200) {
+        socket.emit('error_message', { message: 'Deployment name is required (max 200 chars)' });
+        return;
+      }
+      if (!['script', 'installer'].includes(type)) {
+        socket.emit('error_message', { message: 'Type must be "script" or "installer"' });
+        return;
+      }
+      if (!Array.isArray(targetDeviceIds) || targetDeviceIds.length === 0) {
+        socket.emit('error_message', { message: 'At least one target device is required' });
+        return;
+      }
+      if (targetDeviceIds.length > 100) {
+        socket.emit('error_message', { message: 'Maximum 100 target devices per deployment' });
+        return;
+      }
+
+      // Scope check all targets
+      for (const did of targetDeviceIds) {
+        if (!checkDeviceScope(did)) {
+          socket.emit('error_message', { message: `Device ${did} not in your scope` });
+          return;
+        }
+      }
+
+      // Rate limit: 5/min
+      if (!checkOpRateLimit(socket.id, 'create_deployment', 5)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for deployments (5/min)' });
+        return;
+      }
+
+      try {
+        const db = app.locals.db;
+        let resolvedScriptContent = scriptContent || null;
+        let installerBinary = null;
+
+        if (type === 'script') {
+          if (scriptId) {
+            const script = db.prepare('SELECT * FROM script_library WHERE id = ?').get(scriptId);
+            if (!script) {
+              socket.emit('error_message', { message: 'Script not found in library' });
+              return;
+            }
+            resolvedScriptContent = script.script_content;
+          }
+          if (!resolvedScriptContent || resolvedScriptContent.length === 0) {
+            socket.emit('error_message', { message: 'Script content is required' });
+            return;
+          }
+        }
+
+        if (type === 'installer') {
+          if (!installerFilename || !installerData) {
+            socket.emit('error_message', { message: 'Installer file is required' });
+            return;
+          }
+          // Validate extension
+          const ext = installerFilename.split('.').pop().toLowerCase();
+          if (!['exe', 'msi'].includes(ext)) {
+            socket.emit('error_message', { message: 'Only .exe and .msi files are allowed' });
+            return;
+          }
+          // Decode base64 to Buffer for BLOB storage
+          installerBinary = Buffer.from(installerData, 'base64');
+          // 50MB limit
+          if (installerBinary.length > 52_428_800) {
+            socket.emit('error_message', { message: 'Installer exceeds 50MB limit' });
+            return;
+          }
+        }
+
+        const clampedTimeout = Math.max(30, Math.min(600, parseInt(timeoutSeconds, 10) || 300));
+
+        // Insert deployment
+        const result = db.prepare(
+          `INSERT INTO deployments (name, type, script_id, script_content, installer_filename, installer_data, silent_args, timeout_seconds, requires_elevation, target_device_ids, scheduled_at, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          name, type,
+          scriptId || null, resolvedScriptContent,
+          installerFilename || null, installerBinary,
+          silentArgs || null,
+          clampedTimeout,
+          requiresElevation ? 1 : 0,
+          JSON.stringify(targetDeviceIds),
+          scheduledAt || null,
+          'it_staff'
+        );
+
+        const deploymentId = result.lastInsertRowid;
+
+        // Insert per-device result rows
+        const insertResult = db.prepare(
+          'INSERT INTO deployment_results (deployment_id, device_id, hostname) VALUES (?, ?, ?)'
+        );
+        for (const did of targetDeviceIds) {
+          const dev = db.prepare('SELECT hostname FROM devices WHERE device_id = ?').get(did);
+          insertResult.run(deploymentId, did, dev?.hostname || '');
+        }
+
+        // Audit log
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'deployment_created', String(deploymentId), JSON.stringify({
+          name, type, targetCount: targetDeviceIds.length, scheduled: !!scheduledAt
+        }));
+
+        socket.emit('deployment_created', { deploymentId, name, type, status: scheduledAt ? 'scheduled' : 'dispatching' });
+
+        // Dispatch immediately if no schedule
+        if (!scheduledAt || new Date(scheduledAt) <= new Date()) {
+          const scheduler = require('../services/deploymentScheduler');
+          scheduler.dispatchDeployment(db, app.locals.io, deploymentId);
+        }
+
+      } catch (err) {
+        console.error('[IT] create_deployment error:', err.message);
+        socket.emit('error_message', { message: 'Failed to create deployment: ' + err.message });
+      }
+    });
+
+    // Get deployment history
+    socket.on('get_deployments', () => {
+      try {
+        const db = app.locals.db;
+        const deployments = db.prepare(
+          "SELECT id, name, type, target_device_ids, scheduled_at, status, created_by, created_at FROM deployments ORDER BY id DESC LIMIT 50"
+        ).all();
+
+        // Get result summaries
+        const withResults = deployments.map(d => {
+          const results = db.prepare(
+            'SELECT device_id, hostname, status, exit_code, output, error_output, duration_ms, timed_out FROM deployment_results WHERE deployment_id = ?'
+          ).all(d.id);
+          return { ...d, target_device_ids: JSON.parse(d.target_device_ids || '[]'), results };
+        });
+
+        socket.emit('deployment_list', { deployments: withResults });
+      } catch (err) {
+        console.error('[IT] get_deployments error:', err.message);
+        socket.emit('deployment_list', { deployments: [] });
+      }
+    });
+
+    // Cancel a pending/running deployment
+    socket.on('cancel_deployment', (data) => {
+      const { deploymentId } = data || {};
+      if (!deploymentId) return;
+
+      try {
+        const db = app.locals.db;
+        db.prepare("UPDATE deployments SET status = 'cancelled' WHERE id = ? AND status IN ('pending', 'running')").run(deploymentId);
+        db.prepare("UPDATE deployment_results SET status = 'skipped', completed_at = datetime('now') WHERE deployment_id = ? AND status IN ('pending', 'uploading')").run(deploymentId);
+        socket.emit('deployment_cancelled', { deploymentId });
+      } catch (err) {
+        console.error('[IT] cancel_deployment error:', err.message);
+      }
+    });
+
+    // v0.14.0: IT-to-AI Guidance Chat
+    socket.on('it_guidance_message', async (data) => {
+      const { deviceId, content } = data || {};
+
+      if (!deviceId || !content) {
+        socket.emit('error_message', { message: 'deviceId and content are required' });
+        return;
+      }
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      if (typeof content !== 'string' || content.length > 5000) {
+        socket.emit('error_message', { message: 'Message too long (max 5000 chars)' });
+        return;
+      }
+
+      // Rate limit: 20/min
+      if (!checkOpRateLimit(socket.id, 'it_guidance', 20)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for guidance messages (20/min)' });
+        return;
+      }
+
+      console.log(`[IT] Guidance message for ${deviceId}: ${content.substring(0, 50)}...`);
+
+      const diagnosticAI = app.locals.diagnosticAI;
+      if (!diagnosticAI) {
+        socket.emit('it_guidance_response', { deviceId, text: 'AI service not available.', action: null });
+        return;
+      }
+
+      try {
+        const db = app.locals.db;
+        const device = db.prepare('SELECT hostname, os_version, cpu_model, total_ram_gb, total_disk_gb, processor_count FROM devices WHERE device_id = ?').get(deviceId);
+        const deviceInfo = device ? {
+          hostname: device.hostname, osVersion: device.os_version, deviceId,
+          cpuModel: device.cpu_model, totalRamGB: device.total_ram_gb,
+          totalDiskGB: device.total_disk_gb, processorCount: device.processor_count
+        } : { deviceId };
+
+        const response = await diagnosticAI.processITGuidanceMessage(deviceId, content, deviceInfo);
+
+        // Emit response to the requesting IT socket
+        socket.emit('it_guidance_response', {
+          deviceId,
+          text: response.text,
+          agentName: response.agentName,
+          action: response.action
+        });
+
+        // Also emit to other IT watchers of this device
+        emitToScoped(itNs, db, deviceId, 'it_guidance_update', {
+          deviceId,
+          message: { sender: 'it_tech', content },
+          response: { sender: 'ai', text: response.text, action: response.action }
+        });
+
+        // If action is diagnose, request from device immediately (no user consent needed)
+        if (response.action && response.action.type === 'diagnose') {
+          const connectedDevices = app.locals.connectedDevices;
+          if (connectedDevices) {
+            const deviceSocket = connectedDevices.get(deviceId);
+            if (deviceSocket) {
+              const requestId = `itg-${Date.now()}`;
+              deviceSocket.emit('diagnostic_request', {
+                checkType: response.action.checkType,
+                requestId,
+                itInitiated: true
+              });
+            }
+          }
+        }
+
+        // If action is remediate, execute immediately on device (IT authority)
+        if (response.action && response.action.type === 'remediate') {
+          const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service', 'restart_explorer', 'sfc_scan', 'dism_repair', 'clear_update_cache', 'reset_network_adapter'];
+          if (VALID_ACTIONS.includes(response.action.actionId)) {
+            const connectedDevices = app.locals.connectedDevices;
+            if (connectedDevices) {
+              const deviceSocket = connectedDevices.get(deviceId);
+              if (deviceSocket) {
+                deviceSocket.emit('remediation_request', {
+                  actionId: response.action.actionId,
+                  requestId: `itg-${Date.now()}`,
+                  parameter: response.action.parameter || null,
+                  autoApprove: true  // IT authority: auto-approve
+                });
+              }
+            }
+          }
+        }
+
+        // If action is ticket, create it
+        if (response.action && response.action.type === 'ticket') {
+          try {
+            const VALID_PRIORITIES = ['low', 'medium', 'high', 'critical'];
+            const ticketTitle = (response.action.title || 'Untitled').replace(/[<>&"']/g, '').substring(0, 200);
+            const ticketPriority = VALID_PRIORITIES.includes(response.action.priority) ? response.action.priority : 'medium';
+
+            const ticketResult = db.prepare(
+              "INSERT INTO tickets (device_id, title, priority, ai_summary, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+            ).run(deviceId, ticketTitle, ticketPriority, response.text);
+
+            emitToScoped(itNs, db, deviceId, 'ticket_created', {
+              id: ticketResult.lastInsertRowid, deviceId, title: ticketTitle, priority: ticketPriority
+            });
+          } catch (err) {
+            console.error('[IT] Guidance ticket creation error:', err.message);
+          }
+        }
+
+      } catch (err) {
+        console.error('[IT] it_guidance_message error:', err.message);
+        socket.emit('it_guidance_response', { deviceId, text: 'Error processing guidance request.', action: null });
+      }
+    });
+
+    socket.on('get_it_guidance_history', (data) => {
+      const { deviceId } = data || {};
+      if (!deviceId) return;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      try {
+        const db = app.locals.db;
+        const messages = db.prepare(
+          "SELECT * FROM chat_messages WHERE device_id = ? AND channel = 'it_guidance' ORDER BY id DESC LIMIT 50"
+        ).all(deviceId).reverse();
+        socket.emit('it_guidance_history', { deviceId, messages });
+      } catch (err) {
+        console.error('[IT] get_it_guidance_history error:', err.message);
+        socket.emit('it_guidance_history', { deviceId, messages: [] });
+      }
+    });
+
+    socket.on('clear_it_guidance_context', (data) => {
+      const { deviceId } = data || {};
+      if (!deviceId) return;
+      const diagnosticAI = app.locals.diagnosticAI;
+      if (diagnosticAI) diagnosticAI.clearITGuidanceContext(deviceId);
+      socket.emit('it_guidance_context_cleared', { deviceId });
     });
 
     // Feature wishlist

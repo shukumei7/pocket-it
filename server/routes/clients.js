@@ -106,9 +106,15 @@ router.delete('/:id', requireAdmin, (req, res) => {
     return res.status(409).json({ error: `Cannot delete client with ${deviceCount} device(s). Reassign or remove devices first.` });
   }
 
-  db.prepare('DELETE FROM user_client_assignments WHERE client_id = ?').run(clientId);
-  db.prepare('DELETE FROM clients WHERE id = ?').run(clientId);
-  res.json({ success: true });
+  try {
+    db.prepare('DELETE FROM enrollment_tokens WHERE client_id = ?').run(clientId);
+    db.prepare('DELETE FROM user_client_assignments WHERE client_id = ?').run(clientId);
+    db.prepare('DELETE FROM clients WHERE id = ?').run(clientId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Clients] Delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete client: ' + err.message });
+  }
 });
 
 // List assigned users for a client (admin only)

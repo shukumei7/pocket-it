@@ -728,6 +728,7 @@
         <a href="#" class="nav-link" data-page="alerts">Alerts <span id="nav-alert-badge" style="display:none; background:#ef5350; color:#fff; font-size:10px; padding:2px 6px; border-radius:8px; margin-left:4px;">0</span></a>
         <a href="#" class="nav-link" data-page="reports">Reports</a>
         <a href="#" class="nav-link" data-page="updates">Updates</a>
+        <a href="#" class="nav-link" data-page="deploy">Deploy</a>
         <a href="#" class="nav-link" data-page="settings">Settings</a>
         <a href="#" class="nav-link" data-page="wishlist">Wishlist</a>
         <a href="#" class="nav-link" data-page="clients" id="nav-clients" style="display:none;">Clients</a>
@@ -940,14 +941,30 @@
               </div>
             </div>
 
-            <!-- Right column: Live Chat -->
+            <!-- Right column: Live Chat + AI Guidance -->
             <div>
-              <h2 class="section-title">Live Chat</h2>
-              <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; display:flex; flex-direction:column; height:500px;">
+              <div style="display:flex; gap:0; margin-bottom:0;">
+                <button class="diag-btn" onclick="switchChatTab('user')" id="chat-tab-user" style="border-radius:6px 6px 0 0; background:#1a3a5c; border-bottom:2px solid #66c0f4;">User Chat</button>
+                <button class="diag-btn" onclick="switchChatTab('guidance')" id="chat-tab-guidance" style="border-radius:6px 6px 0 0; border-bottom:2px solid transparent;">AI Guidance</button>
+              </div>
+              <!-- User Chat panel -->
+              <div id="chat-panel-user" style="background:#1b2838; border:1px solid #2a475e; border-radius:0 8px 8px 8px; padding:16px; display:flex; flex-direction:column; height:480px;">
                 <div class="chat-area" id="detail-chat" style="flex:1; overflow-y:auto; margin-bottom:12px;"></div>
                 <div style="display:flex; gap:8px;">
-                  <input type="text" id="detail-chat-input" placeholder="Send message to user..." style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px 12px; border-radius:4px;" />
+                  <input type="text" id="detail-chat-input" placeholder="Send message to user..." style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px 12px; border-radius:4px;" onkeydown="if(event.key==='Enter')sendChatToDevice()" />
                   <button class="diag-btn" onclick="sendChatToDevice()" style="background:#66c0f4; color:#1b2838; font-weight:600;">Send</button>
+                </div>
+              </div>
+              <!-- AI Guidance panel -->
+              <div id="chat-panel-guidance" style="display:none; background:#1b2838; border:1px solid #2a475e; border-radius:0 8px 8px 8px; padding:16px; flex-direction:column; height:480px;">
+                <div class="chat-area" id="guidance-chat" style="flex:1; overflow-y:auto; margin-bottom:12px;"></div>
+                <div style="display:flex; gap:8px;">
+                  <input type="text" id="guidance-chat-input" placeholder="Instruct AI (e.g., 'check disk space', 'restart spooler')..." style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px 12px; border-radius:4px;" onkeydown="if(event.key==='Enter')sendGuidanceMessage()" />
+                  <button class="diag-btn" onclick="sendGuidanceMessage()" style="background:#e65100; color:#fff; font-weight:600;">Send</button>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:6px;">
+                  <button class="diag-btn" onclick="clearGuidanceContext()" style="font-size:11px; padding:3px 8px;">Clear Context</button>
+                  <span id="guidance-status" style="font-size:11px; color:#8f98a0; align-self:center;"></span>
                 </div>
               </div>
             </div>
@@ -1377,6 +1394,86 @@
             </table>
         </div>
 
+        <!-- Deploy page -->
+        <div class="page" id="page-deploy">
+            <h2 class="section-title">Deploy Scripts &amp; Installers</h2>
+            <div style="display:flex; gap:8px; margin-bottom:20px;">
+                <button class="diag-btn" onclick="showDeployTab('new')" id="deploy-tab-new" style="background:#1a3a5c;">New Deployment</button>
+                <button class="diag-btn" onclick="showDeployTab('history')" id="deploy-tab-history">Deployment History</button>
+            </div>
+
+            <!-- New Deployment Form -->
+            <div id="deploy-new" class="client-form">
+                <label>Deployment Name</label>
+                <input type="text" id="deploy-name" placeholder="e.g. Install Chrome, Run cleanup script" style="max-width:400px;">
+
+                <label style="margin-top:12px;">Type</label>
+                <div style="display:flex; gap:16px; margin:8px 0;">
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                        <input type="radio" name="deploy-type" value="script" checked onchange="toggleDeployType()"> Script
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                        <input type="radio" name="deploy-type" value="installer" onchange="toggleDeployType()"> Installer
+                    </label>
+                </div>
+
+                <!-- Script panel -->
+                <div id="deploy-script-panel">
+                    <label>Library Script</label>
+                    <select id="deploy-script-select" style="max-width:400px; padding:8px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:4px;" onchange="onDeployScriptSelect()">
+                        <option value="">-- Ad-hoc script --</option>
+                    </select>
+                    <label style="margin-top:8px;">Script Content</label>
+                    <textarea id="deploy-script-content" placeholder="Enter PowerShell script..." style="width:100%; min-height:80px; max-width:600px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-family:monospace; font-size:13px; resize:vertical;"></textarea>
+                    <label style="display:flex; align-items:center; gap:4px; margin-top:8px;">
+                        <input type="checkbox" id="deploy-elevation"> Requires elevation
+                    </label>
+                </div>
+
+                <!-- Installer panel -->
+                <div id="deploy-installer-panel" style="display:none;">
+                    <label>Installer File (.exe / .msi, max 50MB)</label>
+                    <input type="file" id="deploy-installer-file" accept=".exe,.msi" style="margin:8px 0;" onchange="onDeployInstallerSelected()">
+                    <div id="deploy-installer-info" style="font-size:12px; color:#8f98a0; margin-bottom:8px;"></div>
+                    <label>Silent Arguments</label>
+                    <input type="text" id="deploy-silent-args" placeholder="e.g. /S or /qn ALLUSERS=1" style="max-width:400px;">
+                </div>
+
+                <label style="margin-top:12px;">Timeout (seconds)</label>
+                <input type="number" id="deploy-timeout" value="300" min="30" max="600" style="width:80px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px; border-radius:4px;">
+
+                <label style="margin-top:16px; font-weight:600;">Target Devices</label>
+                <div style="margin:8px 0; display:flex; gap:8px;">
+                    <button class="diag-btn" onclick="deploySelectAllOnline()" style="font-size:12px; padding:4px 10px;">Select All Online</button>
+                    <button class="diag-btn" onclick="deploySelectAll()" style="font-size:12px; padding:4px 10px;">Select All</button>
+                    <button class="diag-btn" onclick="deploySelectNone()" style="font-size:12px; padding:4px 10px;">Clear</button>
+                </div>
+                <div id="deploy-device-list" style="max-height:200px; overflow-y:auto; background:#0f1923; border:1px solid #2a475e; border-radius:4px; padding:8px;"></div>
+
+                <label style="margin-top:16px;">Schedule</label>
+                <div style="display:flex; gap:16px; margin:8px 0;">
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                        <input type="radio" name="deploy-schedule" value="now" checked onchange="toggleDeploySchedule()"> Run immediately
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                        <input type="radio" name="deploy-schedule" value="later" onchange="toggleDeploySchedule()"> Schedule for:
+                    </label>
+                    <input type="datetime-local" id="deploy-schedule-time" disabled style="background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px; border-radius:4px;">
+                </div>
+
+                <div style="margin-top:20px;">
+                    <button class="diag-btn" onclick="submitDeployment()" style="background:#66c0f4; color:#1b2838; font-weight:600; padding:10px 24px;">Deploy</button>
+                </div>
+            </div>
+
+            <!-- Deployment History -->
+            <div id="deploy-history" style="display:none;">
+                <div id="deploy-history-list" style="font-size:13px;">
+                    <div style="color:#8f98a0;">Loading...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Wishlist page -->
         <div class="page" id="page-wishlist">
             <h2 class="section-title">Feature Wishlist</h2>
@@ -1624,6 +1721,7 @@
             if (page === 'clients') loadClients();
             if (page === 'settings') loadSettings();
             if (page === 'wishlist') loadWishes();
+            if (page === 'deploy') loadDeployPage();
         }
 
         function navigateTo(page) {
@@ -1670,7 +1768,7 @@
                     return true;
                 }
             }
-            const validPages = ['fleet', 'tickets', 'alerts', 'reports', 'updates', 'wishlist', 'settings'];
+            const validPages = ['fleet', 'tickets', 'alerts', 'reports', 'updates', 'deploy', 'wishlist', 'settings'];
             if (validPages.includes(hash)) {
                 showPage(hash);
                 history.replaceState({ page: hash }, '', '#' + hash);
@@ -1772,6 +1870,57 @@
 
             socket.on('file_upload_result', (data) => {
                 if (data.deviceId === currentDeviceId) handleFileUploadResult(data);
+            });
+
+            // v0.14.0: Deployment events
+            socket.on('deployment_created', (data) => {
+                console.log('[Deploy] Created:', data.deploymentId);
+                if (document.getElementById('page-deploy').classList.contains('active')) loadDeployHistory();
+            });
+
+            socket.on('deployment_progress', (data) => {
+                console.log('[Deploy] Progress:', data);
+                if (document.getElementById('page-deploy').classList.contains('active')) loadDeployHistory();
+            });
+
+            socket.on('deployment_completed', (data) => {
+                console.log('[Deploy] Completed:', data.deploymentId);
+                if (document.getElementById('page-deploy').classList.contains('active')) loadDeployHistory();
+            });
+
+            // v0.14.0: IT Guidance events
+            socket.on('it_guidance_response', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    appendGuidanceMessage('ai', data.text);
+                    document.getElementById('guidance-status').textContent = '';
+                }
+            });
+
+            socket.on('it_guidance_history', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    const chatEl = document.getElementById('guidance-chat');
+                    chatEl.innerHTML = '';
+                    data.messages.forEach(m => appendGuidanceMessage(m.sender, m.content));
+                }
+            });
+
+            socket.on('it_guidance_update', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    if (data.message) appendGuidanceMessage(data.message.sender, data.message.content);
+                    if (data.response) appendGuidanceMessage(data.response.sender, data.response.text);
+                }
+            });
+
+            socket.on('it_guidance_context_cleared', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    document.getElementById('guidance-chat').innerHTML = '<div style="color:#8f98a0; font-size:12px; text-align:center; padding:8px;">Context cleared.</div>';
+                }
+            });
+
+            socket.on('installer_result', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    console.log('[Installer] Result:', data);
+                }
             });
 
             socket.on('script_result', (data) => {
@@ -4677,6 +4826,245 @@
                     document.getElementById('sys-info-devices').textContent = `${stats.onlineDevices || 0} online / ${stats.totalDevices || 0} total`;
                 })
                 .catch(() => {});
+        }
+
+        // ---- Deploy Page ----
+        let deployDevicesCache = [];
+
+        function showDeployTab(tab) {
+            document.getElementById('deploy-new').style.display = tab === 'new' ? '' : 'none';
+            document.getElementById('deploy-history').style.display = tab === 'history' ? '' : 'none';
+            document.getElementById('deploy-tab-new').style.background = tab === 'new' ? '#1a3a5c' : '';
+            document.getElementById('deploy-tab-history').style.background = tab === 'history' ? '#1a3a5c' : '';
+            if (tab === 'history') loadDeployHistory();
+        }
+
+        function toggleDeployType() {
+            const type = document.querySelector('input[name="deploy-type"]:checked').value;
+            document.getElementById('deploy-script-panel').style.display = type === 'script' ? '' : 'none';
+            document.getElementById('deploy-installer-panel').style.display = type === 'installer' ? '' : 'none';
+        }
+
+        function toggleDeploySchedule() {
+            const val = document.querySelector('input[name="deploy-schedule"]:checked').value;
+            document.getElementById('deploy-schedule-time').disabled = val === 'now';
+        }
+
+        async function loadDeployPage() {
+            // Load script library
+            try {
+                const res = await fetchWithAuth(`${API}/api/scripts`);
+                const scripts = await res.json();
+                const sel = document.getElementById('deploy-script-select');
+                sel.innerHTML = '<option value="">-- Ad-hoc script --</option>';
+                scripts.forEach(s => {
+                    sel.innerHTML += `<option value="${s.id}" data-content="${escapeHtml(s.script_content)}" data-elevation="${s.requires_elevation}">${escapeHtml(s.name)}</option>`;
+                });
+            } catch (err) { console.error('Load scripts error:', err); }
+
+            // Load devices
+            try {
+                const res = await fetchWithAuth(`${API}/api/devices`);
+                const devices = await res.json();
+                deployDevicesCache = devices;
+                renderDeployDeviceList(devices);
+            } catch (err) { console.error('Load devices error:', err); }
+        }
+
+        function renderDeployDeviceList(devices) {
+            const el = document.getElementById('deploy-device-list');
+            if (devices.length === 0) {
+                el.innerHTML = '<div style="color:#8f98a0;">No devices enrolled.</div>';
+                return;
+            }
+            el.innerHTML = devices.map(d => {
+                const online = d.status === 'online';
+                return `<label style="display:flex; align-items:center; gap:6px; padding:4px 0; cursor:pointer;">
+                    <input type="checkbox" class="deploy-device-cb" value="${d.device_id}" data-online="${online}">
+                    <span style="width:8px; height:8px; border-radius:50%; background:${online ? '#4caf50' : '#616161'}; display:inline-block;"></span>
+                    <span>${escapeHtml(d.hostname || d.device_id)}</span>
+                    <span style="font-size:11px; color:#8f98a0;">${online ? 'online' : 'offline'}</span>
+                </label>`;
+            }).join('');
+        }
+
+        function onDeployScriptSelect() {
+            const sel = document.getElementById('deploy-script-select');
+            const opt = sel.options[sel.selectedIndex];
+            if (opt.value) {
+                document.getElementById('deploy-script-content').value = opt.dataset.content || '';
+                document.getElementById('deploy-elevation').checked = opt.dataset.elevation === '1';
+            }
+        }
+
+        function onDeployInstallerSelected() {
+            const input = document.getElementById('deploy-installer-file');
+            const info = document.getElementById('deploy-installer-info');
+            if (input.files.length > 0) {
+                const f = input.files[0];
+                const sizeMB = (f.size / 1024 / 1024).toFixed(1);
+                info.textContent = `${f.name} (${sizeMB} MB)`;
+                if (f.size > 52_428_800) {
+                    info.style.color = '#ef5350';
+                    info.textContent += ' — exceeds 50MB limit!';
+                } else {
+                    info.style.color = '#8f98a0';
+                }
+            }
+        }
+
+        function deploySelectAllOnline() {
+            document.querySelectorAll('.deploy-device-cb').forEach(cb => { cb.checked = cb.dataset.online === 'true'; });
+        }
+        function deploySelectAll() {
+            document.querySelectorAll('.deploy-device-cb').forEach(cb => { cb.checked = true; });
+        }
+        function deploySelectNone() {
+            document.querySelectorAll('.deploy-device-cb').forEach(cb => { cb.checked = false; });
+        }
+
+        async function submitDeployment() {
+            const name = document.getElementById('deploy-name').value.trim();
+            if (!name) { alert('Deployment name is required'); return; }
+
+            const type = document.querySelector('input[name="deploy-type"]:checked').value;
+            const targetDeviceIds = Array.from(document.querySelectorAll('.deploy-device-cb:checked')).map(cb => cb.value);
+            if (targetDeviceIds.length === 0) { alert('Select at least one target device'); return; }
+
+            const timeoutSeconds = parseInt(document.getElementById('deploy-timeout').value, 10) || 300;
+            const scheduleVal = document.querySelector('input[name="deploy-schedule"]:checked').value;
+            const scheduledAt = scheduleVal === 'later' ? document.getElementById('deploy-schedule-time').value : null;
+            if (scheduleVal === 'later' && !scheduledAt) { alert('Please select a schedule date/time'); return; }
+
+            const payload = { name, type, targetDeviceIds, timeoutSeconds, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null };
+
+            if (type === 'script') {
+                const scriptSel = document.getElementById('deploy-script-select');
+                if (scriptSel.value) {
+                    payload.scriptId = parseInt(scriptSel.value, 10);
+                }
+                payload.scriptContent = document.getElementById('deploy-script-content').value;
+                payload.requiresElevation = document.getElementById('deploy-elevation').checked;
+
+                if (!payload.scriptContent && !payload.scriptId) { alert('Script content is required'); return; }
+            } else {
+                const fileInput = document.getElementById('deploy-installer-file');
+                if (!fileInput.files.length) { alert('Select an installer file'); return; }
+                const file = fileInput.files[0];
+                if (file.size > 52_428_800) { alert('File exceeds 50MB limit'); return; }
+
+                // Read as base64
+                const reader = new FileReader();
+                const base64 = await new Promise((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result.split(',')[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+                payload.installerFilename = file.name;
+                payload.installerData = base64;
+                payload.silentArgs = document.getElementById('deploy-silent-args').value.trim();
+            }
+
+            socket.emit('create_deployment', payload);
+            showDeployTab('history');
+        }
+
+        function loadDeployHistory() {
+            socket.emit('get_deployments');
+            socket.once('deployment_list', (data) => {
+                const el = document.getElementById('deploy-history-list');
+                if (!data.deployments || data.deployments.length === 0) {
+                    el.innerHTML = '<div style="color:#8f98a0; text-align:center; padding:24px;">No deployments yet.</div>';
+                    return;
+                }
+                el.innerHTML = data.deployments.map(d => {
+                    const totalTargets = d.results ? d.results.length : 0;
+                    const done = d.results ? d.results.filter(r => ['success', 'failed', 'skipped'].includes(r.status)).length : 0;
+                    const succeeded = d.results ? d.results.filter(r => r.status === 'success').length : 0;
+                    const statusColor = d.status === 'completed' ? '#4caf50' : d.status === 'running' ? '#ff9800' : d.status === 'cancelled' ? '#ef5350' : '#8f98a0';
+                    const scheduledInfo = d.scheduled_at ? `<span style="font-size:11px; color:#8f98a0;">Scheduled: ${new Date(d.scheduled_at).toLocaleString()}</span>` : '';
+
+                    const resultsHtml = d.results ? d.results.map(r => {
+                        const rColor = r.status === 'success' ? '#4caf50' : r.status === 'failed' ? '#ef5350' : r.status === 'running' ? '#ff9800' : '#8f98a0';
+                        return `<div style="display:flex; gap:8px; align-items:center; padding:4px 8px; border-bottom:1px solid #1a2635;">
+                            <span style="width:8px; height:8px; border-radius:50%; background:${rColor};"></span>
+                            <span style="min-width:120px;">${escapeHtml(r.hostname || r.device_id)}</span>
+                            <span style="color:${rColor}; font-size:12px; min-width:60px;">${r.status}</span>
+                            <span style="font-size:11px; color:#8f98a0;">${r.exit_code !== null ? 'exit=' + r.exit_code : ''} ${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + 's' : ''} ${r.timed_out ? '(timed out)' : ''}</span>
+                        </div>`;
+                    }).join('') : '';
+
+                    return `<div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <div>
+                                <span style="font-weight:600; color:#c7d5e0;">${escapeHtml(d.name)}</span>
+                                <span style="font-size:12px; color:#8f98a0; margin-left:8px;">${d.type}</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:12px; color:${statusColor}; font-weight:600;">${d.status.toUpperCase()}</span>
+                                <span style="font-size:11px; color:#8f98a0;">${succeeded}/${totalTargets} succeeded</span>
+                                ${d.status === 'pending' || d.status === 'running' ? `<button class="diag-btn" onclick="cancelDeployment(${d.id})" style="font-size:11px; padding:2px 8px; background:#4a1919; color:#ef5350;">Cancel</button>` : ''}
+                            </div>
+                        </div>
+                        ${scheduledInfo}
+                        <div style="font-size:11px; color:#8f98a0; margin-bottom:8px;">Created: ${new Date(d.created_at).toLocaleString()}</div>
+                        <details style="margin-top:4px;">
+                            <summary style="cursor:pointer; font-size:12px; color:#8f98a0;">Per-device results (${done}/${totalTargets} complete)</summary>
+                            <div style="margin-top:8px; background:#0f1923; border-radius:4px; max-height:200px; overflow-y:auto;">${resultsHtml || '<div style="padding:8px; color:#8f98a0;">No results yet.</div>'}</div>
+                        </details>
+                    </div>`;
+                }).join('');
+            });
+        }
+
+        function cancelDeployment(id) {
+            if (!confirm('Cancel this deployment? Pending devices will be skipped.')) return;
+            socket.emit('cancel_deployment', { deploymentId: id });
+            setTimeout(loadDeployHistory, 500);
+        }
+
+        // ---- AI Guidance Chat ----
+        function switchChatTab(tab) {
+            document.getElementById('chat-panel-user').style.display = tab === 'user' ? 'flex' : 'none';
+            document.getElementById('chat-panel-guidance').style.display = tab === 'guidance' ? 'flex' : 'none';
+            document.getElementById('chat-tab-user').style.background = tab === 'user' ? '#1a3a5c' : '';
+            document.getElementById('chat-tab-user').style.borderBottomColor = tab === 'user' ? '#66c0f4' : 'transparent';
+            document.getElementById('chat-tab-guidance').style.background = tab === 'guidance' ? '#1a3a5c' : '';
+            document.getElementById('chat-tab-guidance').style.borderBottomColor = tab === 'guidance' ? '#e65100' : 'transparent';
+
+            if (tab === 'guidance' && currentDeviceId) {
+                socket.emit('get_it_guidance_history', { deviceId: currentDeviceId });
+            }
+        }
+
+        function sendGuidanceMessage() {
+            const input = document.getElementById('guidance-chat-input');
+            const content = input.value.trim();
+            if (!content || !currentDeviceId) return;
+            input.value = '';
+
+            appendGuidanceMessage('it_tech', content);
+            document.getElementById('guidance-status').textContent = 'AI is thinking...';
+            socket.emit('it_guidance_message', { deviceId: currentDeviceId, content });
+        }
+
+        function appendGuidanceMessage(sender, content) {
+            const chatEl = document.getElementById('guidance-chat');
+            const div = document.createElement('div');
+            div.style.cssText = 'margin-bottom:8px; font-size:13px;';
+
+            const senderLabel = sender === 'it_tech' ? 'IT' : sender === 'ai' ? 'AI' : sender;
+            const senderColor = sender === 'it_tech' ? '#e65100' : sender === 'ai' ? '#66c0f4' : '#8f98a0';
+
+            div.innerHTML = `<span style="font-weight:600; color:${senderColor}; font-size:11px;">${escapeHtml(senderLabel)}</span><br><span style="color:#c7d5e0;">${escapeHtml(content || '')}</span>`;
+            chatEl.appendChild(div);
+            chatEl.scrollTop = chatEl.scrollHeight;
+        }
+
+        function clearGuidanceContext() {
+            if (!currentDeviceId) return;
+            socket.emit('clear_it_guidance_context', { deviceId: currentDeviceId });
         }
     </script>
 </body>

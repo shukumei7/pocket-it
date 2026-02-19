@@ -1,4 +1,5 @@
 const { emitToScoped, emitToAll } = require('./scopedEmit');
+const deploymentScheduler = require('../services/deploymentScheduler');
 
 function setup(io, app) {
   const agentNs = io.of('/agent');
@@ -129,6 +130,13 @@ function setup(io, app) {
       }
     } catch (err) {
       console.error('[Agent] Chat history load error:', err.message);
+    }
+
+    // v0.14.0: Dispatch pending deployments for reconnected device
+    try {
+      deploymentScheduler.dispatchPendingForDevice(db, io, deviceId, socket);
+    } catch (err) {
+      console.error('[Agent] Pending deployment dispatch error:', err.message);
     }
 
     // Heartbeat
@@ -528,6 +536,22 @@ function setup(io, app) {
         console.error('[Agent] Alert evaluation error:', err.message);
       }
 
+      // v0.14.0: If IT guidance context is active for this device, also feed results there
+      const diagnosticAI2 = app.locals.diagnosticAI;
+      if (diagnosticAI2 && diagnosticAI2.itGuidanceContexts && diagnosticAI2.itGuidanceContexts.has(deviceId)) {
+        try {
+          const guidanceResponse = await diagnosticAI2.processITGuidanceDiagnosticResult(deviceId, data.checkType, data.results);
+          emitToScoped(itNs, db, deviceId, 'it_guidance_response', {
+            deviceId,
+            text: guidanceResponse.text,
+            agentName: guidanceResponse.agentName,
+            action: guidanceResponse.action
+          });
+        } catch (guidanceErr) {
+          console.error('[Agent] IT guidance diagnostic routing error:', guidanceErr.message);
+        }
+      }
+
       // Only feed results to AI if the AI requested them (not scheduled/IT-initiated)
       if (!pendingAIDiagnostics.has(deviceId)) return;
 
@@ -750,6 +774,11 @@ function setup(io, app) {
         timedOut: data.timedOut || false,
         validationError: data.validationError || null
       });
+
+      // Check if this is a deployment result
+      if (data.requestId && data.requestId.startsWith('dep-')) {
+        deploymentScheduler.handleDeploymentResult(db, io, data.requestId, data);
+      }
     });
 
     // v0.6.0: Remote terminal events from client
@@ -992,6 +1021,41 @@ function setup(io, app) {
         path: data.path || null,
         error: data.error || null
       });
+    });
+
+    // v0.14.0: Installer execution results from client
+    socket.on('installer_result', (data) => {
+      console.log(`[Agent] Installer result from ${deviceId}: ${data.requestId} (exit=${data.exitCode})`);
+
+      // Audit log
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'installer_completed', data.requestId || '', JSON.stringify({
+          requestId: data.requestId, exitCode: data.exitCode, success: data.success,
+          durationMs: data.durationMs, timedOut: data.timedOut
+        }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+
+      // Relay to IT dashboard
+      emitToScoped(itNs, db, deviceId, 'installer_result', {
+        deviceId,
+        requestId: data.requestId,
+        success: data.success,
+        output: data.output || '',
+        errorOutput: data.errorOutput || '',
+        exitCode: data.exitCode,
+        durationMs: data.durationMs,
+        timedOut: data.timedOut || false,
+        validationError: data.validationError || null
+      });
+
+      // Check if this is a deployment result
+      if (data.requestId && data.requestId.startsWith('dep-')) {
+        deploymentScheduler.handleDeploymentResult(db, io, data.requestId, data);
+      }
     });
 
     // Disconnect

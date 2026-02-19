@@ -223,4 +223,10 @@ const SchedulerService = require('./services/schedulerService');
 const schedulerService = new SchedulerService(db, reportService, exportService, notificationService);
 schedulerService.start();
 
+// v0.14.0: Deployment scheduler
+const deploymentScheduler = require('./services/deploymentScheduler');
+deploymentScheduler.start(db, io);
+// Scheduler needs access to connected devices map
+io._connectedDevices = app.locals.connectedDevices;
+
 module.exports = { app, server, io };

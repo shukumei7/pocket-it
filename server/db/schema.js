@@ -323,6 +323,58 @@ function initDatabase(dbPath) {
     );
   `);
 
+  // v0.14.0: Remote deployment tables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS deployments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('script', 'installer')),
+      script_id INTEGER,
+      script_content TEXT,
+      installer_filename TEXT,
+      installer_data BLOB,
+      silent_args TEXT,
+      timeout_seconds INTEGER DEFAULT 300,
+      requires_elevation INTEGER DEFAULT 0,
+      target_device_ids TEXT NOT NULL,
+      scheduled_at TEXT,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'cancelled')),
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS deployment_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deployment_id INTEGER NOT NULL REFERENCES deployments(id) ON DELETE CASCADE,
+      device_id TEXT NOT NULL,
+      hostname TEXT,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'uploading', 'running', 'success', 'failed', 'skipped')),
+      exit_code INTEGER,
+      output TEXT,
+      error_output TEXT,
+      duration_ms INTEGER,
+      timed_out INTEGER DEFAULT 0,
+      started_at TEXT,
+      completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_deploy_results_deployment ON deployment_results(deployment_id);
+    CREATE INDEX IF NOT EXISTS idx_deploy_results_device ON deployment_results(device_id);
+  `);
+
+  // v0.14.0: Add channel column to chat_messages for IT guidance separation
+  try {
+    db.prepare("ALTER TABLE chat_messages ADD COLUMN channel TEXT DEFAULT 'user'").run();
+  } catch (err) {
+    // Column already exists
+  }
+
+  // v0.14.0: Index for channel-based chat queries
+  try {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_chat_messages_channel ON chat_messages(device_id, channel)');
+  } catch (err) {
+    // Index already exists
+  }
+
   // v0.13.0: Feature wishlist — AI logs capability gaps
   db.exec(`
     CREATE TABLE IF NOT EXISTS feature_wishes (

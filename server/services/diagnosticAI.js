@@ -1,5 +1,6 @@
 const { getSystemPrompt, getAgentName } = require('../ai/systemPrompt');
 const { parseResponse } = require('../ai/decisionEngine');
+const { getITGuidancePrompt } = require('../ai/itGuidancePrompt');
 
 function sanitizeForLLM(text) {
   return text.replace(/\[ACTION:[A-Z_]+(?::[^\]]+)?\]/gi, '[BLOCKED_TAG]');
@@ -12,6 +13,8 @@ class DiagnosticAI {
     // In-memory conversation contexts per device (last N messages)
     this.contexts = new Map();
     this.maxContextMessages = 20;
+    // IT Guidance: separate conversation contexts per device
+    this.itGuidanceContexts = new Map();
   }
 
   getOrCreateContext(deviceId, deviceInfo) {
@@ -114,13 +117,106 @@ class DiagnosticAI {
     }
   }
 
-  _saveMessage(deviceId, sender, content, action) {
+  // ---- IT Guidance Methods ----
+
+  getOrCreateITGuidanceContext(deviceId, deviceInfo) {
+    if (!this.itGuidanceContexts.has(deviceId)) {
+      const agentName = getAgentName(deviceId);
+      this.itGuidanceContexts.set(deviceId, {
+        agentName,
+        deviceInfo,
+        messages: []
+      });
+    }
+    return this.itGuidanceContexts.get(deviceId);
+  }
+
+  async processITGuidanceMessage(deviceId, itMessage, deviceInfo) {
+    const ctx = this.getOrCreateITGuidanceContext(deviceId, deviceInfo);
+
+    // Update device info if provided
+    if (deviceInfo) ctx.deviceInfo = deviceInfo;
+
+    ctx.messages.push({ role: 'user', content: `<it_guidance>${sanitizeForLLM(itMessage)}</it_guidance>` });
+
+    if (ctx.messages.length > this.maxContextMessages) {
+      ctx.messages = ctx.messages.slice(-this.maxContextMessages);
+    }
+
+    const systemPrompt = getITGuidancePrompt(ctx.deviceInfo, ctx.agentName);
+    const llmMessages = [
+      { role: 'system', content: systemPrompt },
+      ...ctx.messages
+    ];
+
+    try {
+      const rawResponse = await this.llm.chat(llmMessages);
+      const parsed = parseResponse(rawResponse);
+      ctx.messages.push({ role: 'assistant', content: rawResponse });
+
+      // Save to DB with channel = 'it_guidance'
+      this._saveMessage(deviceId, 'it_tech', itMessage, null, 'it_guidance');
+      this._saveMessage(deviceId, 'ai', parsed.text, parsed.action, 'it_guidance');
+
+      return {
+        text: parsed.text,
+        action: parsed.action,
+        agentName: ctx.agentName
+      };
+    } catch (err) {
+      console.error('DiagnosticAI IT guidance error:', err.message);
+      return {
+        text: 'Error processing guidance request. Check LLM connectivity.',
+        action: null,
+        agentName: ctx.agentName
+      };
+    }
+  }
+
+  async processITGuidanceDiagnosticResult(deviceId, checkType, results) {
+    const ctx = this.getOrCreateITGuidanceContext(deviceId, {});
+
+    const resultText = sanitizeForLLM(`[DIAGNOSTIC RESULTS - ${checkType}]\n${JSON.stringify(results, null, 2)}`);
+    ctx.messages.push({ role: 'user', content: resultText });
+
+    const systemPrompt = getITGuidancePrompt(ctx.deviceInfo, ctx.agentName);
+    const llmMessages = [
+      { role: 'system', content: systemPrompt },
+      ...ctx.messages
+    ];
+
+    try {
+      const rawResponse = await this.llm.chat(llmMessages);
+      const parsed = parseResponse(rawResponse);
+      ctx.messages.push({ role: 'assistant', content: rawResponse });
+      this._saveMessage(deviceId, 'ai', parsed.text, parsed.action, 'it_guidance');
+
+      return {
+        text: parsed.text,
+        action: parsed.action,
+        agentName: ctx.agentName
+      };
+    } catch (err) {
+      console.error('DiagnosticAI IT guidance diagnostic error:', err.message);
+      return {
+        text: 'Error analyzing diagnostic results.',
+        action: null,
+        agentName: ctx.agentName
+      };
+    }
+  }
+
+  clearITGuidanceContext(deviceId) {
+    this.itGuidanceContexts.delete(deviceId);
+  }
+
+  _saveMessage(deviceId, sender, content, action, channel) {
     try {
       const metadata = action ? JSON.stringify(action) : null;
       const messageType = action ? action.type : 'text';
       this.db.prepare(
-        'INSERT INTO chat_messages (device_id, sender, content, message_type, metadata) VALUES (?, ?, ?, ?, ?)'
-      ).run(deviceId, sender, content, messageType, metadata);
+        'INSERT INTO chat_messages (device_id, sender, content, message_type, metadata, channel) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(deviceId, sender, content, messageType, metadata, channel || 'user');
     } catch (err) {
       console.error('Failed to save message:', err.message);
     }

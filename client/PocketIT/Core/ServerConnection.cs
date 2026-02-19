@@ -45,6 +45,7 @@ public class ServerConnection : IDisposable
     public event Action<string, string[], string, bool>? OnFilePasteRequest; // requestId, paths, destination, move
     public event Action<string, string>? OnFileDownloadRequest; // requestId, path
     public event Action<string, string, string, string>? OnFileUploadRequest; // requestId, destinationPath, filename, base64data
+    public event Action<string, string, string, string?, int>? OnInstallerRequest; // requestId, filename, fileData(base64), silentArgs, timeoutSeconds
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -312,6 +313,18 @@ public class ServerConnection : IDisposable
             OnFileUploadRequest?.Invoke(requestId, destinationPath, filename, data);
         });
 
+        _socket.On("installer_request", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            var filename = json.GetProperty("filename").GetString() ?? "";
+            var fileData = json.GetProperty("fileData").GetString() ?? "";
+            var silentArgs = json.TryGetProperty("silentArgs", out var saProp) ? saProp.GetString() : null;
+            int timeoutSeconds = json.TryGetProperty("timeoutSeconds", out var toProp) ? toProp.GetInt32() : 300;
+            Logger.Info($"Installer request: {filename} (requestId: {requestId})");
+            OnInstallerRequest?.Invoke(requestId, filename, fileData, silentArgs, timeoutSeconds);
+        });
+
         try
         {
             await _socket.ConnectAsync();
@@ -476,6 +489,11 @@ public class ServerConnection : IDisposable
     public async Task SendFileUploadResult(string requestId, bool success, string? path, string? error)
     {
         await EmitAsync("file_upload_result", new { requestId, success, path, error });
+    }
+
+    public async Task SendInstallerResult(string requestId, bool success, string output = "", string errorOutput = "", int exitCode = -1, long durationMs = 0, bool timedOut = false, string? validationError = null)
+    {
+        await EmitAsync("installer_result", new { requestId, success, output, errorOutput, exitCode, durationMs, timedOut, validationError });
     }
 
     private async Task EmitAsync(string eventName, object data)

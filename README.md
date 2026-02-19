@@ -82,7 +82,9 @@ cd server
 npm install
 cp .env.example .env
 # Edit .env to configure LLM provider
-node server.js
+npm start        # production: runs wrapper.js (auto-restarts on update)
+# or
+node server.js   # development: direct, no restart wrapper
 ```
 
 Server runs on **port 9100** by default.
@@ -242,7 +244,16 @@ Step 3 does all of the following automatically:
 - Zips the `client/publish/win-x64/` directory
 - Computes SHA-256 hash
 - Upserts into the `update_packages` table (allows rebuilds of the same version)
+- Copies the ZIP to `releases/PocketIT-latest.zip` and writes `releases/version.json`
 - Pushes `update_available` to all connected devices running older versions
+
+After running `publish-local`, commit and push the repo so remote servers can fetch the new client ZIP via git:
+
+```bash
+git add releases/
+git commit -m "chore: publish client v$(cat releases/version.json | jq -r .version)"
+git push
+```
 
 ### Server-Side Auto-Push (on device connect)
 
@@ -274,12 +285,77 @@ When deploying to a remote server, you only need to:
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
-| `/api/updates/publish-local` | POST | localhost only | Auto-register build and push to outdated clients |
+| `/api/updates/publish-local` | POST | localhost only | Auto-register build, copy to `releases/`, and push to outdated clients |
 | `/api/updates/check?version=X.Y.Z` | GET | device auth | Client checks for available update |
 | `/api/updates/download/:version` | GET | device auth | Client downloads update ZIP |
 | `/api/updates/push/:version` | POST | IT auth | Manually push update notification |
 | `/api/updates/latest` | GET | IT auth | Get latest version info |
 | `/api/updates/fleet-versions` | GET | IT auth | Version distribution across fleet |
+| `/api/updates/server-check` | GET | IT auth | Check if server update available via git |
+| `/api/updates/server-apply` | POST | IT auth | Pull and apply server update (triggers restart) |
+
+## Server Self-Update
+
+Remote Pocket IT servers can update themselves by pulling the latest code from git, without any manual SSH access. The flow is triggered from the IT dashboard Settings page.
+
+### How It Works
+
+**Dev machine (publish a new server release):**
+
+```bash
+# 1. Make your server changes
+# 2. Publish the latest client build
+curl -X POST http://localhost:9100/api/updates/publish-local
+# 3. Commit everything (server code + releases/ ZIP) and push
+git add .
+git commit -m "release: v0.X.Y"
+git push
+```
+
+**Remote server (apply the update):**
+
+1. Open the IT dashboard Settings page
+2. Click **Check for Updates** — the server runs `git fetch` and compares commits
+3. If updates are available, the available commit summary is displayed
+4. Click **Update Server** — the server runs `git pull`, then `npm install` if `package.json` changed, registers the new client ZIP if present, and restarts
+5. The dashboard auto-polls `/health` and reconnects automatically when the server is back up
+
+### Process Wrapper
+
+`npm start` runs `node wrapper.js` instead of `server.js` directly. The wrapper monitors the server process and restarts it when it exits with code 75 (the designated self-update exit code).
+
+```bash
+npm start       # Production: runs wrapper.js → auto-restarts on update
+npm run dev     # Development: runs server.js directly (no wrapper)
+```
+
+**Key files:**
+
+| File | Purpose |
+|------|---------|
+| `server/wrapper.js` | Process manager — restarts server on exit code 75 |
+| `server/services/serverUpdate.js` | Git check/pull, `npm install`, ZIP registration, restart logic |
+| `releases/PocketIT-latest.zip` | Latest client ZIP (Git LFS tracked) |
+| `releases/version.json` | Version metadata written by `publish-local` |
+
+### Git LFS
+
+Client ZIPs (~70 MB) are tracked via Git LFS to keep the repository size manageable. This is configured in `.gitattributes`:
+
+```
+releases/*.zip filter=lfs diff=lfs merge=lfs -text
+```
+
+Remote servers must have `git-lfs` installed to pull the ZIP files correctly:
+
+```bash
+git lfs install     # one-time setup per machine
+git pull            # fetches LFS objects automatically
+```
+
+### Live Server URL Propagation
+
+When an admin changes the **Public URL** in Settings, the server emits a `server_url_changed` event to all connected clients. Clients automatically update their `appsettings.json` and reconnect to the new URL — no manual reconfiguration needed.
 
 ### Integrity Protection
 
@@ -442,6 +518,8 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `GET /api/updates/check?version=X.Y.Z` — Check if update is available (device auth)
 - `GET /api/updates/download/:version` — Download installer (device auth)
 - `GET /api/updates/fleet-versions` — Version distribution across fleet (IT/admin auth)
+- `GET /api/updates/server-check` — Check if server updates are available via git (IT auth)
+- `POST /api/updates/server-apply` — Pull and apply server update; triggers restart via wrapper (IT auth)
 
 ### Reports
 - `GET /api/reports/fleet/health-trend?days=7` — Fleet average health per day
@@ -514,6 +592,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `desktop_stopped` — Desktop session ended: `{ deviceId }`
 - `desktop_denied` — Device denied desktop access: `{ deviceId }`
 - `system_tool_result` — Tool result relayed from device: `{ deviceId, requestId, tool, success, data, error }`
+- `server_url_changed` — Broadcast when admin changes the Public URL in Settings: `{ url: string }` (clients update `appsettings.json` and reconnect)
 
 ## Database Schema
 
@@ -684,15 +763,20 @@ pocket-it/
 ├── deploy/
 │   ├── Deploy-PocketIT.ps1      # Remote deployment via PS Remoting
 │   └── targets.example.txt      # Example target machines list
+├── releases/
+│   ├── PocketIT-latest.zip       # Latest client ZIP (Git LFS tracked)
+│   └── version.json              # Version metadata (written by publish-local)
 ├── server/
 │   ├── server.js                 # Main entry point
+│   ├── wrapper.js                # Process manager — restarts server on exit code 75
 │   ├── package.json              # Dependencies
 │   ├── .env.example              # Environment template
 │   ├── db/
 │   │   └── schema.js             # Database initialization
 │   ├── services/
 │   │   ├── llmService.js         # Multi-provider LLM abstraction
-│   │   └── diagnosticAI.js       # Conversation management + AI decision logic
+│   │   ├── diagnosticAI.js       # Conversation management + AI decision logic
+│   │   └── serverUpdate.js       # Git check/pull, npm install, ZIP registration, restart logic
 │   ├── ai/
 │   │   ├── systemPrompt.js       # Agent personality + capabilities
 │   │   └── decisionEngine.js     # Parse action tags from responses
@@ -709,7 +793,7 @@ pocket-it/
 │   │   ├── llm.js                # LLM config endpoints
 │   │   ├── admin.js              # Admin stats
 │   │   ├── clients.js            # Client CRUD, user assignment, installer download
-│   │   └── updates.js            # Self-update: upload, check, download, list, delete, push, fleet-versions
+│   │   └── updates.js            # Self-update: upload, check, download, list, delete, push, fleet-versions, server-check, server-apply
 │   ├── auth/
 │   │   ├── middleware.js         # Auth middleware (localhost bypass)
 │   │   └── clientScope.js        # resolveClientScope middleware, scopeSQL, isDeviceInScope
@@ -820,7 +904,8 @@ cp .env.example .env
 # Edit .env — set POCKET_IT_JWT_SECRET (required)
 node seed-admin.js --username admin --password <your-password>
 npm install
-node server.js
+npm start        # production (wrapper.js manages restarts)
+# or: node server.js   # development (no wrapper)
 ```
 
 **Client (requires .NET 8 SDK):**

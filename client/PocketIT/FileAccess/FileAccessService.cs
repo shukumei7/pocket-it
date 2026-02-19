@@ -5,7 +5,7 @@ namespace PocketIT.FileAccess;
 public class FileEntry
 {
     public string Name { get; set; } = "";
-    public string Type { get; set; } = "file"; // "file" or "dir"
+    public string Type { get; set; } = "file"; // "file", "dir", or "drive"
     public long SizeBytes { get; set; }
     public string LastModified { get; set; } = "";
 }
@@ -80,11 +80,37 @@ public class FileAccessService
         }
     }
 
-    public List<FileEntry> Browse(string path)
+    public List<FileEntry> ListDrives()
     {
+        var entries = new List<FileEntry>();
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            if (!drive.IsReady) continue;
+            entries.Add(new FileEntry
+            {
+                Name = drive.Name, // "C:\"
+                Type = "drive",
+                SizeBytes = drive.TotalSize,
+                LastModified = ""
+            });
+        }
+        return entries;
+    }
+
+    public List<FileEntry> Browse(string path, bool unrestricted = false)
+    {
+        // Empty path = list drives
+        if (string.IsNullOrWhiteSpace(path))
+            return ListDrives();
+
         var fullPath = Path.GetFullPath(path);
-        if (!IsAllowed(fullPath))
-            throw new UnauthorizedAccessException($"Access denied: path '{path}' is outside allowed directories");
+
+        if (!unrestricted)
+        {
+            // AI-initiated: strict allowed-roots + blocked-paths check
+            if (!IsAllowed(fullPath))
+                throw new UnauthorizedAccessException($"Access denied: path '{path}' is outside allowed directories");
+        }
 
         if (!Directory.Exists(fullPath))
             throw new DirectoryNotFoundException($"Directory not found: {path}");
@@ -132,17 +158,17 @@ public class FileAccessService
         return entries;
     }
 
-    public FileReadResult ReadFile(string path)
+    public FileReadResult ReadFile(string path, bool unrestricted = false)
     {
         var fullPath = Path.GetFullPath(path);
-        if (!IsAllowed(fullPath))
+        if (!unrestricted && !IsAllowed(fullPath))
             return new FileReadResult { Success = false, Error = $"Access denied: path '{path}' is outside allowed directories" };
 
         if (!File.Exists(fullPath))
             return new FileReadResult { Success = false, Error = $"File not found: {path}" };
 
         var ext = Path.GetExtension(fullPath);
-        if (BlockedExtensions.Contains(ext))
+        if (!unrestricted && BlockedExtensions.Contains(ext))
             return new FileReadResult { Success = false, Error = $"File type '{ext}' is not allowed for reading" };
 
         var fileInfo = new FileInfo(fullPath);

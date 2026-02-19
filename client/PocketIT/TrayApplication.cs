@@ -554,7 +554,7 @@ public class TrayApplication : ApplicationContext
             {
                 try
                 {
-                    var entries = _fileAccess.Browse(path);
+                    var entries = _fileAccess.Browse(path, unrestricted: true);
                     await _serverConnection.SendFileBrowseResult(requestId, path, true, entries);
                 }
                 catch (Exception ex)
@@ -587,7 +587,7 @@ public class TrayApplication : ApplicationContext
             {
                 try
                 {
-                    var result = _fileAccess.ReadFile(path);
+                    var result = _fileAccess.ReadFile(path, unrestricted: true);
                     if (result.Success)
                         await _serverConnection.SendFileReadResult(requestId, path, true, result.Content, result.SizeBytes);
                     else

@@ -812,11 +812,12 @@
 
               <h2 class="section-title">File Browser</h2>
               <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
-                <div style="display:flex; gap:8px; margin-bottom:8px;">
-                  <input type="text" id="file-browse-path" placeholder="C:\Users\..." style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px 12px; border-radius:4px; font-size:13px; font-family:monospace;" />
-                  <button class="diag-btn" onclick="browseFiles()">Browse</button>
+                <!-- Breadcrumb navigation bar -->
+                <div id="file-breadcrumb" style="display:flex; align-items:center; gap:4px; margin-bottom:12px; padding:8px 12px; background:#0e1621; border-radius:6px; flex-wrap:wrap; min-height:36px;">
+                  <span style="color:#66c0f4; cursor:pointer; font-size:14px;" onclick="browseFiles('')" title="Drives">&#x1F4BB; Drives</span>
                 </div>
-                <div id="file-browser-area"></div>
+                <!-- File listing area -->
+                <div id="file-browser-area" style="min-height:200px; max-height:500px; overflow-y:auto;"></div>
               </div>
 
               <h2 class="section-title">Remote Scripts</h2>
@@ -2050,8 +2051,7 @@
             }
 
             loadScriptLibrary();
-            document.getElementById('file-browse-path').value = '';
-            document.getElementById('file-browser-area').innerHTML = '';
+            browseFiles('');
             document.getElementById('script-output-area').innerHTML = '';
             // Reset and auto-load system tools
             cachedProcessList = null;
@@ -2538,99 +2538,201 @@
 
         // ---- File Browser ----
         let currentBrowsePath = '';
+        let fileBrowserHistory = [];
 
-        function browseFiles() {
+        function browseFiles(path) {
             if (!currentDeviceId || !socket) return;
-            const pathInput = document.getElementById('file-browse-path');
-            const path = pathInput.value.trim();
-            if (!path) { alert('Enter a path to browse'); return; }
+            if (path === undefined || path === null) {
+                path = '';
+            }
             currentBrowsePath = path;
-            document.getElementById('file-browser-area').innerHTML = '<div style="font-size:13px; color:#8f98a0;">Requesting access...</div>';
+            document.getElementById('file-browser-area').innerHTML = '<div style="color:#8f98a0; padding:20px; text-align:center;">Loading...</div>';
             socket.emit('request_file_browse', { deviceId: currentDeviceId, path });
+        }
+
+        function updateBreadcrumb(path) {
+            const bc = document.getElementById('file-breadcrumb');
+            if (!bc) return;
+
+            let html = '<span style="color:#66c0f4; cursor:pointer; font-size:14px;" onclick="browseFiles(\'\')" title="Drives">&#x1F4BB;</span>';
+
+            if (path) {
+                html += '<span style="color:#4a6278;">&#x203A;</span>';
+                const normalized = path.replace(/\//g, '\\');
+                const parts = normalized.split('\\').filter(p => p);
+                let accumulated = '';
+                parts.forEach((part, i) => {
+                    accumulated += (i === 0) ? part + '\\' : part + '\\';
+                    const clickPath = accumulated;
+                    const isLast = i === parts.length - 1;
+                    html += `<span style="color:${isLast ? '#c7d5e0' : '#66c0f4'}; cursor:pointer; font-size:13px; ${isLast ? 'font-weight:bold;' : ''}" onclick="browseFiles('${clickPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">${escapeHtml(part)}</span>`;
+                    if (!isLast) html += '<span style="color:#4a6278;">&#x203A;</span>';
+                });
+            }
+
+            bc.innerHTML = html;
         }
 
         function renderFileBrowser(data) {
             const area = document.getElementById('file-browser-area');
             if (!data.approved) {
-                area.innerHTML = `<div style="color:#ef5350; font-size:13px;">Access denied by user</div>`;
+                area.innerHTML = '<div style="color:#ef5350; padding:20px; text-align:center;">Access denied by user</div>';
                 return;
             }
             if (data.error) {
-                area.innerHTML = `<div style="color:#ef5350; font-size:13px;">${escapeHtml(data.error)}</div>`;
+                area.innerHTML = '<div style="color:#ef5350; padding:20px; text-align:center;">' + escapeHtml(data.error) + '</div>';
                 return;
             }
 
-            const entries = data.entries || [];
-            // Build breadcrumb
-            const parts = data.path.replace(/\\/g, '/').split('/').filter(Boolean);
-            let breadcrumb = '<div class="file-breadcrumb">';
-            let accumulated = '';
-            for (let i = 0; i < parts.length; i++) {
-                accumulated += parts[i] + '/';
-                const p = accumulated;
-                breadcrumb += `<span onclick="navigateToPath('${escapeHtml(p.replace(/'/g, "\\'"))}')">${escapeHtml(parts[i])}</span>/`;
-            }
-            breadcrumb += '</div>';
+            updateBreadcrumb(data.path || '');
 
-            let html = `<div class="file-browser">${breadcrumb}<ul class="file-list">`;
+            const entries = data.entries || [];
             if (entries.length === 0) {
-                html += '<li style="color:#8f98a0;">Directory is empty</li>';
+                area.innerHTML = '<div style="color:#8f98a0; padding:20px; text-align:center;">Empty directory</div>';
+                return;
             }
-            for (const entry of entries) {
-                const icon = entry.Type === 'dir' ? '\uD83D\uDCC1' : '\uD83D\uDCC4';
-                const size = entry.Type === 'file' ? formatFileSize(entry.SizeBytes) : '';
-                const fullPath = data.path.replace(/\\/g, '/').replace(/\/$/, '') + '/' + entry.Name;
-                if (entry.Type === 'dir') {
-                    html += `<li onclick="navigateToPath('${escapeHtml(fullPath.replace(/'/g, "\\'"))}')">
-                        <span class="file-icon">${icon}</span>
-                        <span class="file-name">${escapeHtml(entry.Name)}</span>
-                    </li>`;
-                } else {
-                    html += `<li onclick="requestFileRead('${escapeHtml(fullPath.replace(/'/g, "\\'"))}')">
-                        <span class="file-icon">${icon}</span>
-                        <span class="file-name">${escapeHtml(entry.Name)}</span>
-                        <span class="file-size">${size}</span>
-                    </li>`;
+
+            // Check if this is a drives listing
+            const isDrives = entries.some(e => e.Type === 'drive' || e.type === 'drive');
+
+            if (isDrives) {
+                // Render drives as a grid
+                let html = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; padding:8px;">';
+                entries.forEach(entry => {
+                    const name = entry.Name || entry.name;
+                    const size = entry.SizeBytes || entry.sizeBytes || 0;
+                    const sizeGB = (size / (1024*1024*1024)).toFixed(1);
+                    const driveLetter = name.replace('\\', '');
+                    html += `<div onclick="browseFiles('${name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')"
+                        style="background:#0e1621; border:1px solid #2a475e; border-radius:8px; padding:16px; cursor:pointer; text-align:center; transition:border-color 0.2s;"
+                        onmouseover="this.style.borderColor='#66c0f4'" onmouseout="this.style.borderColor='#2a475e'">
+                        <div style="font-size:32px; margin-bottom:8px;">&#x1F4BE;</div>
+                        <div style="color:#c7d5e0; font-weight:bold; font-size:15px;">${escapeHtml(driveLetter)}</div>
+                        <div style="color:#8f98a0; font-size:11px; margin-top:4px;">${sizeGB} GB</div>
+                    </div>`;
+                });
+                html += '</div>';
+                area.innerHTML = html;
+                return;
+            }
+
+            // Render file/folder list
+            let html = '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
+            html += '<thead><tr style="border-bottom:1px solid #2a475e; color:#8f98a0; font-size:11px; text-transform:uppercase;">';
+            html += '<th style="text-align:left; padding:6px 8px;">Name</th>';
+            html += '<th style="text-align:right; padding:6px 8px; width:90px;">Size</th>';
+            html += '<th style="text-align:right; padding:6px 8px; width:150px;">Modified</th>';
+            html += '</tr></thead><tbody>';
+
+            // Back navigation
+            if (data.path) {
+                const parentPath = data.path.replace(/\\[^\\]+\\?$/, '');
+                const backTarget = (parentPath === data.path || parentPath.length <= 2) ? '' : parentPath;
+                html += `<tr onclick="browseFiles('${backTarget.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')"
+                    style="cursor:pointer; border-bottom:1px solid #1b2838;"
+                    onmouseover="this.style.background='#1b2838'" onmouseout="this.style.background='transparent'">
+                    <td style="padding:8px; color:#66c0f4;">&#x2B06;&#xFE0F; ..</td>
+                    <td></td><td></td>
+                </tr>`;
+            }
+
+            // Sort: dirs first, then files, alphabetical
+            const sorted = [...entries].sort((a, b) => {
+                const aType = a.Type || a.type;
+                const bType = b.Type || b.type;
+                if (aType === 'dir' && bType !== 'dir') return -1;
+                if (aType !== 'dir' && bType === 'dir') return 1;
+                return (a.Name || a.name).localeCompare(b.Name || b.name);
+            });
+
+            sorted.forEach(entry => {
+                const name = entry.Name || entry.name;
+                const type = entry.Type || entry.type;
+                const size = entry.SizeBytes || entry.sizeBytes || 0;
+                const modified = entry.LastModified || entry.lastModified || '';
+                const isDir = type === 'dir';
+                const icon = isDir ? '&#x1F4C1;' : getFileIcon(name);
+
+                const fullPath = (data.path || '').replace(/\\$/, '') + '\\' + name;
+
+                let sizeStr = '';
+                if (!isDir) {
+                    if (size > 1024*1024*1024) sizeStr = (size/(1024*1024*1024)).toFixed(1) + ' GB';
+                    else if (size > 1024*1024) sizeStr = (size/(1024*1024)).toFixed(1) + ' MB';
+                    else if (size > 1024) sizeStr = (size/1024).toFixed(1) + ' KB';
+                    else sizeStr = size + ' B';
                 }
-            }
-            html += '</ul></div>';
+
+                let modStr = '';
+                if (modified) {
+                    try { modStr = new Date(modified).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e) {}
+                }
+
+                const clickAction = isDir
+                    ? `browseFiles('${fullPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')`
+                    : `requestFileRead('${fullPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')`;
+
+                html += `<tr onclick="${clickAction}"
+                    style="cursor:pointer; border-bottom:1px solid #1b2838;"
+                    onmouseover="this.style.background='#1b2838'" onmouseout="this.style.background='transparent'">
+                    <td style="padding:8px; color:${isDir ? '#66c0f4' : '#c7d5e0'};">${icon} ${escapeHtml(name)}</td>
+                    <td style="padding:8px; color:#8f98a0; text-align:right; font-size:12px;">${sizeStr}</td>
+                    <td style="padding:8px; color:#8f98a0; text-align:right; font-size:12px;">${modStr}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
             area.innerHTML = html;
         }
 
+        function getFileIcon(name) {
+            const ext = (name.split('.').pop() || '').toLowerCase();
+            const icons = {
+                txt: '&#x1F4DD;', log: '&#x1F4DD;', md: '&#x1F4DD;', csv: '&#x1F4DD;',
+                json: '&#x1F4CB;', xml: '&#x1F4CB;', yaml: '&#x1F4CB;', yml: '&#x1F4CB;', ini: '&#x1F4CB;', cfg: '&#x1F4CB;', conf: '&#x1F4CB;',
+                js: '&#x1F4DC;', ts: '&#x1F4DC;', py: '&#x1F4DC;', cs: '&#x1F4DC;', java: '&#x1F4DC;', cpp: '&#x1F4DC;', c: '&#x1F4DC;', h: '&#x1F4DC;', css: '&#x1F4DC;', html: '&#x1F4DC;',
+                jpg: '&#x1F5BC;&#xFE0F;', jpeg: '&#x1F5BC;&#xFE0F;', png: '&#x1F5BC;&#xFE0F;', gif: '&#x1F5BC;&#xFE0F;', bmp: '&#x1F5BC;&#xFE0F;', svg: '&#x1F5BC;&#xFE0F;', ico: '&#x1F5BC;&#xFE0F;', webp: '&#x1F5BC;&#xFE0F;',
+                pdf: '&#x1F4D5;', doc: '&#x1F4D8;', docx: '&#x1F4D8;', xls: '&#x1F4D7;', xlsx: '&#x1F4D7;', ppt: '&#x1F4D9;', pptx: '&#x1F4D9;',
+                zip: '&#x1F4E6;', rar: '&#x1F4E6;', '7z': '&#x1F4E6;', tar: '&#x1F4E6;', gz: '&#x1F4E6;',
+                exe: '&#x2699;&#xFE0F;', dll: '&#x2699;&#xFE0F;', msi: '&#x2699;&#xFE0F;', bat: '&#x2699;&#xFE0F;', cmd: '&#x2699;&#xFE0F;', ps1: '&#x2699;&#xFE0F;',
+                mp3: '&#x1F3B5;', wav: '&#x1F3B5;', flac: '&#x1F3B5;', ogg: '&#x1F3B5;',
+                mp4: '&#x1F3AC;', avi: '&#x1F3AC;', mkv: '&#x1F3AC;', mov: '&#x1F3AC;',
+                db: '&#x1F5C4;&#xFE0F;', sqlite: '&#x1F5C4;&#xFE0F;', sql: '&#x1F5C4;&#xFE0F;'
+            };
+            return icons[ext] || '&#x1F4C4;';
+        }
+
         function navigateToPath(path) {
-            if (!currentDeviceId || !socket) return;
-            document.getElementById('file-browse-path').value = path;
-            currentBrowsePath = path;
-            document.getElementById('file-browser-area').innerHTML = '<div style="font-size:13px; color:#8f98a0;">Requesting access...</div>';
-            socket.emit('request_file_browse', { deviceId: currentDeviceId, path });
+            browseFiles(path);
         }
 
         function requestFileRead(path) {
             if (!currentDeviceId || !socket) return;
-            document.getElementById('file-browser-area').innerHTML += '<div style="font-size:13px; color:#8f98a0; margin-top:8px;">Requesting file access...</div>';
             socket.emit('request_file_read', { deviceId: currentDeviceId, path });
         }
 
         function renderFileContent(data) {
             const area = document.getElementById('file-browser-area');
             if (!data.approved) {
-                area.innerHTML += `<div style="color:#ef5350; font-size:13px; margin-top:8px;">File read denied by user</div>`;
+                alert('File read denied by user');
                 return;
             }
             if (data.error) {
-                area.innerHTML += `<div style="color:#ef5350; font-size:13px; margin-top:8px;">${escapeHtml(data.error)}</div>`;
+                alert('Error: ' + data.error);
                 return;
             }
-            const fileName = data.path.split(/[/\\]/).pop();
-            const viewer = `<div class="file-viewer">
-                <div class="file-header">
-                    <span>${escapeHtml(fileName)} (${formatFileSize(data.sizeBytes)})</span>
-                    <button class="diag-btn" onclick="copyFileContent()" style="font-size:11px; padding:3px 8px;">Copy</button>
-                </div>
-                <pre id="file-content-pre">${escapeHtml(data.content)}</pre>
-            </div>`;
-            // Append viewer below the file list
-            area.innerHTML += viewer;
+
+            const filename = (data.path || '').split('\\').pop();
+            const sizeKB = ((data.sizeBytes || 0) / 1024).toFixed(1);
+
+            let html = '<div style="border:1px solid #2a475e; border-radius:8px; overflow:hidden;">';
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#0e1621; border-bottom:1px solid #2a475e;">';
+            html += '<div style="color:#c7d5e0; font-size:13px;"><strong>' + escapeHtml(filename) + '</strong> <span style="color:#8f98a0;">(' + sizeKB + ' KB)</span></div>';
+            html += '<button onclick="browseFiles(currentBrowsePath)" style="background:#2a475e; color:#c7d5e0; border:none; border-radius:4px; padding:4px 12px; cursor:pointer; font-size:12px;">&#x2715; Close</button>';
+            html += '</div>';
+            html += '<pre style="margin:0; padding:12px; background:#0a0f18; color:#c7d5e0; font-size:12px; font-family:Consolas,monospace; max-height:400px; overflow:auto; white-space:pre-wrap; word-break:break-all;">' + escapeHtml(data.content || '') + '</pre>';
+            html += '</div>';
+            area.innerHTML = html;
         }
 
         function copyFileContent() {

@@ -114,6 +114,7 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnFileUploadRequest += OnServerFileUploadRequest;
         _serverConnection.OnInstallerRequest += OnServerInstallerRequest;
         _serverConnection.OnScreenshotRequest += OnServerScreenshotRequest;
+        _serverConnection.OnServerUrlChanged += OnServerUrlChanged;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -964,6 +965,76 @@ public class TrayApplication : ApplicationContext
             requiresApproval = true
         });
         _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
+    }
+
+    private async void OnServerUrlChanged(string newUrl)
+    {
+        Logger.Info($"Server URL changed to: {newUrl}");
+
+        // Update appsettings.json
+        try
+        {
+            var configPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+
+            // Remove read-only if set
+            if (File.Exists(configPath))
+            {
+                var attrs = File.GetAttributes(configPath);
+                if ((attrs & FileAttributes.ReadOnly) != 0)
+                    File.SetAttributes(configPath, attrs & ~FileAttributes.ReadOnly);
+            }
+
+            // Read, update, write
+            var json = File.Exists(configPath) ? File.ReadAllText(configPath) : "{}";
+            using var doc = JsonDocument.Parse(json);
+            using var ms = new System.IO.MemoryStream();
+            using (var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
+            {
+                writer.WriteStartObject();
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (prop.Name == "Server")
+                    {
+                        writer.WriteStartObject("Server");
+                        foreach (var serverProp in prop.Value.EnumerateObject())
+                        {
+                            if (serverProp.Name == "Url")
+                                writer.WriteString("Url", newUrl);
+                            else
+                                serverProp.WriteTo(writer);
+                        }
+                        writer.WriteEndObject();
+                    }
+                    else
+                    {
+                        prop.WriteTo(writer);
+                    }
+                }
+                writer.WriteEndObject();
+            }
+            File.WriteAllText(configPath, System.Text.Encoding.UTF8.GetString(ms.ToArray()));
+
+            // Re-protect config
+            File.SetAttributes(configPath, File.GetAttributes(configPath) | FileAttributes.ReadOnly);
+            Logger.Info("appsettings.json updated with new server URL");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to update appsettings.json: {ex.Message}");
+        }
+
+        // Update UpdateService URL
+        _updateService?.UpdateServerUrl(newUrl);
+
+        // Reconnect with new URL
+        try
+        {
+            await _serverConnection.ReconnectWithNewUrl(newUrl);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Failed to reconnect with new URL: {ex.Message}");
+        }
     }
 
     private async void OnServerConnectedReady()

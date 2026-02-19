@@ -337,6 +337,17 @@ router.put('/settings', requireAdmin, (req, res) => {
     });
   }
 
+  // If server URL changed, notify all connected clients
+  if (updates['server.publicUrl']) {
+    const newUrl = updates['server.publicUrl'];
+    const io = req.app.locals.io;
+    if (io) {
+      const agentNs = io.of('/agent');
+      agentNs.emit('server_url_changed', { url: newUrl });
+      console.log(`[Settings] Broadcasted server_url_changed to all clients: ${newUrl}`);
+    }
+  }
+
   // Audit log
   try {
     db.prepare(

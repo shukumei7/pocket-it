@@ -21,7 +21,7 @@ public class UpdateInfo
 
 public class UpdateService : IDisposable
 {
-    private readonly string _serverUrl;
+    private string _serverUrl;
     private readonly string _deviceId;
     private readonly string _deviceSecret;
     private readonly HttpClient _httpClient;
@@ -42,6 +42,11 @@ public class UpdateService : IDisposable
         // Check every 4 hours
         _checkTimer = new System.Timers.Timer(4 * 60 * 60 * 1000);
         _checkTimer.Elapsed += async (_, _) => await CheckForUpdateAsync();
+    }
+
+    public void UpdateServerUrl(string newUrl)
+    {
+        _serverUrl = newUrl.TrimEnd('/');
     }
 
     public void Start()

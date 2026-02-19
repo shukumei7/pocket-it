@@ -12,7 +12,7 @@ namespace PocketIT.Core;
 public class ServerConnection : IDisposable
 {
     private SocketIOClient.SocketIO? _socket;
-    private readonly string _serverUrl;
+    private string _serverUrl;
     private readonly string _deviceId;
     private string _deviceSecret;
     private readonly System.Timers.Timer _heartbeatTimer;
@@ -47,6 +47,7 @@ public class ServerConnection : IDisposable
     public event Action<string, string, string, string>? OnFileUploadRequest; // requestId, destinationPath, filename, base64data
     public event Action<string, string, string, string?, int>? OnInstallerRequest; // requestId, filename, fileData(base64), silentArgs, timeoutSeconds
     public event Action<string, string>? OnScreenshotRequest; // requestId, reason
+    public event Action<string>? OnServerUrlChanged; // newUrl
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -334,6 +335,17 @@ public class ServerConnection : IDisposable
             OnScreenshotRequest?.Invoke(requestId, reason);
         });
 
+        _socket.On("server_url_changed", response =>
+        {
+            var data = response.GetValue<JsonElement>();
+            var url = data.TryGetProperty("url", out var urlProp) ? urlProp.GetString() ?? "" : "";
+            if (!string.IsNullOrEmpty(url))
+            {
+                Logger.Info($"Server URL changed to: {url}");
+                OnServerUrlChanged?.Invoke(url);
+            }
+        });
+
         try
         {
             await _socket.ConnectAsync();
@@ -559,5 +571,24 @@ public class ServerConnection : IDisposable
         _heartbeatTimer.Dispose();
         _socket?.DisconnectAsync().Wait();
         _socket?.Dispose();
+    }
+
+    public async Task ReconnectWithNewUrl(string newUrl)
+    {
+        Logger.Info($"Reconnecting with new server URL: {newUrl}");
+        _serverUrl = newUrl;
+
+        // Disconnect existing socket
+        if (_socket != null)
+        {
+            try { await _socket.DisconnectAsync(); } catch { }
+            _socket.Dispose();
+            _socket = null;
+        }
+        _isConnected = false;
+        _heartbeatTimer.Stop();
+
+        // Reconnect with new URL
+        await ConnectAsync();
     }
 }

@@ -110,7 +110,8 @@ const llmService = new LLMService({
   anthropicKey: process.env.POCKET_IT_ANTHROPIC_API_KEY || '',
   anthropicModel: process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
   claudeCliModel: process.env.POCKET_IT_CLAUDE_CLI_MODEL || '',
-  ollamaModel: process.env.POCKET_IT_OLLAMA_MODEL || 'llama3.2'
+  ollamaModel: process.env.POCKET_IT_OLLAMA_MODEL || 'llama3.2',
+  timeoutMs: 120000
 });
 
 const diagnosticAI = new DiagnosticAI(llmService, db);
@@ -131,7 +132,8 @@ try {
       openaiModel: s['llm.openai.model'] || llmService.openaiModel,
       anthropicKey: s['llm.anthropic.apiKey'] || llmService.anthropicKey,
       anthropicModel: s['llm.anthropic.model'] || llmService.anthropicModel,
-      claudeCliModel: s['llm.claudeCli.model'] || llmService.claudeCliModel
+      claudeCliModel: s['llm.claudeCli.model'] || llmService.claudeCliModel,
+      timeoutMs: parseInt(s['llm.timeout'], 10) || 120000
     });
   }
 } catch (err) {

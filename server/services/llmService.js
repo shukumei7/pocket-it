@@ -10,6 +10,7 @@ class LLMService {
     this.anthropicModel = config.anthropicModel || 'claude-sonnet-4-5-20250929';
     this.ollamaModel = config.ollamaModel || 'llama3.2';
     this.claudeCliModel = config.claudeCliModel || ''; // empty = use default
+    this.timeoutMs = config.timeoutMs || 120000; // default 120s
   }
 
   reconfigure(config) {
@@ -21,6 +22,7 @@ class LLMService {
     if (config.anthropicKey !== undefined) this.anthropicKey = config.anthropicKey;
     if (config.anthropicModel !== undefined) this.anthropicModel = config.anthropicModel;
     if (config.claudeCliModel !== undefined) this.claudeCliModel = config.claudeCliModel;
+    if (config.timeoutMs !== undefined) this.timeoutMs = config.timeoutMs;
     console.log(`[LLM] Reconfigured: provider=${this.provider}`);
   }
 
@@ -35,7 +37,7 @@ class LLMService {
 
   async _openaiChat(messages) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -79,7 +81,7 @@ class LLMService {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -103,62 +105,66 @@ class LLMService {
   }
 
   async _claudeCliChat(messages) {
-    // Use "claude -p" (pipe mode) — sends prompt via stdin, gets response on stdout
-    // Flatten messages into a single prompt string
+    // Claude Code CLI: claude -p "prompt" --system-prompt "system" --model "model"
     const systemMsg = messages.find(m => m.role === 'system');
     const chatMessages = messages.filter(m => m.role !== 'system');
 
+    // Build conversation as a single prompt string
     let prompt = '';
-    if (systemMsg) {
-      prompt += `<system>\n${systemMsg.content}\n</system>\n\n`;
-    }
     for (const msg of chatMessages) {
       const role = msg.role === 'assistant' ? 'Assistant' : 'User';
       prompt += `${role}: ${msg.content}\n\n`;
     }
     prompt += 'Assistant:';
 
-    const args = ['-p'];
+    const args = ['-p', prompt];
+    console.log(`[LLM] Claude CLI: spawning with ${args.length} args, prompt length=${prompt.length}, system prompt length=${systemMsg ? systemMsg.content.length : 0}`);
+    if (systemMsg) {
+      args.push('--system-prompt', systemMsg.content);
+    }
     if (this.claudeCliModel) {
       args.push('--model', this.claudeCliModel);
     }
 
     const env = { ...process.env };
     delete env.CLAUDECODE;
+    delete env.CLAUDE_CODE_ENTRYPOINT;
 
     return new Promise((resolve, reject) => {
-      const child = spawn('claude', args, { env });
+      const child = spawn('claude', args, { env, windowsHide: true });
       let stdout = '';
       let stderr = '';
 
       child.stdout.on('data', (d) => { stdout += d; });
       child.stderr.on('data', (d) => { stderr += d; });
 
-      child.on('error', (err) => reject(new Error(`Claude CLI spawn error: ${err.message}`)));
+      child.on('error', (err) => {
+        console.error(`[LLM] Claude CLI spawn failed: ${err.message}`);
+        reject(new Error(`Claude CLI spawn error: ${err.message}`));
+      });
 
       child.on('close', (code) => {
+        clearTimeout(timer);
         if (code !== 0) {
+          console.error(`[LLM] Claude CLI failed (exit ${code}): ${stderr.substring(0, 500)}`);
           reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
         } else {
+          console.log(`[LLM] Claude CLI responded (${stdout.length} chars)`);
           resolve(stdout.trim());
         }
       });
 
       const timer = setTimeout(() => {
+        console.error(`[LLM] Claude CLI timed out after ${this.timeoutMs / 1000}s`);
         child.kill();
-        reject(new Error('Claude CLI timed out after 60s'));
-      }, 60000);
-
-      child.on('close', () => clearTimeout(timer));
-
-      child.stdin.write(prompt);
-      child.stdin.end();
+        reject(new Error(`Claude CLI timed out after ${this.timeoutMs / 1000}s`));
+      }, this.timeoutMs);
     });
   }
 
   async _ollamaChat(messages) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const response = await fetch(`${this.ollamaUrl}/api/chat`, {
         method: 'POST',

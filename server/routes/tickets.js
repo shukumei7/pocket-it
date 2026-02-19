@@ -73,6 +73,41 @@ router.post('/', requireDevice, (req, res) => {
   res.status(201).json({ id: result.lastInsertRowid, device_id, title });
 });
 
+// IT staff manual ticket creation
+router.post('/manual', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const { device_id, title, description, priority, category } = req.body;
+
+  if (!title || !device_id) {
+    return res.status(400).json({ error: 'Title and device are required' });
+  }
+  if (title.length > 500) {
+    return res.status(400).json({ error: 'Title too long (max 500 chars)' });
+  }
+  if (description && description.length > 10000) {
+    return res.status(400).json({ error: 'Description too long (max 10000 chars)' });
+  }
+
+  if (!isDeviceInScope(db, device_id, req.clientScope)) {
+    return res.status(403).json({ error: 'Device not in scope' });
+  }
+
+  const validPriorities = ['low', 'medium', 'high', 'critical'];
+  const safePriority = validPriorities.includes(priority) ? priority : 'medium';
+  const now = new Date().toISOString();
+
+  const result = db.prepare(`
+    INSERT INTO tickets (device_id, title, description, priority, category, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(device_id, title, description || null, safePriority, category || null, now, now);
+
+  db.prepare(
+    "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+  ).run(req.user?.username || 'it_staff', 'ticket_created_manual', device_id, JSON.stringify({ title, priority: safePriority }));
+
+  res.status(201).json({ id: result.lastInsertRowid, device_id, title });
+});
+
 router.patch('/:id', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const { status, assigned_to, priority } = req.body;

@@ -70,8 +70,9 @@ router.get('/:id/activity', requireIT, resolveClientScope, (req, res) => {
   const conditions = ['target = ?'];
   const params = [deviceId];
 
-  if (req.query.action) {
-    const actions = req.query.action.split(',').map(a => a.trim()).filter(Boolean);
+  const actionParam = req.query.action || req.query.actions;
+  if (actionParam) {
+    const actions = actionParam.split(',').map(a => a.trim()).filter(Boolean);
     if (actions.length > 0) {
       conditions.push(`action IN (${actions.map(() => '?').join(',')})`);
       params.push(...actions);

@@ -1102,7 +1102,10 @@ function setup(io, app) {
 
     // v0.14.0: IT-to-AI Guidance Chat
     socket.on('it_guidance_message', async (data) => {
-      const { deviceId, content } = data || {};
+      let deviceId;
+      try {
+      const { deviceId: did, content } = data || {};
+      deviceId = did;
 
       if (!deviceId || !content) {
         socket.emit('error_message', { message: 'deviceId and content are required' });
@@ -1133,7 +1136,6 @@ function setup(io, app) {
         return;
       }
 
-      try {
         const db = app.locals.db;
         const device = db.prepare('SELECT hostname, os_version, cpu_model, total_ram_gb, total_disk_gb, processor_count FROM devices WHERE device_id = ?').get(deviceId);
         const deviceInfo = device ? {
@@ -1215,7 +1217,7 @@ function setup(io, app) {
 
       } catch (err) {
         console.error('[IT] it_guidance_message error:', err.message);
-        socket.emit('it_guidance_response', { deviceId, text: 'Error processing guidance request.', action: null });
+        socket.emit('it_guidance_response', { deviceId: deviceId || null, text: 'Error processing guidance request: ' + err.message, action: null });
       }
     });
 

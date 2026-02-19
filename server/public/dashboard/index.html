@@ -1117,7 +1117,54 @@
 
         <!-- Tickets page -->
         <div class="page" id="page-tickets">
-            <h2 class="section-title">Support Tickets</h2>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h2 class="section-title" style="margin-bottom:0;">Support Tickets</h2>
+                <button class="diag-btn" onclick="showCreateTicketForm()" style="background:#66c0f4; color:#1b2838; font-weight:600; padding:8px 16px;">+ New Ticket</button>
+            </div>
+            <!-- Create ticket form -->
+            <div id="create-ticket-form" class="client-form" style="display:none; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <span style="font-weight:600; color:#c7d5e0;">New Support Ticket</span>
+                    <button class="diag-btn" onclick="hideCreateTicketForm()" style="font-size:12px; padding:4px 10px;">Cancel</button>
+                </div>
+                <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:250px;">
+                        <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Title *</label>
+                        <input type="text" id="new-ticket-title" placeholder="Brief description of the issue" style="width:100%; box-sizing:border-box;">
+                    </div>
+                    <div style="min-width:200px; position:relative;">
+                        <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Device *</label>
+                        <input type="hidden" id="new-ticket-device" value="">
+                        <input type="text" id="new-ticket-device-search" placeholder="Search device..." autocomplete="off"
+                            style="width:100%; box-sizing:border-box; padding:8px 10px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:6px; font-size:13px;"
+                            oninput="filterTicketDevices()" onfocus="filterTicketDevices()">
+                        <div id="new-ticket-device-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; z-index:50; max-height:180px; overflow-y:auto; background:#0f1923; border:1px solid #2a475e; border-top:none; border-radius:0 0 6px 6px; box-shadow:0 4px 12px rgba(0,0,0,0.4);"></div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:16px; margin-top:12px; flex-wrap:wrap;">
+                    <div style="min-width:120px;">
+                        <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Priority</label>
+                        <select id="new-ticket-priority" style="width:100%; padding:8px 10px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:6px; font-size:13px;">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                    <div style="min-width:120px;">
+                        <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Category</label>
+                        <input type="text" id="new-ticket-category" placeholder="e.g. Hardware, Network" style="width:100%; box-sizing:border-box;">
+                    </div>
+                </div>
+                <div style="margin-top:12px;">
+                    <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Description</label>
+                    <textarea id="new-ticket-description" placeholder="Detailed description of the issue, steps to reproduce, etc." style="width:100%; min-height:80px; box-sizing:border-box; resize:vertical;"></textarea>
+                </div>
+                <div style="margin-top:12px; display:flex; gap:8px;">
+                    <button class="diag-btn" onclick="submitNewTicket()" style="background:#66c0f4; color:#1b2838; font-weight:600; padding:8px 20px;">Create Ticket</button>
+                    <button class="diag-btn" onclick="hideCreateTicketForm()">Cancel</button>
+                </div>
+            </div>
             <ul class="ticket-list" id="ticket-list">
                 <div class="empty-state">No tickets yet.</div>
             </ul>
@@ -1686,8 +1733,16 @@
                 </div>
 
                 <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
-                    <button class="diag-btn" onclick="testLLMConnection()" id="test-llm-btn" style="background:#1a3a5c;">Test Connection</button>
+                    <button class="diag-btn" onclick="testLLMConnection()" id="test-llm-btn-inline" style="background:#1a3a5c;">Test Connection</button>
                     <span id="test-llm-status" style="font-size:12px;color:#8f98a0;"></span>
+                </div>
+
+                <div style="margin-top:16px;">
+                    <label style="font-size:13px; color:#8f98a0;">Response Timeout</label>
+                    <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+                        <input type="number" id="setting-llm-timeout" value="120" min="15" max="600" style="width:80px;padding:6px 10px;background:#0f1923;border:1px solid #2a475e;color:#c7d5e0;border-radius:4px;font-size:13px;">
+                        <span style="font-size:12px; color:#8f98a0;">seconds (15-600). How long to wait for LLM response before timing out.</span>
+                    </div>
                 </div>
             </div>
 
@@ -1709,8 +1764,10 @@
             <!-- Save button -->
             <div style="display:flex;align-items:center;gap:12px;">
                 <button class="diag-btn" onclick="saveSettings()" style="padding:10px 24px;font-size:14px;">Save Settings</button>
+                <button id="test-llm-btn" onclick="testLLMConnection()" style="background:#2563eb; color:white; border:none; border-radius:6px; padding:8px 18px; cursor:pointer; font-size:14px; margin-left:10px;">Test LLM Connection</button>
                 <span id="save-settings-status" style="font-size:12px;color:#8f98a0;"></span>
             </div>
+            <div id="llm-test-result" style="display:none; margin-top:8px; padding:8px 12px; border-radius:6px; background:#1a1a2e; font-size:13px;"></div>
         </div>
     </div>
 
@@ -2381,6 +2438,97 @@
                 }
             } catch (err) {
                 console.error('Failed to load fleet:', err);
+            }
+        }
+
+        let ticketDevicesCache = [];
+
+        function showCreateTicketForm() {
+            const form = document.getElementById('create-ticket-form');
+            form.style.display = '';
+            document.getElementById('new-ticket-device').value = '';
+            document.getElementById('new-ticket-device-search').value = '';
+            fetchWithAuth(`${API}/api/devices`).then(r => r.json()).then(devices => {
+                ticketDevicesCache = devices;
+            }).catch(() => { ticketDevicesCache = []; });
+        }
+
+        function filterTicketDevices() {
+            const query = document.getElementById('new-ticket-device-search').value.toLowerCase();
+            const dropdown = document.getElementById('new-ticket-device-dropdown');
+            const matches = ticketDevicesCache.filter(d =>
+                (d.hostname || '').toLowerCase().includes(query) ||
+                d.device_id.toLowerCase().includes(query)
+            ).slice(0, 20);
+
+            if (matches.length === 0) {
+                dropdown.innerHTML = '<div style="padding:8px 10px; color:#8f98a0; font-size:12px;">No devices match</div>';
+            } else {
+                dropdown.innerHTML = matches.map(d => {
+                    const online = d.status === 'online';
+                    return `<div style="padding:7px 10px; cursor:pointer; font-size:13px; color:#c7d5e0; display:flex; align-items:center; gap:8px; transition:background 0.1s;"
+                        onmousedown="selectTicketDevice('${d.device_id}', '${escapeHtml(d.hostname || d.device_id)}')"
+                        onmouseenter="this.style.background='rgba(102,192,244,0.1)'" onmouseleave="this.style.background=''">
+                        <span style="width:7px; height:7px; border-radius:50%; background:${online ? '#4caf50' : '#616161'}; flex-shrink:0;"></span>
+                        <span>${escapeHtml(d.hostname || d.device_id)}</span>
+                        <span style="font-size:11px; color:#8f98a0; margin-left:auto;">${online ? 'online' : 'offline'}</span>
+                    </div>`;
+                }).join('');
+            }
+            dropdown.style.display = '';
+        }
+
+        function selectTicketDevice(deviceId, label) {
+            document.getElementById('new-ticket-device').value = deviceId;
+            document.getElementById('new-ticket-device-search').value = label;
+            document.getElementById('new-ticket-device-dropdown').style.display = 'none';
+        }
+
+        document.addEventListener('click', (e) => {
+            const dd = document.getElementById('new-ticket-device-dropdown');
+            const search = document.getElementById('new-ticket-device-search');
+            if (dd && search && !search.contains(e.target) && !dd.contains(e.target)) {
+                dd.style.display = 'none';
+            }
+        });
+
+        function hideCreateTicketForm() {
+            document.getElementById('create-ticket-form').style.display = 'none';
+            document.getElementById('new-ticket-title').value = '';
+            document.getElementById('new-ticket-description').value = '';
+            document.getElementById('new-ticket-category').value = '';
+            document.getElementById('new-ticket-priority').value = 'medium';
+            document.getElementById('new-ticket-device').value = '';
+            document.getElementById('new-ticket-device-search').value = '';
+            document.getElementById('new-ticket-device-dropdown').style.display = 'none';
+        }
+
+        async function submitNewTicket() {
+            const title = document.getElementById('new-ticket-title').value.trim();
+            const device_id = document.getElementById('new-ticket-device').value;
+            const description = document.getElementById('new-ticket-description').value.trim();
+            const priority = document.getElementById('new-ticket-priority').value;
+            const category = document.getElementById('new-ticket-category').value.trim();
+
+            if (!title) { alert('Title is required'); return; }
+            if (!device_id) { alert('Please select a device'); return; }
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/tickets/manual`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, device_id, description, priority, category: category || null })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert('Error: ' + (err.error || 'Failed to create ticket'));
+                    return;
+                }
+                hideCreateTicketForm();
+                loadTickets();
+            } catch (err) {
+                console.error('Failed to create ticket:', err);
+                alert('Failed to create ticket');
             }
         }
 
@@ -4699,7 +4847,8 @@
                     if (!append) tbody.innerHTML = '<tr><td colspan="4" style="color:#8f98a0; text-align:center; padding:24px;">Failed to load activity.</td></tr>';
                     return;
                 }
-                const activities = await res.json();
+                const data = await res.json();
+                const activities = data.activities || data;
 
                 if (!append) {
                     if (activities.length === 0) {
@@ -4717,7 +4866,7 @@
                 }
 
                 activityCurrentPage = page;
-                loadMoreBtn.style.display = activities.length < ACTIVITY_LIMIT ? 'none' : 'block';
+                loadMoreBtn.style.display = (activities.length < ACTIVITY_LIMIT || activities.length === 0) ? 'none' : 'block';
             } catch (err) {
                 console.error('Failed to load activity:', err);
                 if (!append) tbody.innerHTML = '<tr><td colspan="4" style="color:#8f98a0; text-align:center; padding:24px;">Error loading activity.</td></tr>';
@@ -4831,6 +4980,7 @@
                     document.getElementById('setting-anthropic-key').value = settings['llm.anthropic.apiKey'] || '';
                     document.getElementById('setting-anthropic-model').value = settings['llm.anthropic.model'] || '';
                     document.getElementById('setting-claude-cli-model').value = settings['llm.claudeCli.model'] || '';
+                    document.getElementById('setting-llm-timeout').value = settings['llm.timeout'] ? Math.round(parseInt(settings['llm.timeout'], 10) / 1000) : 120;
 
                     toggleLLMProvider();
                     updateSystemInfo(settings);
@@ -4863,7 +5013,8 @@
                 'llm.openai.model': document.getElementById('setting-openai-model').value.trim(),
                 'llm.anthropic.apiKey': document.getElementById('setting-anthropic-key').value.trim(),
                 'llm.anthropic.model': document.getElementById('setting-anthropic-model').value.trim(),
-                'llm.claudeCli.model': document.getElementById('setting-claude-cli-model').value.trim()
+                'llm.claudeCli.model': document.getElementById('setting-claude-cli-model').value.trim(),
+                'llm.timeout': String(Math.max(15, Math.min(600, parseInt(document.getElementById('setting-llm-timeout').value, 10) || 120)) * 1000)
             };
 
             try {
@@ -4887,29 +5038,37 @@
             }
         }
 
+        let _llmTestRunning = false;
         async function testLLMConnection() {
-            const btn = document.getElementById('test-llm-btn');
-            const statusEl = document.getElementById('test-llm-status');
-            btn.disabled = true;
-            btn.textContent = 'Testing...';
-            statusEl.textContent = '';
+            if (_llmTestRunning) return;
+            _llmTestRunning = true;
+
+            const btns = [document.getElementById('test-llm-btn'), document.getElementById('test-llm-btn-inline')].filter(Boolean);
+            const resultDiv = document.getElementById('llm-test-result');
+            const statusSpan = document.getElementById('test-llm-status');
+
+            btns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+            if (resultDiv) { resultDiv.textContent = 'Testing LLM connection... (may take up to 2 minutes)'; resultDiv.style.color = '#8f98a0'; resultDiv.style.display = 'block'; }
+            if (statusSpan) statusSpan.textContent = 'Testing...';
 
             try {
-                const res = await fetchWithAuth(`${API}/api/admin/settings/test-llm`, { method: 'POST' });
+                const res = await fetchWithAuth(`${API}/api/llm/test`, { method: 'POST' });
                 const data = await res.json();
-                if (data.success) {
-                    statusEl.textContent = `Connected! Provider: ${data.provider}, Model: ${data.model}`;
-                    statusEl.style.color = '#66bb6a';
-                } else {
-                    statusEl.textContent = `Failed: ${data.error}`;
-                    statusEl.style.color = '#ef5350';
-                }
+
+                const msg = data.success
+                    ? `OK — ${data.provider}/${data.model} responded in ${data.durationMs}ms: "${data.response}"`
+                    : `FAILED — ${data.provider}/${data.model}: ${data.error}`;
+                const color = data.success ? '#22c55e' : '#ef4444';
+
+                if (resultDiv) { resultDiv.style.color = color; resultDiv.textContent = msg; resultDiv.style.display = 'block'; }
+                if (statusSpan) { statusSpan.style.color = color; statusSpan.textContent = data.success ? 'Connected' : 'Failed'; }
             } catch (err) {
-                statusEl.textContent = 'Test error: ' + err.message;
-                statusEl.style.color = '#ef5350';
+                const msg = `Connection error: ${err.message}`;
+                if (resultDiv) { resultDiv.style.color = '#ef4444'; resultDiv.textContent = msg; resultDiv.style.display = 'block'; }
+                if (statusSpan) { statusSpan.style.color = '#ef4444'; statusSpan.textContent = 'Error'; }
             } finally {
-                btn.disabled = false;
-                btn.textContent = 'Test Connection';
+                btns.forEach(b => { b.disabled = false; b.style.opacity = ''; b.style.pointerEvents = ''; });
+                _llmTestRunning = false;
             }
         }
 

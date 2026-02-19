@@ -239,7 +239,8 @@ router.put('/settings', requireAdmin, (req, res) => {
     'llm.provider', 'llm.ollama.url', 'llm.ollama.model',
     'llm.openai.apiKey', 'llm.openai.model',
     'llm.anthropic.apiKey', 'llm.anthropic.model',
-    'llm.claudeCli.model'
+    'llm.claudeCli.model',
+    'llm.timeout'
   ];
 
   const upsert = db.prepare(
@@ -275,7 +276,8 @@ router.put('/settings', requireAdmin, (req, res) => {
       openaiModel: fresh['llm.openai.model'] || process.env.POCKET_IT_OPENAI_MODEL || 'gpt-4o-mini',
       anthropicKey: fresh['llm.anthropic.apiKey'] || process.env.POCKET_IT_ANTHROPIC_API_KEY || '',
       anthropicModel: fresh['llm.anthropic.model'] || process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
-      claudeCliModel: fresh['llm.claudeCli.model'] || process.env.POCKET_IT_CLAUDE_CLI_MODEL || ''
+      claudeCliModel: fresh['llm.claudeCli.model'] || process.env.POCKET_IT_CLAUDE_CLI_MODEL || '',
+      timeoutMs: parseInt(fresh['llm.timeout'], 10) || 120000
     });
   }
 

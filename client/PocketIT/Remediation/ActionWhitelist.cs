@@ -50,6 +50,36 @@ public static class ActionWhitelist
             "Restart Service",
             "Stops and restarts a Windows service by name. Only whitelisted services are allowed.",
             "Medium"
+        ),
+        ["restart_explorer"] = new RemediationInfo(
+            "restart_explorer",
+            "Restart Windows Explorer",
+            "Restarts explorer.exe to fix frozen taskbar, start menu, or file explorer windows.",
+            "Medium"
+        ),
+        ["sfc_scan"] = new RemediationInfo(
+            "sfc_scan",
+            "System File Checker",
+            "Runs SFC /scannow to detect and repair corrupted Windows system files. This may take several minutes.",
+            "Medium"
+        ),
+        ["dism_repair"] = new RemediationInfo(
+            "dism_repair",
+            "DISM Image Repair",
+            "Runs DISM /Online /Cleanup-Image /RestoreHealth to repair the Windows system image. This may take 10-15 minutes.",
+            "Medium"
+        ),
+        ["clear_update_cache"] = new RemediationInfo(
+            "clear_update_cache",
+            "Clear Windows Update Cache",
+            "Stops Windows Update service, clears the SoftwareDistribution folder, and restarts the service. Fixes stuck or failed updates.",
+            "Medium"
+        ),
+        ["reset_network_adapter"] = new RemediationInfo(
+            "reset_network_adapter",
+            "Reset Network Adapter",
+            "Disables and re-enables the primary network adapter. Fixes stuck or unresponsive network connections.",
+            "Medium"
         )
     };
 

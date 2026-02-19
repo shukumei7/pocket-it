@@ -15,6 +15,11 @@ public class RemediationEngine
         RegisterAction(new Actions.ClearBrowserCacheAction());
         RegisterAction(new Actions.KillProcessAction());
         RegisterAction(new Actions.GenericRestartServiceAction());
+        RegisterAction(new Actions.RestartExplorerAction());
+        RegisterAction(new Actions.SfcScanAction());
+        RegisterAction(new Actions.DismRepairAction());
+        RegisterAction(new Actions.ClearUpdateCacheAction());
+        RegisterAction(new Actions.ResetNetworkAdapterAction());
     }
 
     private void RegisterAction(IRemediationAction action)

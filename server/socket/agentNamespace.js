@@ -17,6 +17,10 @@ function setup(io, app) {
   // Only diagnostic results matching a pending AI request get fed back to the AI
   const pendingAIDiagnostics = new Set();
 
+  // Defense-in-depth: track PIDs seen in recent diagnostic results per device
+  // Used to verify kill_process PIDs before emitting remediation requests
+  const recentDiagnosticPIDs = new Map(); // deviceId -> Set of PIDs
+
   // Diagnostic descriptions for chat UI
   const DIAGNOSTIC_DESCRIPTIONS = {
     cpu: 'CPU Usage Check',
@@ -261,7 +265,7 @@ function setup(io, app) {
 
         // If action is remediate, validate action ID before requesting approval
         if (response.action && response.action.type === 'remediate') {
-          const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service'];
+          const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service', 'restart_explorer', 'sfc_scan', 'dism_repair', 'clear_update_cache', 'reset_network_adapter'];
           if (VALID_ACTIONS.includes(response.action.actionId)) {
             // Audit log: AI remediation requested
             try {
@@ -278,14 +282,20 @@ function setup(io, app) {
               if (!Number.isInteger(pid) || pid < 1 || pid > 65535) {
                 console.warn(`[Agent] Blocked kill_process with invalid PID: ${param}`);
               } else {
-                socket.emit('remediation_request', {
-                  actionId: response.action.actionId,
-                  requestId: Date.now().toString(),
-                  parameter: String(pid)
-                });
+                // Defense-in-depth: verify PID was seen in recent diagnostics
+                const knownPIDs = recentDiagnosticPIDs.get(deviceId);
+                if (!knownPIDs || !knownPIDs.has(pid)) {
+                  console.warn(`[Agent] Blocked kill_process: PID ${pid} not found in recent diagnostics for ${deviceId}`);
+                } else {
+                  socket.emit('remediation_request', {
+                    actionId: response.action.actionId,
+                    requestId: Date.now().toString(),
+                    parameter: String(pid)
+                  });
+                }
               }
             } else if (response.action.actionId === 'restart_service') {
-              const ALLOWED_SERVICES = ['spooler', 'wuauserv', 'bits', 'dnscache', 'w32time', 'winmgmt', 'themes', 'audiosrv', 'wsearch'];
+              const ALLOWED_SERVICES = ['spooler', 'wuauserv', 'bits', 'dnscache', 'w32time', 'winmgmt', 'themes', 'audiosrv', 'wsearch', 'tabletinputservice', 'sysmain', 'diagtrack'];
               if (!param || !ALLOWED_SERVICES.includes(param.toLowerCase())) {
                 console.warn(`[Agent] Blocked restart_service with invalid service: ${param}`);
               } else {
@@ -367,6 +377,31 @@ function setup(io, app) {
           .run(deviceId, 'diagnostic_completed', data.checkType, JSON.stringify({ status: data.status }));
       } catch (err) {
         console.error('[Agent] Audit log error:', err.message);
+      }
+
+      // Extract PIDs from diagnostic results for kill_process defense-in-depth validation
+      if (data.results) {
+        const pids = new Set();
+        const extractPIDs = (obj) => {
+          if (Array.isArray(obj)) {
+            obj.forEach(item => {
+              if (item && (item.pid || item.PID || item.processId)) {
+                pids.add(Number(item.pid || item.PID || item.processId));
+              }
+            });
+          }
+          if (obj && typeof obj === 'object') {
+            Object.values(obj).forEach(v => {
+              if (Array.isArray(v)) extractPIDs(v);
+            });
+          }
+        };
+        extractPIDs(data.results);
+        if (pids.size > 0) {
+          recentDiagnosticPIDs.set(deviceId, pids);
+          // Clear after 10 minutes
+          setTimeout(() => recentDiagnosticPIDs.delete(deviceId), 600000);
+        }
       }
 
       // Recompute health score (Phase B)
@@ -492,7 +527,7 @@ function setup(io, app) {
           });
 
           if (response.action && response.action.type === 'remediate') {
-            const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service'];
+            const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service', 'restart_explorer', 'sfc_scan', 'dism_repair', 'clear_update_cache', 'reset_network_adapter'];
             if (VALID_ACTIONS.includes(response.action.actionId)) {
               // Validate parameters for parameterized actions
               const param = response.action.parameter || null;
@@ -501,14 +536,20 @@ function setup(io, app) {
                 if (!Number.isInteger(pid) || pid < 1 || pid > 65535) {
                   console.warn(`[Agent] Blocked kill_process with invalid PID: ${param}`);
                 } else {
-                  socket.emit('remediation_request', {
-                    actionId: response.action.actionId,
-                    requestId: Date.now().toString(),
-                    parameter: String(pid)
-                  });
+                  // Defense-in-depth: verify PID was seen in recent diagnostics
+                  const knownPIDs = recentDiagnosticPIDs.get(deviceId);
+                  if (!knownPIDs || !knownPIDs.has(pid)) {
+                    console.warn(`[Agent] Blocked kill_process: PID ${pid} not found in recent diagnostics for ${deviceId}`);
+                  } else {
+                    socket.emit('remediation_request', {
+                      actionId: response.action.actionId,
+                      requestId: Date.now().toString(),
+                      parameter: String(pid)
+                    });
+                  }
                 }
               } else if (response.action.actionId === 'restart_service') {
-                const ALLOWED_SERVICES = ['spooler', 'wuauserv', 'bits', 'dnscache', 'w32time', 'winmgmt', 'themes', 'audiosrv', 'wsearch'];
+                const ALLOWED_SERVICES = ['spooler', 'wuauserv', 'bits', 'dnscache', 'w32time', 'winmgmt', 'themes', 'audiosrv', 'wsearch', 'tabletinputservice', 'sysmain', 'diagtrack'];
                 if (!param || !ALLOWED_SERVICES.includes(param.toLowerCase())) {
                   console.warn(`[Agent] Blocked restart_service with invalid service: ${param}`);
                 } else {

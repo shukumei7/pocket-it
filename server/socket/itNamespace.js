@@ -1154,12 +1154,12 @@ function setup(io, app) {
           action: response.action
         });
 
-        // Also emit to other IT watchers of this device
+        // Also emit to other IT watchers of this device (exclude sender to avoid duplicates)
         emitToScoped(itNs, db, deviceId, 'it_guidance_update', {
           deviceId,
           message: { sender: 'it_tech', content },
           response: { sender: 'ai', text: response.text, action: response.action }
-        });
+        }, socket.id);
 
         // If action is diagnose, request from device immediately (no user consent needed)
         if (response.action && response.action.type === 'diagnose') {

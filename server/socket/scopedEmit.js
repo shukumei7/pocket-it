@@ -30,10 +30,11 @@ function invalidateDeviceCache(deviceId) {
 /**
  * Emit an event only to IT dashboard sockets that have the device's client in scope.
  */
-function emitToScoped(itNs, db, deviceId, event, data) {
+function emitToScoped(itNs, db, deviceId, event, data, excludeSocketId) {
   const clientId = getDeviceClientId(db, deviceId);
 
   for (const [, socket] of itNs.sockets) {
+    if (excludeSocketId && socket.id === excludeSocketId) continue;
     const scope = socket.userScope;
     if (!scope) continue;
     if (scope.isAdmin ||

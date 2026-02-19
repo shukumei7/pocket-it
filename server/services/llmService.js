@@ -105,23 +105,22 @@ class LLMService {
   }
 
   async _claudeCliChat(messages) {
-    // Claude Code CLI: claude -p "prompt" --system-prompt "system" --model "model"
+    // Use "claude -p" (pipe mode) — sends prompt via stdin, gets response on stdout
     const systemMsg = messages.find(m => m.role === 'system');
     const chatMessages = messages.filter(m => m.role !== 'system');
 
-    // Build conversation as a single prompt string
+    // Flatten messages into a single prompt string with system in <system> tags
     let prompt = '';
+    if (systemMsg) {
+      prompt += `<system>\n${systemMsg.content}\n</system>\n\n`;
+    }
     for (const msg of chatMessages) {
       const role = msg.role === 'assistant' ? 'Assistant' : 'User';
       prompt += `${role}: ${msg.content}\n\n`;
     }
     prompt += 'Assistant:';
 
-    const args = ['-p', prompt];
-    console.log(`[LLM] Claude CLI: spawning with ${args.length} args, prompt length=${prompt.length}, system prompt length=${systemMsg ? systemMsg.content.length : 0}`);
-    if (systemMsg) {
-      args.push('--system-prompt', systemMsg.content);
-    }
+    const args = ['-p'];
     if (this.claudeCliModel) {
       args.push('--model', this.claudeCliModel);
     }
@@ -129,6 +128,8 @@ class LLMService {
     const env = { ...process.env };
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
+
+    console.log(`[LLM] Claude CLI: spawning, prompt length=${prompt.length}`);
 
     return new Promise((resolve, reject) => {
       const child = spawn('claude', args, { env, windowsHide: true });
@@ -139,6 +140,7 @@ class LLMService {
       child.stderr.on('data', (d) => { stderr += d; });
 
       child.on('error', (err) => {
+        clearTimeout(timer);
         console.error(`[LLM] Claude CLI spawn failed: ${err.message}`);
         reject(new Error(`Claude CLI spawn error: ${err.message}`));
       });
@@ -159,6 +161,10 @@ class LLMService {
         child.kill();
         reject(new Error(`Claude CLI timed out after ${this.timeoutMs / 1000}s`));
       }, this.timeoutMs);
+
+      // Pipe prompt via stdin (original working approach)
+      child.stdin.write(prompt);
+      child.stdin.end();
     });
   }
 

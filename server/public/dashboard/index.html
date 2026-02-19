@@ -642,6 +642,63 @@
         .activity-details {
             font-size: 12px; color: #8f98a0; max-width: 300px; word-break: break-word;
         }
+
+        /* Wishlist */
+        .wish-filter-row {
+            display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .wish-filter-row select {
+            background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0;
+            padding: 6px 10px; border-radius: 4px; font-size: 13px;
+        }
+        .wish-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .wish-table th {
+            text-align: left; padding: 10px 12px; color: #8f98a0;
+            border-bottom: 1px solid #2a475e; font-weight: 600;
+        }
+        .wish-table td { padding: 9px 12px; border-bottom: 1px solid rgba(42,71,94,0.4); vertical-align: top; }
+        .wish-table tr:hover td { background: rgba(102,192,244,0.04); }
+        .wish-vote {
+            font-size: 18px; font-weight: 700; color: #66c0f4; text-align: center;
+            min-width: 36px;
+        }
+        .wish-vote.high { font-size: 22px; color: #4fc3f7; }
+        .wish-vote.low { font-size: 14px; color: #8f98a0; font-weight: 500; }
+        .wish-cat-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 11px; font-weight: 600; color: #0f1923; white-space: nowrap;
+        }
+        .wish-status-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 11px; font-weight: 600; white-space: nowrap;
+        }
+        .wish-need { color: #c7d5e0; font-weight: 500; }
+        .wish-request {
+            color: #8f98a0; font-size: 12px; max-width: 220px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+        }
+        .wish-request:hover { white-space: normal; overflow: visible; }
+        .wish-actions { display: flex; gap: 4px; white-space: nowrap; }
+        .wish-btn {
+            padding: 3px 9px; font-size: 11px; border-radius: 3px; cursor: pointer;
+            border: 1px solid #2a475e; background: #1b2838; color: #c7d5e0; transition: all 0.15s;
+        }
+        .wish-btn:hover { background: #2a475e; }
+        .wish-btn.approve { color: #81c784; border-color: #2a4a2a; }
+        .wish-btn.approve:hover { background: #2a4a2a; }
+        .wish-btn.reject { color: #ef5350; border-color: #4a1919; }
+        .wish-btn.reject:hover { background: #4a1919; }
+        .wish-btn.implement { color: #4fc3f7; border-color: #1a3a4a; }
+        .wish-btn.implement:hover { background: #1a3a4a; }
+        .wish-stats-bar {
+            display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;
+        }
+        .wish-stat {
+            background: #1b2838; border: 1px solid #2a475e; border-radius: 8px;
+            padding: 14px 20px; flex: 1; min-width: 160px;
+        }
+        .wish-stat .ws-value { font-size: 24px; font-weight: 700; color: #66c0f4; }
+        .wish-stat .ws-label { font-size: 12px; color: #8f98a0; margin-top: 2px; }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -667,11 +724,12 @@
         </select>
         <a href="#" class="nav-link active" data-page="fleet">Fleet</a>
         <a href="#" class="nav-link" data-page="tickets">Tickets</a>
-        <a href="#" class="nav-link" data-page="enrollment">Enrollment</a>
+
         <a href="#" class="nav-link" data-page="alerts">Alerts <span id="nav-alert-badge" style="display:none; background:#ef5350; color:#fff; font-size:10px; padding:2px 6px; border-radius:8px; margin-left:4px;">0</span></a>
         <a href="#" class="nav-link" data-page="reports">Reports</a>
         <a href="#" class="nav-link" data-page="updates">Updates</a>
         <a href="#" class="nav-link" data-page="settings">Settings</a>
+        <a href="#" class="nav-link" data-page="wishlist">Wishlist</a>
         <a href="#" class="nav-link" data-page="clients" id="nav-clients" style="display:none;">Clients</a>
         <span class="spacer"></span>
         <span class="status-badge" id="server-status">Connected</span>
@@ -1034,20 +1092,6 @@
             </div>
         </div>
 
-        <!-- Enrollment page -->
-        <div class="page" id="page-enrollment">
-            <h2 class="section-title">Enrollment Tokens</h2>
-            <p style="margin-bottom: 16px; color: #8f98a0;">Generate tokens for devices to enroll with Pocket IT.</p>
-            <div style="margin-bottom: 16px;">
-                <label style="font-size: 13px; color: #8f98a0;">Client:</label>
-                <select id="enroll-client-select" style="margin-left: 8px; padding: 6px 10px; background: #0f1923; border: 1px solid #2a475e; border-radius: 6px; color: #c7d5e0;"></select>
-                <button class="diag-btn" onclick="generateToken()" style="margin-left: 8px;">Generate Token</button>
-            </div>
-            <div id="token-display" style="display:none; background: #1b2838; border: 1px solid #2a475e; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-                <div style="font-size: 13px; color: #8f98a0;">Enrollment Token (one-time use) for <strong id="token-client-name"></strong>:</div>
-                <div id="token-value" style="font-family: monospace; font-size: 18px; color: #66c0f4; margin-top: 8px; user-select: all;"></div>
-            </div>
-        </div>
 
         <!-- Alerts page -->
         <div class="page" id="page-alerts">
@@ -1320,20 +1364,6 @@
         <div class="page" id="page-updates">
             <h2 class="section-title">Update Management</h2>
 
-            <!-- Upload form -->
-            <div class="client-form" style="margin-bottom: 24px;">
-                <h3 style="margin-bottom: 12px; color: #c7d5e0;">Upload New Update</h3>
-                <label>Version *</label>
-                <input type="text" id="update-version" placeholder="e.g. 0.11.0" style="width:auto; max-width:200px;">
-                <label>Installer (.exe) *</label>
-                <input type="file" id="update-file" accept=".exe" style="margin-top:4px; margin-bottom:12px; color:#c7d5e0;">
-                <label>Release Notes</label>
-                <textarea id="update-notes" rows="3" placeholder="What's new in this version..."></textarea>
-                <div style="display:flex; align-items:center; gap:12px; margin-top:8px;">
-                    <button class="diag-btn" onclick="uploadUpdate()">Upload</button>
-                    <span id="upload-status" style="font-size:12px; color:#8f98a0;"></span>
-                </div>
-            </div>
 
             <!-- Fleet version distribution -->
             <h2 class="section-title">Fleet Versions</h2>
@@ -1345,6 +1375,70 @@
                 <thead><tr><th>Version</th><th>File Size</th><th>SHA-256</th><th>Uploaded</th><th>Actions</th></tr></thead>
                 <tbody id="updates-table-body"></tbody>
             </table>
+        </div>
+
+        <!-- Wishlist page -->
+        <div class="page" id="page-wishlist">
+            <h2 class="section-title">Feature Wishlist</h2>
+            <p style="font-size:13px; color:#8f98a0; margin-bottom:20px;">Capability gaps logged by the AI when it can't fulfill user requests.</p>
+
+            <!-- Stats bar -->
+            <div class="wish-stats-bar">
+                <div class="wish-stat">
+                    <div class="ws-value" id="wish-stat-total">—</div>
+                    <div class="ws-label">Total Wishes</div>
+                </div>
+                <div class="wish-stat">
+                    <div class="ws-value" id="wish-stat-top-cat">—</div>
+                    <div class="ws-label">Top Category</div>
+                </div>
+                <div class="wish-stat">
+                    <div class="ws-value" id="wish-stat-top-votes">—</div>
+                    <div class="ws-label">Most Voted</div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="wish-filter-row">
+                <select id="wish-filter-status" onchange="loadWishes()">
+                    <option value="">All Statuses</option>
+                    <option value="pending" selected>Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="implemented">Implemented</option>
+                </select>
+                <select id="wish-filter-category" onchange="loadWishes()">
+                    <option value="">All Categories</option>
+                    <option value="software">Software</option>
+                    <option value="network">Network</option>
+                    <option value="security">Security</option>
+                    <option value="hardware">Hardware</option>
+                    <option value="account">Account</option>
+                    <option value="automation">Automation</option>
+                    <option value="other">Other</option>
+                </select>
+                <button class="diag-btn" onclick="loadWishes()">Refresh</button>
+            </div>
+
+            <!-- Wishes table -->
+            <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; overflow:hidden;">
+                <table class="wish-table">
+                    <thead>
+                        <tr>
+                            <th style="width:52px;">Votes</th>
+                            <th style="width:110px;">Category</th>
+                            <th>AI Need</th>
+                            <th>User Request</th>
+                            <th>Device</th>
+                            <th style="width:100px;">Status</th>
+                            <th style="width:190px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="wish-tbody">
+                        <tr><td colspan="7" style="text-align:center; padding:32px; color:#8f98a0;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Settings page -->
@@ -1529,6 +1623,7 @@
             if (page === 'updates') loadUpdates();
             if (page === 'clients') loadClients();
             if (page === 'settings') loadSettings();
+            if (page === 'wishlist') loadWishes();
         }
 
         function navigateTo(page) {
@@ -1575,7 +1670,7 @@
                     return true;
                 }
             }
-            const validPages = ['fleet', 'tickets', 'enrollment', 'alerts', 'reports', 'updates', 'settings'];
+            const validPages = ['fleet', 'tickets', 'alerts', 'reports', 'updates', 'wishlist', 'settings'];
             if (validPages.includes(hash)) {
                 showPage(hash);
                 history.replaceState({ page: hash }, '', '#' + hash);
@@ -1842,6 +1937,118 @@
                 const row = renderActivityRow(data);
                 tbody.insertAdjacentHTML('afterbegin', row);
             });
+
+            // Wishlist: real-time wish logged notification
+            socket.on('feature_wish_logged', (data) => {
+                // If wishlist page is visible, reload it
+                if (document.getElementById('page-wishlist').classList.contains('active')) {
+                    loadWishes();
+                }
+            });
+
+            // Wishlist: response to get_feature_wishes
+            socket.on('feature_wishes_list', (data) => {
+                renderWishes(data.wishes || []);
+            });
+
+            // Wishlist: response to update_feature_wish
+            socket.on('feature_wish_updated', (data) => {
+                // Reload to reflect status change
+                loadWishes();
+            });
+        }
+
+        // ---- Wishlist ----
+        const WISH_CAT_COLORS = {
+            software: '#4fc3f7',
+            network: '#81c784',
+            security: '#ef5350',
+            hardware: '#ffb74d',
+            account: '#ce93d8',
+            automation: '#90a4ae',
+            other: '#8f98a0'
+        };
+        const WISH_STATUS_COLORS = {
+            pending: '#ffb74d',
+            approved: '#81c784',
+            rejected: '#ef5350',
+            implemented: '#4fc3f7'
+        };
+
+        function loadWishes() {
+            if (!socket) return;
+            const status = document.getElementById('wish-filter-status')?.value || null;
+            const category = document.getElementById('wish-filter-category')?.value || null;
+            const tbody = document.getElementById('wish-tbody');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#8f98a0;">Loading...</td></tr>';
+            socket.emit('get_feature_wishes', {
+                status: status || null,
+                category: category || null
+            });
+        }
+
+        function renderWishes(wishes) {
+            const tbody = document.getElementById('wish-tbody');
+            if (!tbody) return;
+
+            if (wishes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#8f98a0;">No wishes found.</td></tr>';
+                updateWishStats([]);
+                return;
+            }
+
+            tbody.innerHTML = wishes.map(w => {
+                const catColor = WISH_CAT_COLORS[w.category] || '#8f98a0';
+                const statusColor = WISH_STATUS_COLORS[w.status] || '#8f98a0';
+                const votes = w.vote_count || 1;
+                const voteClass = votes >= 5 ? 'high' : votes <= 1 ? 'low' : '';
+                const needEscaped = escapeHtml(w.ai_need || '');
+                const requestEscaped = escapeHtml(w.user_request || '');
+                const deviceLabel = escapeHtml(w.hostname || (w.device_id ? w.device_id.substring(0, 8) + '...' : '—'));
+
+                // Build action buttons based on current status
+                let actions = '';
+                if (w.status !== 'approved') actions += `<button class="wish-btn approve" onclick="updateWish(${w.id},'approved')">Approve</button>`;
+                if (w.status !== 'rejected') actions += `<button class="wish-btn reject" onclick="updateWish(${w.id},'rejected')">Reject</button>`;
+                if (w.status !== 'implemented') actions += `<button class="wish-btn implement" onclick="updateWish(${w.id},'implemented')">Implemented</button>`;
+
+                return `<tr>
+                    <td><div class="wish-vote ${voteClass}">${votes}</div></td>
+                    <td><span class="wish-cat-badge" style="background:${catColor}">${escapeHtml(w.category)}</span></td>
+                    <td class="wish-need">${needEscaped}</td>
+                    <td><div class="wish-request" title="${requestEscaped}">${requestEscaped || '<span style="color:#4a5560">—</span>'}</div></td>
+                    <td style="font-size:12px; color:#8f98a0;">${deviceLabel}</td>
+                    <td><span class="wish-status-badge" style="background:${statusColor}22; color:${statusColor}; border:1px solid ${statusColor}44;">${escapeHtml(w.status)}</span></td>
+                    <td><div class="wish-actions">${actions}</div></td>
+                </tr>`;
+            }).join('');
+
+            updateWishStats(wishes);
+        }
+
+        function updateWishStats(wishes) {
+            document.getElementById('wish-stat-total').textContent = wishes.length;
+
+            // Top category by count
+            const catCounts = {};
+            wishes.forEach(w => { catCounts[w.category] = (catCounts[w.category] || 0) + 1; });
+            const topCat = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0];
+            document.getElementById('wish-stat-top-cat').textContent = topCat ? topCat[0] : '—';
+
+            // Most voted wish need
+            const top = wishes.reduce((best, w) => (!best || w.vote_count > best.vote_count) ? w : best, null);
+            const topEl = document.getElementById('wish-stat-top-votes');
+            if (top) {
+                topEl.textContent = top.vote_count + 'x';
+                topEl.title = top.ai_need;
+            } else {
+                topEl.textContent = '—';
+            }
+        }
+
+        function updateWish(id, status) {
+            if (!socket) return;
+            socket.emit('update_feature_wish', { id, status });
         }
 
         // ---- Fleet ----
@@ -2319,29 +2526,6 @@
                 <pre style="background: #0f1923; padding: 12px; border-radius: 6px; margin-top: 8px; font-size: 12px; overflow: auto;">${JSON.stringify(data.results, null, 2)}</pre>`;
         }
 
-        async function generateToken() {
-            const clientSel = document.getElementById('enroll-client-select');
-            const clientId = clientSel ? parseInt(clientSel.value) : null;
-            if (!clientId) return alert('Please select a client');
-            const clientName = clientSel.options[clientSel.selectedIndex]?.text || '';
-            try {
-                const res = await fetchWithAuth(`${API}/api/enrollment/token`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ client_id: clientId })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    document.getElementById('token-display').style.display = 'block';
-                    document.getElementById('token-value').textContent = data.token;
-                    document.getElementById('token-client-name').textContent = clientName;
-                } else {
-                    alert(data.error || 'Failed to generate token');
-                }
-            } catch (err) {
-                alert('Failed to generate token: ' + err.message);
-            }
-        }
 
         async function removeDevice() {
             if (!currentDeviceId) return;
@@ -3872,13 +4056,7 @@
                 document.getElementById('nav-clients').style.display = '';
             }
 
-            // Populate enrollment client picker
-            const enrollSel = document.getElementById('enroll-client-select');
-            if (enrollSel) {
-                enrollSel.innerHTML = currentClients.map(c =>
-                    `<option value="${c.id}">${escapeHtml(c.name)}</option>`
-                ).join('');
-            }
+
         }
 
         function onClientChange() {
@@ -3917,7 +4095,8 @@
                         <td>${escapeHtml(c.contact_name || '')}${c.contact_email ? '<br><span style="font-size:11px;color:#8f98a0;">' + escapeHtml(c.contact_email) + '</span>' : ''}</td>
                         <td style="font-size:12px;color:#8f98a0;">${c.created_at ? new Date(c.created_at).toLocaleDateString() : ''}</td>
                         <td>
-                            <button class="diag-btn" onclick="manageClientUsers(${c.id}, '${escapeHtml(c.name)}')" style="font-size:11px;padding:4px 8px;">Users</button>
+                            <button class="diag-btn" onclick="viewClientDevices(${c.id})" style="font-size:11px;padding:4px 8px;">Devices</button>
+                            <button class="diag-btn" onclick="manageClientUsers(${c.id}, '${escapeHtml(c.name)}')" style="font-size:11px;padding:4px 8px;margin-left:4px;">Users</button>
                             <button class="diag-btn" onclick="downloadInstaller(${c.id}, this)" style="font-size:11px;padding:4px 8px;margin-left:4px;">Installer</button>
                             ${c.slug !== 'default' ? `<button class="diag-btn" onclick="deleteClient(${c.id})" style="font-size:11px;padding:4px 8px;margin-left:4px;background:#5c2020;">Delete</button>` : ''}
                         </td>
@@ -3963,6 +4142,18 @@
             } catch (err) {
                 alert('Error: ' + err.message);
             }
+        }
+
+        function viewClientDevices(clientId) {
+            // Set client filter and navigate to Fleet page
+            const sel = document.getElementById('client-selector');
+            if (sel) {
+                sel.value = String(clientId);
+                selectedClientId = clientId;
+                sessionStorage.setItem('pocket_it_selected_client', String(clientId));
+            }
+            showPage('fleet');
+            loadFleet();
         }
 
         async function deleteClient(id) {
@@ -4347,53 +4538,6 @@
             return bytes + ' B';
         }
 
-        async function uploadUpdate() {
-            const version = document.getElementById('update-version').value.trim();
-            const fileInput = document.getElementById('update-file');
-            const notes = document.getElementById('update-notes').value.trim();
-            const statusEl = document.getElementById('upload-status');
-
-            if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
-                statusEl.textContent = 'Enter a valid version (X.Y.Z)';
-                statusEl.style.color = '#ef5350';
-                return;
-            }
-            if (!fileInput.files.length) {
-                statusEl.textContent = 'Select an installer file';
-                statusEl.style.color = '#ef5350';
-                return;
-            }
-
-            statusEl.textContent = 'Uploading...';
-            statusEl.style.color = '#66c0f4';
-
-            const formData = new FormData();
-            formData.append('version', version);
-            formData.append('installer', fileInput.files[0]);
-            if (notes) formData.append('release_notes', notes);
-
-            try {
-                const res = await fetchWithAuth(`${API}/api/updates/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    statusEl.textContent = `v${version} uploaded successfully (SHA-256: ${data.sha256.substring(0, 16)}...)`;
-                    statusEl.style.color = '#66bb6a';
-                    document.getElementById('update-version').value = '';
-                    document.getElementById('update-notes').value = '';
-                    fileInput.value = '';
-                    loadUpdates();
-                } else {
-                    statusEl.textContent = data.error || 'Upload failed';
-                    statusEl.style.color = '#ef5350';
-                }
-            } catch (err) {
-                statusEl.textContent = 'Upload error: ' + err.message;
-                statusEl.style.color = '#ef5350';
-            }
-        }
 
         async function deleteUpdate(version) {
             if (!confirm(`Delete update package v${version}? This cannot be undone.`)) return;

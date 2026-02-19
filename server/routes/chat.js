@@ -11,7 +11,7 @@ router.get('/:deviceId', requireIT, (req, res) => {
   const messages = db.prepare(`
     SELECT * FROM chat_messages
     WHERE device_id = ?
-    ORDER BY created_at DESC
+    ORDER BY id DESC
     LIMIT ? OFFSET ?
   `).all(req.params.deviceId, limit, offset);
 

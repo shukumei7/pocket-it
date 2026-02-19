@@ -323,6 +323,25 @@ function initDatabase(dbPath) {
     );
   `);
 
+  // v0.13.0: Feature wishlist — AI logs capability gaps
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS feature_wishes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_request TEXT NOT NULL,
+      ai_need TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'other',
+      device_id TEXT,
+      hostname TEXT,
+      vote_count INTEGER DEFAULT 1,
+      status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT (datetime('now')),
+      updated_at DATETIME DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_feature_wishes_category ON feature_wishes(category);
+    CREATE INDEX IF NOT EXISTS idx_feature_wishes_status ON feature_wishes(status);
+  `);
+
   // Seed default alert thresholds (only if table is empty)
   const thresholdCount = db.prepare('SELECT COUNT(*) as count FROM alert_thresholds').get().count;
   if (thresholdCount === 0) {

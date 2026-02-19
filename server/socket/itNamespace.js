@@ -139,7 +139,7 @@ function setup(io, app) {
           }
           // Send recent chat
           const messages = db.prepare(
-            'SELECT * FROM chat_messages WHERE device_id = ? ORDER BY created_at DESC LIMIT 50'
+            'SELECT * FROM chat_messages WHERE device_id = ? ORDER BY id DESC LIMIT 50'
           ).all(deviceId).reverse();
           socket.emit('device_chat_history', { deviceId, messages });
         } catch (err) {
@@ -877,6 +877,47 @@ function setup(io, app) {
         } else {
           socket.emit('error_message', { message: 'Device is not connected' });
         }
+      }
+    });
+
+    // Feature wishlist
+    socket.on('get_feature_wishes', (data) => {
+      const status = data?.status || null;
+      const category = data?.category || null;
+
+      let query = 'SELECT * FROM feature_wishes';
+      const conditions = [];
+      const params = [];
+
+      if (status) { conditions.push('status = ?'); params.push(status); }
+      if (category) { conditions.push('category = ?'); params.push(category); }
+      if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
+      query += ' ORDER BY vote_count DESC, created_at DESC';
+
+      try {
+        const wishes = db.prepare(query).all(...params);
+        socket.emit('feature_wishes_list', { wishes });
+      } catch (err) {
+        console.error('[IT] get_feature_wishes error:', err.message);
+        socket.emit('feature_wishes_list', { wishes: [] });
+      }
+    });
+
+    socket.on('update_feature_wish', (data) => {
+      const { id, status } = data || {};
+      const VALID_STATUSES = ['pending', 'approved', 'rejected', 'implemented'];
+      if (!id || !VALID_STATUSES.includes(status)) return;
+
+      try {
+        db.prepare("UPDATE feature_wishes SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, id);
+        socket.emit('feature_wish_updated', { id, status });
+
+        try {
+          db.prepare("INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+            .run('it_tech', 'wish_status_update', String(id), JSON.stringify({ status }));
+        } catch (err) {}
+      } catch (err) {
+        console.error('[IT] update_feature_wish error:', err.message);
       }
     });
 

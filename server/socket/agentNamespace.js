@@ -117,11 +117,11 @@ function setup(io, app) {
       let recentMessages;
       if (lastSeenChat) {
         recentMessages = db.prepare(
-          'SELECT sender, content, created_at FROM chat_messages WHERE device_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT 20'
+          'SELECT sender, content, created_at FROM chat_messages WHERE device_id = ? AND created_at > ? ORDER BY id DESC LIMIT 20'
         ).all(deviceId, lastSeenChat).reverse();
       } else {
         recentMessages = db.prepare(
-          'SELECT sender, content, created_at FROM chat_messages WHERE device_id = ? ORDER BY created_at DESC LIMIT 20'
+          'SELECT sender, content, created_at FROM chat_messages WHERE device_id = ? ORDER BY id DESC LIMIT 20'
         ).all(deviceId).reverse();
       }
       if (recentMessages.length > 0) {
@@ -338,6 +338,41 @@ function setup(io, app) {
             });
           } catch (err) {
             console.error('[Agent] Ticket creation error:', err.message);
+          }
+        }
+
+        // Handle feature wish (can coexist with other actions)
+        if (response.wish) {
+          const VALID_CATEGORIES = ['software', 'network', 'security', 'hardware', 'account', 'automation', 'other'];
+          const category = VALID_CATEGORIES.includes(response.wish.category) ? response.wish.category : 'other';
+          const need = (response.wish.need || '').trim().slice(0, 200);
+
+          if (need.length > 0) {
+            try {
+              const userRequest = (content || '').slice(0, 500);
+              const device = db.prepare('SELECT hostname FROM devices WHERE device_id = ?').get(deviceId);
+              const hostname = device?.hostname || '';
+
+              const existing = db.prepare(
+                "SELECT id, vote_count FROM feature_wishes WHERE category = ? AND ai_need = ? AND status != 'implemented'"
+              ).get(category, need);
+
+              if (existing) {
+                db.prepare(
+                  "UPDATE feature_wishes SET vote_count = vote_count + 1, updated_at = datetime('now') WHERE id = ?"
+                ).run(existing.id);
+                console.log(`[Agent] Feature wish voted: "${need}" (${existing.vote_count + 1} votes)`);
+              } else {
+                db.prepare(
+                  "INSERT INTO feature_wishes (user_request, ai_need, category, device_id, hostname) VALUES (?, ?, ?, ?, ?)"
+                ).run(userRequest, need, category, deviceId, hostname);
+                console.log(`[Agent] Feature wish logged: [${category}] "${need}"`);
+              }
+
+              emitToAll(itNs, 'feature_wish_logged', { category, need, deviceId, hostname });
+            } catch (err) {
+              console.error('[Agent] Feature wish error:', err.message);
+            }
           }
         }
 
@@ -568,6 +603,40 @@ function setup(io, app) {
               }
             } else {
               console.warn(`[Agent] Blocked invalid remediation action: ${response.action.actionId}`);
+            }
+          }
+
+          // Handle feature wish from diagnostic follow-up (no user message available)
+          if (response.wish) {
+            const VALID_CATEGORIES = ['software', 'network', 'security', 'hardware', 'account', 'automation', 'other'];
+            const category = VALID_CATEGORIES.includes(response.wish.category) ? response.wish.category : 'other';
+            const need = (response.wish.need || '').trim().slice(0, 200);
+
+            if (need.length > 0) {
+              try {
+                const devInfo = db.prepare('SELECT hostname FROM devices WHERE device_id = ?').get(deviceId);
+                const hostname = devInfo?.hostname || '';
+
+                const existing = db.prepare(
+                  "SELECT id, vote_count FROM feature_wishes WHERE category = ? AND ai_need = ? AND status != 'implemented'"
+                ).get(category, need);
+
+                if (existing) {
+                  db.prepare(
+                    "UPDATE feature_wishes SET vote_count = vote_count + 1, updated_at = datetime('now') WHERE id = ?"
+                  ).run(existing.id);
+                  console.log(`[Agent] Feature wish voted: "${need}" (${existing.vote_count + 1} votes)`);
+                } else {
+                  db.prepare(
+                    "INSERT INTO feature_wishes (user_request, ai_need, category, device_id, hostname) VALUES (?, ?, ?, ?, ?)"
+                  ).run('', need, category, deviceId, hostname);
+                  console.log(`[Agent] Feature wish logged: [${category}] "${need}"`);
+                }
+
+                emitToAll(itNs, 'feature_wish_logged', { category, need, deviceId, hostname });
+              } catch (err) {
+                console.error('[Agent] Feature wish error:', err.message);
+              }
             }
           }
         } catch (err) {

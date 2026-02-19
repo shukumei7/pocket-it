@@ -21,7 +21,7 @@ public class InstallerExecutionService
     private const int MaxOutputBytes = 524_288; // 512 KB
 
     /// <summary>
-    /// Validates installer parameters. Only allows files from the ExecDir, .exe and .msi extensions.
+    /// Validates installer parameters. Only allows files from the ExecDir, .exe, .msi, .ps1, and .bat extensions.
     /// </summary>
     public (bool IsValid, string? RejectionReason) ValidateInstaller(string filePath)
     {
@@ -38,8 +38,8 @@ public class InstallerExecutionService
             return (false, "File does not exist");
 
         var ext = Path.GetExtension(fullPath).ToLowerInvariant();
-        if (ext != ".exe" && ext != ".msi")
-            return (false, "Only .exe and .msi files are supported");
+        if (ext != ".exe" && ext != ".msi" && ext != ".ps1" && ext != ".bat")
+            return (false, "Only .exe, .msi, .ps1, and .bat files are supported");
 
         return (true, null);
     }
@@ -65,7 +65,37 @@ public class InstallerExecutionService
         var ext = Path.GetExtension(fullPath).ToLowerInvariant();
 
         ProcessStartInfo psi;
-        if (ext == ".msi")
+        if (ext == ".ps1")
+        {
+            var psArgs = $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{fullPath}\"";
+            if (!string.IsNullOrWhiteSpace(silentArgs))
+                psArgs += " " + silentArgs;
+            psi = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = psArgs,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+        }
+        else if (ext == ".bat")
+        {
+            var batArgs = $"/c \"{fullPath}\"";
+            if (!string.IsNullOrWhiteSpace(silentArgs))
+                batArgs += " " + silentArgs;
+            psi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = batArgs,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+        }
+        else if (ext == ".msi")
         {
             // msiexec /i "path" /qn [args]
             var msiArgs = $"/i \"{fullPath}\" /qn";

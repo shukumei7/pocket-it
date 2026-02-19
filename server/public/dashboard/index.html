@@ -699,6 +699,55 @@
         }
         .wish-stat .ws-value { font-size: 24px; font-weight: 700; color: #66c0f4; }
         .wish-stat .ws-label { font-size: 12px; color: #8f98a0; margin-top: 2px; }
+
+        /* Deploy page */
+        .deploy-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+        .deploy-tabs .diag-btn.active { background: #1a3a5c; }
+        .deploy-section { margin-bottom: 20px; }
+        .deploy-section-title { font-size: 14px; font-weight: 600; color: #66c0f4; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #2a475e; }
+        .deploy-radio-group { display: flex; gap: 16px; margin: 8px 0; }
+        .deploy-radio-group label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: #c7d5e0; }
+        .deploy-select { max-width: 400px; padding: 8px; background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; border-radius: 6px; width: 100%; font-size: 13px; }
+        .deploy-textarea { width: 100%; min-height: 100px; max-width: 600px; background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; padding: 10px; border-radius: 6px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; resize: vertical; }
+        .deploy-input-sm { width: 80px; background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+        .deploy-device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: 300px; overflow-y: auto; padding: 4px; }
+        .deploy-device-card { background: #0f1923; border: 1px solid #2a475e; border-radius: 8px; padding: 12px; cursor: pointer; transition: border-color 0.2s, background 0.2s; user-select: none; position: relative; }
+        .deploy-device-card:hover { border-color: #4a7a9b; }
+        .deploy-device-card.selected { border-color: #66c0f4; background: rgba(102,192,244,0.08); }
+        .deploy-device-card .dd-hostname { font-weight: 600; font-size: 13px; color: #c7d5e0; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .deploy-device-card .dd-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8f98a0; }
+        .deploy-device-card .dd-check { position: absolute; top: 8px; right: 8px; width: 16px; height: 16px; border-radius: 4px; border: 1px solid #2a475e; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #66c0f4; }
+        .deploy-device-card.selected .dd-check { border-color: #66c0f4; background: rgba(102,192,244,0.15); }
+        .deploy-device-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+        .deploy-device-dot.online { background: #4caf50; }
+        .deploy-device-dot.offline { background: #616161; }
+        .deploy-device-status { font-size: 11px; color: #8f98a0; margin-left: auto; }
+        .deploy-btn-row { display: flex; gap: 8px; margin: 6px 0 4px; }
+        .deploy-btn-row .diag-btn { font-size: 12px; padding: 4px 12px; }
+        .deploy-submit { background: #66c0f4; color: #1b2838; font-weight: 600; padding: 10px 28px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: background 0.2s; }
+        .deploy-submit:hover { background: #7fd4ff; }
+        .deploy-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+        .deploy-file-info { font-size: 12px; color: #8f98a0; margin: 4px 0 8px; }
+        .deploy-file-info.error { color: #ef5350; }
+        .deploy-history-card { background: #1b2838; border: 1px solid #2a475e; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+        .deploy-history-card .dh-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .deploy-history-card .dh-name { font-weight: 600; color: #c7d5e0; }
+        .deploy-history-card .dh-type { font-size: 12px; color: #8f98a0; margin-left: 8px; background: #0f1923; padding: 2px 8px; border-radius: 10px; }
+        .deploy-history-card .dh-status { font-size: 12px; font-weight: 600; }
+        .deploy-history-card .dh-meta { font-size: 11px; color: #8f98a0; margin-bottom: 8px; }
+        .deploy-history-card .dh-count { font-size: 12px; color: #8f98a0; }
+        .deploy-cancel-btn { font-size: 11px; padding: 2px 10px; background: rgba(239,83,80,0.15); color: #ef5350; border: 1px solid rgba(239,83,80,0.3); border-radius: 4px; cursor: pointer; }
+        .deploy-cancel-btn:hover { background: rgba(239,83,80,0.25); }
+        .deploy-result-row { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border-bottom: 1px solid rgba(26,38,53,0.8); font-size: 13px; }
+        .deploy-result-row:last-child { border-bottom: none; }
+        .deploy-result-host { min-width: 130px; color: #c7d5e0; }
+        .deploy-result-status { font-size: 12px; min-width: 65px; font-weight: 500; }
+        .deploy-result-meta { font-size: 11px; color: #8f98a0; }
+        .deploy-schedule-input { background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+        .deploy-schedule-input:disabled { opacity: 0.4; }
+        .deploy-checkbox-label { display: flex; align-items: center; gap: 6px; margin-top: 8px; cursor: pointer; font-size: 13px; color: #c7d5e0; }
+        .deploy-form-row { display: flex; gap: 20px; flex-wrap: wrap; }
+        .deploy-form-row > .deploy-section { flex: 1; min-width: 280px; }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -1396,80 +1445,125 @@
 
         <!-- Deploy page -->
         <div class="page" id="page-deploy">
-            <h2 class="section-title">Deploy Scripts &amp; Installers</h2>
-            <div style="display:flex; gap:8px; margin-bottom:20px;">
-                <button class="diag-btn" onclick="showDeployTab('new')" id="deploy-tab-new" style="background:#1a3a5c;">New Deployment</button>
+            <h2 class="section-title">Deploy Scripts &amp; Files</h2>
+            <div class="deploy-tabs">
+                <button class="diag-btn active" onclick="showDeployTab('new')" id="deploy-tab-new">New Deployment</button>
                 <button class="diag-btn" onclick="showDeployTab('history')" id="deploy-tab-history">Deployment History</button>
+                <button class="diag-btn" onclick="showDeployTab('templates')" id="deploy-tab-templates">Templates</button>
             </div>
 
             <!-- New Deployment Form -->
             <div id="deploy-new" class="client-form">
-                <label>Deployment Name</label>
-                <input type="text" id="deploy-name" placeholder="e.g. Install Chrome, Run cleanup script" style="max-width:400px;">
+                <!-- General + Script/File panels side by side -->
+                <div class="deploy-form-row">
+                    <!-- Name & Type -->
+                    <div class="deploy-section">
+                        <div class="deploy-section-title">General</div>
+                        <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+                            <select id="deploy-template-select" style="flex:1; padding:6px 10px; font-size:13px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:6px;" onchange="loadDeployTemplate()">
+                                <option value="">Load from template...</option>
+                            </select>
+                            <button class="diag-btn" onclick="saveDeployTemplate()" style="font-size:12px; padding:5px 12px; white-space:nowrap;">Save as Template</button>
+                        </div>
+                        <label class="client-form-label">Deployment Name</label>
+                        <input type="text" id="deploy-name" placeholder="e.g. Install Chrome, Run cleanup script" style="max-width:400px;">
 
-                <label style="margin-top:12px;">Type</label>
-                <div style="display:flex; gap:16px; margin:8px 0;">
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
-                        <input type="radio" name="deploy-type" value="script" checked onchange="toggleDeployType()"> Script
-                    </label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
-                        <input type="radio" name="deploy-type" value="installer" onchange="toggleDeployType()"> Installer
-                    </label>
+                        <label class="client-form-label" style="margin-top:4px;">Type</label>
+                        <div class="deploy-radio-group">
+                            <label><input type="radio" name="deploy-type" value="script" checked onchange="toggleDeployType()"> Script</label>
+                            <label><input type="radio" name="deploy-type" value="installer" onchange="toggleDeployType()"> File</label>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:12px; margin-top:4px;">
+                            <div>
+                                <label>Timeout</label>
+                                <input type="number" id="deploy-timeout" value="300" min="30" max="600" class="deploy-input-sm">
+                            </div>
+                            <span style="font-size:11px; color:#8f98a0; margin-top:18px;">seconds (30-600)</span>
+                        </div>
+                    </div>
+
+                    <!-- Script panel -->
+                    <div id="deploy-script-panel" class="deploy-section">
+                        <div class="deploy-section-title">Script Configuration</div>
+                        <label>Library Script</label>
+                        <select id="deploy-script-select" class="deploy-select" onchange="onDeployScriptSelect()">
+                            <option value="">-- Ad-hoc script --</option>
+                        </select>
+                        <label style="margin-top:8px;">Script Content</label>
+                        <textarea id="deploy-script-content" class="deploy-textarea" placeholder="Enter PowerShell script..."></textarea>
+                        <label class="deploy-checkbox-label">
+                            <input type="checkbox" id="deploy-elevation"> Requires elevation
+                        </label>
+                    </div>
+
+                    <!-- File panel -->
+                    <div id="deploy-installer-panel" class="deploy-section" style="display:none;">
+                        <div class="deploy-section-title">File Configuration</div>
+                        <label>File (.exe, .msi, .ps1, .bat — max 50MB)</label>
+                        <input type="file" id="deploy-installer-file" accept=".exe,.msi,.ps1,.bat" style="margin:8px 0;" onchange="onDeployInstallerSelected()">
+                        <div id="deploy-installer-info" class="deploy-file-info"></div>
+                        <label>Silent Arguments</label>
+                        <input type="text" id="deploy-silent-args" placeholder="e.g. /S or /qn ALLUSERS=1" style="max-width:400px;">
+                    </div>
                 </div>
 
-                <!-- Script panel -->
-                <div id="deploy-script-panel">
-                    <label>Library Script</label>
-                    <select id="deploy-script-select" style="max-width:400px; padding:8px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:4px;" onchange="onDeployScriptSelect()">
-                        <option value="">-- Ad-hoc script --</option>
-                    </select>
-                    <label style="margin-top:8px;">Script Content</label>
-                    <textarea id="deploy-script-content" placeholder="Enter PowerShell script..." style="width:100%; min-height:80px; max-width:600px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-family:monospace; font-size:13px; resize:vertical;"></textarea>
-                    <label style="display:flex; align-items:center; gap:4px; margin-top:8px;">
-                        <input type="checkbox" id="deploy-elevation"> Requires elevation
-                    </label>
+                <!-- Target Devices -->
+                <div class="deploy-section">
+                    <div class="deploy-section-title">Target Devices</div>
+                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+                        <div class="deploy-btn-row" style="margin:0;">
+                            <button class="diag-btn" onclick="deploySelectAllOnline()">Select All Online</button>
+                            <button class="diag-btn" onclick="deploySelectAll()">Select All</button>
+                            <button class="diag-btn" onclick="deploySelectNone()">Clear</button>
+                        </div>
+                        <span style="color:#2a475e; margin:0 2px;">|</span>
+                        <select id="deploy-filter-client" style="width:150px; padding:5px 8px; font-size:12px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:6px;" onchange="filterDeployDevices()">
+                            <option value="">All Clients</option>
+                        </select>
+                        <input type="text" id="deploy-filter-search" placeholder="Search hostname..." style="width:160px; padding:5px 8px; font-size:12px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:6px;" oninput="filterDeployDevices()">
+                        <span id="deploy-selected-count" style="font-size:12px; color:#66c0f4; margin-left:auto;">0 selected</span>
+                    </div>
+                    <div id="deploy-device-list" class="deploy-device-grid"></div>
                 </div>
 
-                <!-- Installer panel -->
-                <div id="deploy-installer-panel" style="display:none;">
-                    <label>Installer File (.exe / .msi, max 50MB)</label>
-                    <input type="file" id="deploy-installer-file" accept=".exe,.msi" style="margin:8px 0;" onchange="onDeployInstallerSelected()">
-                    <div id="deploy-installer-info" style="font-size:12px; color:#8f98a0; margin-bottom:8px;"></div>
-                    <label>Silent Arguments</label>
-                    <input type="text" id="deploy-silent-args" placeholder="e.g. /S or /qn ALLUSERS=1" style="max-width:400px;">
+                <!-- Schedule -->
+                <div class="deploy-section">
+                    <div class="deploy-section-title">Schedule</div>
+                    <div class="deploy-radio-group">
+                        <label><input type="radio" name="deploy-schedule" value="now" checked onchange="toggleDeploySchedule()"> Run immediately</label>
+                        <label><input type="radio" name="deploy-schedule" value="later" onchange="toggleDeploySchedule()"> Schedule for later</label>
+                    </div>
+                    <div id="deploy-schedule-picker" style="display:none;">
+                        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                            <div>
+                                <label style="font-size:11px; color:#8f98a0; display:block; margin-bottom:4px;">Date</label>
+                                <input type="date" id="deploy-schedule-date" class="deploy-schedule-input" onchange="updateSchedulePreview()">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; color:#8f98a0; display:block; margin-bottom:4px;">Time</label>
+                                <input type="time" id="deploy-schedule-time-input" class="deploy-schedule-input" onchange="updateSchedulePreview()">
+                            </div>
+                            <div id="deploy-schedule-preview" style="font-size:12px; color:#66c0f4; margin-top:16px;"></div>
+                        </div>
+                    </div>
                 </div>
 
-                <label style="margin-top:12px;">Timeout (seconds)</label>
-                <input type="number" id="deploy-timeout" value="300" min="30" max="600" style="width:80px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px; border-radius:4px;">
-
-                <label style="margin-top:16px; font-weight:600;">Target Devices</label>
-                <div style="margin:8px 0; display:flex; gap:8px;">
-                    <button class="diag-btn" onclick="deploySelectAllOnline()" style="font-size:12px; padding:4px 10px;">Select All Online</button>
-                    <button class="diag-btn" onclick="deploySelectAll()" style="font-size:12px; padding:4px 10px;">Select All</button>
-                    <button class="diag-btn" onclick="deploySelectNone()" style="font-size:12px; padding:4px 10px;">Clear</button>
-                </div>
-                <div id="deploy-device-list" style="max-height:200px; overflow-y:auto; background:#0f1923; border:1px solid #2a475e; border-radius:4px; padding:8px;"></div>
-
-                <label style="margin-top:16px;">Schedule</label>
-                <div style="display:flex; gap:16px; margin:8px 0;">
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
-                        <input type="radio" name="deploy-schedule" value="now" checked onchange="toggleDeploySchedule()"> Run immediately
-                    </label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
-                        <input type="radio" name="deploy-schedule" value="later" onchange="toggleDeploySchedule()"> Schedule for:
-                    </label>
-                    <input type="datetime-local" id="deploy-schedule-time" disabled style="background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px; border-radius:4px;">
-                </div>
-
-                <div style="margin-top:20px;">
-                    <button class="diag-btn" onclick="submitDeployment()" style="background:#66c0f4; color:#1b2838; font-weight:600; padding:10px 24px;">Deploy</button>
+                <div style="margin-top:8px; padding-top:16px; border-top:1px solid #2a475e;">
+                    <button class="deploy-submit" onclick="submitDeployment()">Deploy</button>
                 </div>
             </div>
 
             <!-- Deployment History -->
             <div id="deploy-history" style="display:none;">
-                <div id="deploy-history-list" style="font-size:13px;">
-                    <div style="color:#8f98a0;">Loading...</div>
+                <div id="deploy-history-list">
+                    <div style="color:#8f98a0; text-align:center; padding:24px;">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Templates -->
+            <div id="deploy-templates" style="display:none;">
+                <div id="deploy-templates-list">
+                    <div style="color:#8f98a0; text-align:center; padding:24px;">Loading...</div>
                 </div>
             </div>
         </div>
@@ -1922,6 +2016,9 @@
                     console.log('[Installer] Result:', data);
                 }
             });
+
+            socket.on('deploy_template_saved', () => { loadDeployTemplates(); });
+            socket.on('deploy_template_deleted', () => { loadDeployTemplates(); });
 
             socket.on('script_result', (data) => {
                 if (data.deviceId === currentDeviceId) renderScriptResult(data);
@@ -4834,9 +4931,12 @@
         function showDeployTab(tab) {
             document.getElementById('deploy-new').style.display = tab === 'new' ? '' : 'none';
             document.getElementById('deploy-history').style.display = tab === 'history' ? '' : 'none';
-            document.getElementById('deploy-tab-new').style.background = tab === 'new' ? '#1a3a5c' : '';
-            document.getElementById('deploy-tab-history').style.background = tab === 'history' ? '#1a3a5c' : '';
+            document.getElementById('deploy-templates').style.display = tab === 'templates' ? '' : 'none';
+            document.getElementById('deploy-tab-new').classList.toggle('active', tab === 'new');
+            document.getElementById('deploy-tab-history').classList.toggle('active', tab === 'history');
+            document.getElementById('deploy-tab-templates').classList.toggle('active', tab === 'templates');
             if (tab === 'history') loadDeployHistory();
+            if (tab === 'templates') loadDeployTemplates();
         }
 
         function toggleDeployType() {
@@ -4847,7 +4947,31 @@
 
         function toggleDeploySchedule() {
             const val = document.querySelector('input[name="deploy-schedule"]:checked').value;
-            document.getElementById('deploy-schedule-time').disabled = val === 'now';
+            const picker = document.getElementById('deploy-schedule-picker');
+            picker.style.display = val === 'later' ? '' : 'none';
+            if (val === 'later') {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const dateInput = document.getElementById('deploy-schedule-date');
+                const timeInput = document.getElementById('deploy-schedule-time-input');
+                if (!dateInput.value) {
+                    dateInput.value = tomorrow.toISOString().split('T')[0];
+                    timeInput.value = '09:00';
+                }
+                updateSchedulePreview();
+            }
+        }
+
+        function updateSchedulePreview() {
+            const dateVal = document.getElementById('deploy-schedule-date').value;
+            const timeVal = document.getElementById('deploy-schedule-time-input').value;
+            const preview = document.getElementById('deploy-schedule-preview');
+            if (dateVal && timeVal) {
+                const dt = new Date(dateVal + 'T' + timeVal);
+                preview.textContent = dt.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            } else {
+                preview.textContent = '';
+            }
         }
 
         async function loadDeployPage() {
@@ -4868,24 +4992,64 @@
                 const devices = await res.json();
                 deployDevicesCache = devices;
                 renderDeployDeviceList(devices);
+                // Populate client filter from existing client selector
+                const clientSel = document.getElementById('client-selector');
+                const deployClientFilter = document.getElementById('deploy-filter-client');
+                if (clientSel && deployClientFilter) {
+                    deployClientFilter.innerHTML = '<option value="">All Clients</option>';
+                    Array.from(clientSel.options).forEach(opt => {
+                        if (opt.value) deployClientFilter.innerHTML += `<option value="${opt.value}">${escapeHtml(opt.textContent)}</option>`;
+                    });
+                }
             } catch (err) { console.error('Load devices error:', err); }
+
+            // Load templates
+            loadDeployTemplates();
         }
 
         function renderDeployDeviceList(devices) {
             const el = document.getElementById('deploy-device-list');
             if (devices.length === 0) {
-                el.innerHTML = '<div style="color:#8f98a0;">No devices enrolled.</div>';
+                el.innerHTML = '<div style="color:#8f98a0; padding:24px; text-align:center; grid-column:1/-1;">No devices match filters.</div>';
                 return;
             }
             el.innerHTML = devices.map(d => {
                 const online = d.status === 'online';
-                return `<label style="display:flex; align-items:center; gap:6px; padding:4px 0; cursor:pointer;">
-                    <input type="checkbox" class="deploy-device-cb" value="${d.device_id}" data-online="${online}">
-                    <span style="width:8px; height:8px; border-radius:50%; background:${online ? '#4caf50' : '#616161'}; display:inline-block;"></span>
-                    <span>${escapeHtml(d.hostname || d.device_id)}</span>
-                    <span style="font-size:11px; color:#8f98a0;">${online ? 'online' : 'offline'}</span>
-                </label>`;
+                return `<div class="deploy-device-card" data-device-id="${d.device_id}" data-online="${online}" data-hostname="${escapeHtml(d.hostname || '')}" data-client-id="${d.client_id || ''}" onclick="toggleDeployDevice(this)">
+                    <div class="dd-check"></div>
+                    <div class="dd-hostname">${escapeHtml(d.hostname || d.device_id)}</div>
+                    <div class="dd-status">
+                        <span class="deploy-device-dot ${online ? 'online' : 'offline'}"></span>
+                        ${online ? 'online' : 'offline'}
+                    </div>
+                </div>`;
             }).join('');
+            updateDeploySelectedCount();
+        }
+
+        function toggleDeployDevice(card) {
+            card.classList.toggle('selected');
+            card.querySelector('.dd-check').textContent = card.classList.contains('selected') ? '✓' : '';
+            updateDeploySelectedCount();
+        }
+
+        function updateDeploySelectedCount() {
+            const count = document.querySelectorAll('.deploy-device-card.selected').length;
+            const el = document.getElementById('deploy-selected-count');
+            if (el) el.textContent = count + ' selected';
+        }
+
+        function filterDeployDevices() {
+            const clientFilter = document.getElementById('deploy-filter-client').value;
+            const searchFilter = document.getElementById('deploy-filter-search').value.toLowerCase();
+            let filtered = deployDevicesCache;
+            if (clientFilter) {
+                filtered = filtered.filter(d => String(d.client_id) === clientFilter);
+            }
+            if (searchFilter) {
+                filtered = filtered.filter(d => (d.hostname || d.device_id).toLowerCase().includes(searchFilter));
+            }
+            renderDeployDeviceList(filtered);
         }
 
         function onDeployScriptSelect() {
@@ -4904,23 +5068,35 @@
                 const f = input.files[0];
                 const sizeMB = (f.size / 1024 / 1024).toFixed(1);
                 info.textContent = `${f.name} (${sizeMB} MB)`;
+                info.className = 'deploy-file-info';
                 if (f.size > 52_428_800) {
-                    info.style.color = '#ef5350';
                     info.textContent += ' — exceeds 50MB limit!';
-                } else {
-                    info.style.color = '#8f98a0';
+                    info.className = 'deploy-file-info error';
                 }
             }
         }
 
         function deploySelectAllOnline() {
-            document.querySelectorAll('.deploy-device-cb').forEach(cb => { cb.checked = cb.dataset.online === 'true'; });
+            document.querySelectorAll('.deploy-device-card').forEach(card => {
+                const isOnline = card.dataset.online === 'true';
+                card.classList.toggle('selected', isOnline);
+                card.querySelector('.dd-check').textContent = isOnline ? '✓' : '';
+            });
+            updateDeploySelectedCount();
         }
         function deploySelectAll() {
-            document.querySelectorAll('.deploy-device-cb').forEach(cb => { cb.checked = true; });
+            document.querySelectorAll('.deploy-device-card').forEach(card => {
+                card.classList.add('selected');
+                card.querySelector('.dd-check').textContent = '✓';
+            });
+            updateDeploySelectedCount();
         }
         function deploySelectNone() {
-            document.querySelectorAll('.deploy-device-cb').forEach(cb => { cb.checked = false; });
+            document.querySelectorAll('.deploy-device-card').forEach(card => {
+                card.classList.remove('selected');
+                card.querySelector('.dd-check').textContent = '';
+            });
+            updateDeploySelectedCount();
         }
 
         async function submitDeployment() {
@@ -4928,13 +5104,18 @@
             if (!name) { alert('Deployment name is required'); return; }
 
             const type = document.querySelector('input[name="deploy-type"]:checked').value;
-            const targetDeviceIds = Array.from(document.querySelectorAll('.deploy-device-cb:checked')).map(cb => cb.value);
+            const targetDeviceIds = Array.from(document.querySelectorAll('.deploy-device-card.selected')).map(card => card.dataset.deviceId);
             if (targetDeviceIds.length === 0) { alert('Select at least one target device'); return; }
 
             const timeoutSeconds = parseInt(document.getElementById('deploy-timeout').value, 10) || 300;
             const scheduleVal = document.querySelector('input[name="deploy-schedule"]:checked').value;
-            const scheduledAt = scheduleVal === 'later' ? document.getElementById('deploy-schedule-time').value : null;
-            if (scheduleVal === 'later' && !scheduledAt) { alert('Please select a schedule date/time'); return; }
+            let scheduledAt = null;
+            if (scheduleVal === 'later') {
+                const dateVal = document.getElementById('deploy-schedule-date').value;
+                const timeVal = document.getElementById('deploy-schedule-time-input').value;
+                if (!dateVal || !timeVal) { alert('Please select a schedule date and time'); return; }
+                scheduledAt = dateVal + 'T' + timeVal;
+            }
 
             const payload = { name, type, targetDeviceIds, timeoutSeconds, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null };
 
@@ -4983,35 +5164,35 @@
                     const done = d.results ? d.results.filter(r => ['success', 'failed', 'skipped'].includes(r.status)).length : 0;
                     const succeeded = d.results ? d.results.filter(r => r.status === 'success').length : 0;
                     const statusColor = d.status === 'completed' ? '#4caf50' : d.status === 'running' ? '#ff9800' : d.status === 'cancelled' ? '#ef5350' : '#8f98a0';
-                    const scheduledInfo = d.scheduled_at ? `<span style="font-size:11px; color:#8f98a0;">Scheduled: ${new Date(d.scheduled_at).toLocaleString()}</span>` : '';
+                    const scheduledInfo = d.scheduled_at ? `<div class="dh-meta">Scheduled: ${new Date(d.scheduled_at).toLocaleString()}</div>` : '';
 
                     const resultsHtml = d.results ? d.results.map(r => {
                         const rColor = r.status === 'success' ? '#4caf50' : r.status === 'failed' ? '#ef5350' : r.status === 'running' ? '#ff9800' : '#8f98a0';
-                        return `<div style="display:flex; gap:8px; align-items:center; padding:4px 8px; border-bottom:1px solid #1a2635;">
-                            <span style="width:8px; height:8px; border-radius:50%; background:${rColor};"></span>
-                            <span style="min-width:120px;">${escapeHtml(r.hostname || r.device_id)}</span>
-                            <span style="color:${rColor}; font-size:12px; min-width:60px;">${r.status}</span>
-                            <span style="font-size:11px; color:#8f98a0;">${r.exit_code !== null ? 'exit=' + r.exit_code : ''} ${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + 's' : ''} ${r.timed_out ? '(timed out)' : ''}</span>
+                        return `<div class="deploy-result-row">
+                            <span class="deploy-device-dot" style="background:${rColor};"></span>
+                            <span class="deploy-result-host">${escapeHtml(r.hostname || r.device_id)}</span>
+                            <span class="deploy-result-status" style="color:${rColor};">${r.status}</span>
+                            <span class="deploy-result-meta">${r.exit_code !== null ? 'exit=' + r.exit_code : ''} ${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + 's' : ''} ${r.timed_out ? '(timed out)' : ''}</span>
                         </div>`;
                     }).join('') : '';
 
-                    return `<div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:12px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    return `<div class="deploy-history-card">
+                        <div class="dh-header">
                             <div>
-                                <span style="font-weight:600; color:#c7d5e0;">${escapeHtml(d.name)}</span>
-                                <span style="font-size:12px; color:#8f98a0; margin-left:8px;">${d.type}</span>
+                                <span class="dh-name">${escapeHtml(d.name)}</span>
+                                <span class="dh-type">${d.type}</span>
                             </div>
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:12px; color:${statusColor}; font-weight:600;">${d.status.toUpperCase()}</span>
-                                <span style="font-size:11px; color:#8f98a0;">${succeeded}/${totalTargets} succeeded</span>
-                                ${d.status === 'pending' || d.status === 'running' ? `<button class="diag-btn" onclick="cancelDeployment(${d.id})" style="font-size:11px; padding:2px 8px; background:#4a1919; color:#ef5350;">Cancel</button>` : ''}
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <span class="dh-status" style="color:${statusColor};">${d.status.toUpperCase()}</span>
+                                <span class="dh-count">${succeeded}/${totalTargets} succeeded</span>
+                                ${d.status === 'pending' || d.status === 'running' ? `<button class="deploy-cancel-btn" onclick="cancelDeployment(${d.id})">Cancel</button>` : ''}
                             </div>
                         </div>
                         ${scheduledInfo}
-                        <div style="font-size:11px; color:#8f98a0; margin-bottom:8px;">Created: ${new Date(d.created_at).toLocaleString()}</div>
+                        <div class="dh-meta">Created: ${new Date(d.created_at).toLocaleString()}</div>
                         <details style="margin-top:4px;">
-                            <summary style="cursor:pointer; font-size:12px; color:#8f98a0;">Per-device results (${done}/${totalTargets} complete)</summary>
-                            <div style="margin-top:8px; background:#0f1923; border-radius:4px; max-height:200px; overflow-y:auto;">${resultsHtml || '<div style="padding:8px; color:#8f98a0;">No results yet.</div>'}</div>
+                            <summary style="cursor:pointer; font-size:12px; color:#66c0f4;">Per-device results (${done}/${totalTargets} complete)</summary>
+                            <div style="margin-top:8px; background:#0f1923; border-radius:6px; max-height:220px; overflow-y:auto;">${resultsHtml || '<div style="padding:10px; color:#8f98a0; text-align:center;">No results yet.</div>'}</div>
                         </details>
                     </div>`;
                 }).join('');
@@ -5022,6 +5203,135 @@
             if (!confirm('Cancel this deployment? Pending devices will be skipped.')) return;
             socket.emit('cancel_deployment', { deploymentId: id });
             setTimeout(loadDeployHistory, 500);
+        }
+
+        // ---- Deploy Templates ----
+        function loadDeployTemplates() {
+            socket.emit('get_deploy_templates');
+            socket.once('deploy_template_list', (data) => {
+                const el = document.getElementById('deploy-templates-list');
+                const sel = document.getElementById('deploy-template-select');
+
+                // Update the dropdown in the form
+                sel.innerHTML = '<option value="">Load from template...</option>';
+                if (data.templates) {
+                    data.templates.forEach(t => {
+                        sel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name)} (${t.type})</option>`;
+                    });
+                }
+
+                // Render template cards
+                if (!data.templates || data.templates.length === 0) {
+                    el.innerHTML = '<div style="color:#8f98a0; text-align:center; padding:24px;">No templates saved yet. Create a deployment and click "Save as Template".</div>';
+                    return;
+                }
+                el.innerHTML = data.templates.map(t => {
+                    const details = [];
+                    if (t.type === 'script' && t.script_content) details.push('Script: ' + t.script_content.substring(0, 60) + (t.script_content.length > 60 ? '...' : ''));
+                    if (t.type === 'installer' && t.installer_filename) details.push('File: ' + t.installer_filename);
+                    if (t.silent_args) details.push('Args: ' + t.silent_args);
+                    if (t.requires_elevation) details.push('Elevated');
+                    details.push('Timeout: ' + t.timeout_seconds + 's');
+
+                    return `<div class="deploy-history-card">
+                        <div class="dh-header">
+                            <div>
+                                <span class="dh-name">${escapeHtml(t.name)}</span>
+                                <span class="dh-type">${t.type}</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <button class="diag-btn" onclick="useDeployTemplate(${t.id})" style="font-size:11px; padding:3px 10px;">Use</button>
+                                <button class="deploy-cancel-btn" onclick="deleteDeployTemplate(${t.id})">Delete</button>
+                            </div>
+                        </div>
+                        <div class="dh-meta">${details.map(d => escapeHtml(d)).join(' &middot; ')}</div>
+                        <div class="dh-meta">Created: ${new Date(t.created_at).toLocaleString()} by ${escapeHtml(t.created_by || 'unknown')}</div>
+                    </div>`;
+                }).join('');
+            });
+        }
+
+        function saveDeployTemplate() {
+            const name = document.getElementById('deploy-name').value.trim();
+            if (!name) { alert('Enter a deployment name first — it will be used as the template name'); return; }
+
+            const type = document.querySelector('input[name="deploy-type"]:checked').value;
+            const payload = {
+                name,
+                type,
+                timeoutSeconds: parseInt(document.getElementById('deploy-timeout').value, 10) || 300,
+                requiresElevation: document.getElementById('deploy-elevation').checked
+            };
+
+            if (type === 'script') {
+                const scriptSel = document.getElementById('deploy-script-select');
+                if (scriptSel.value) payload.scriptId = parseInt(scriptSel.value, 10);
+                payload.scriptContent = document.getElementById('deploy-script-content').value;
+            } else {
+                const fileInput = document.getElementById('deploy-installer-file');
+                if (fileInput.files.length) payload.installerFilename = fileInput.files[0].name;
+                payload.silentArgs = document.getElementById('deploy-silent-args').value.trim();
+            }
+
+            socket.emit('save_deploy_template', payload);
+            socket.once('deploy_template_saved', (data) => {
+                alert('Template "' + data.name + '" saved!');
+                loadDeployTemplates();
+            });
+            socket.once('deploy_template_error', (data) => {
+                alert('Error saving template: ' + data.error);
+            });
+        }
+
+        function loadDeployTemplate() {
+            const sel = document.getElementById('deploy-template-select');
+            if (!sel.value) return;
+
+            socket.emit('get_deploy_templates');
+            socket.once('deploy_template_list', (data) => {
+                const t = data.templates.find(tpl => tpl.id === parseInt(sel.value, 10));
+                if (!t) return;
+
+                document.getElementById('deploy-name').value = t.name;
+                document.getElementById('deploy-timeout').value = t.timeout_seconds || 300;
+                document.getElementById('deploy-elevation').checked = !!t.requires_elevation;
+
+                // Set type
+                document.querySelector(`input[name="deploy-type"][value="${t.type}"]`).checked = true;
+                toggleDeployType();
+
+                if (t.type === 'script') {
+                    if (t.script_id) {
+                        const scriptSel = document.getElementById('deploy-script-select');
+                        scriptSel.value = String(t.script_id);
+                        onDeployScriptSelect();
+                    }
+                    if (t.script_content) {
+                        document.getElementById('deploy-script-content').value = t.script_content;
+                    }
+                } else {
+                    if (t.installer_filename) {
+                        document.getElementById('deploy-installer-info').textContent = 'Template file: ' + t.installer_filename + ' (re-select file to deploy)';
+                        document.getElementById('deploy-installer-info').className = 'deploy-file-info';
+                    }
+                    if (t.silent_args) {
+                        document.getElementById('deploy-silent-args').value = t.silent_args;
+                    }
+                }
+            });
+        }
+
+        function useDeployTemplate(id) {
+            const sel = document.getElementById('deploy-template-select');
+            sel.value = String(id);
+            loadDeployTemplate();
+            showDeployTab('new');
+        }
+
+        function deleteDeployTemplate(id) {
+            if (!confirm('Delete this template?')) return;
+            socket.emit('delete_deploy_template', { id });
+            socket.once('deploy_template_deleted', () => { loadDeployTemplates(); });
         }
 
         // ---- AI Guidance Chat ----

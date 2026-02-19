@@ -944,8 +944,8 @@ function setup(io, app) {
           }
           // Validate extension
           const ext = installerFilename.split('.').pop().toLowerCase();
-          if (!['exe', 'msi'].includes(ext)) {
-            socket.emit('error_message', { message: 'Only .exe and .msi files are allowed' });
+          if (!['exe', 'msi', 'ps1', 'bat'].includes(ext)) {
+            socket.emit('error_message', { message: 'Only .exe, .msi, .ps1, and .bat files are allowed' });
             return;
           }
           // Decode base64 to Buffer for BLOB storage
@@ -1042,6 +1042,61 @@ function setup(io, app) {
         socket.emit('deployment_cancelled', { deploymentId });
       } catch (err) {
         console.error('[IT] cancel_deployment error:', err.message);
+      }
+    });
+
+    // ---- Deployment Templates ----
+    socket.on('save_deploy_template', (data) => {
+      try {
+        const { name, type, scriptId, scriptContent, installerFilename, silentArgs, timeoutSeconds, requiresElevation } = data || {};
+        if (!name || !type) {
+          socket.emit('deploy_template_error', { error: 'Name and type are required' });
+          return;
+        }
+        if (!['script', 'installer'].includes(type)) {
+          socket.emit('deploy_template_error', { error: 'Invalid type' });
+          return;
+        }
+
+        const result = db.prepare(`
+          INSERT INTO deployment_templates (name, type, script_id, script_content, installer_filename, silent_args, timeout_seconds, requires_elevation, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          name, type,
+          type === 'script' ? (scriptId || null) : null,
+          type === 'script' ? (scriptContent || null) : null,
+          type === 'installer' ? (installerFilename || null) : null,
+          silentArgs || null,
+          timeoutSeconds || 300,
+          requiresElevation ? 1 : 0,
+          socket.username || 'unknown'
+        );
+
+        socket.emit('deploy_template_saved', { id: result.lastInsertRowid, name });
+      } catch (err) {
+        console.error('[IT] save_deploy_template error:', err.message);
+        socket.emit('deploy_template_error', { error: err.message });
+      }
+    });
+
+    socket.on('get_deploy_templates', () => {
+      try {
+        const templates = db.prepare('SELECT * FROM deployment_templates ORDER BY name ASC').all();
+        socket.emit('deploy_template_list', { templates });
+      } catch (err) {
+        console.error('[IT] get_deploy_templates error:', err.message);
+        socket.emit('deploy_template_list', { templates: [] });
+      }
+    });
+
+    socket.on('delete_deploy_template', (data) => {
+      try {
+        const { id } = data || {};
+        if (!id) return;
+        db.prepare('DELETE FROM deployment_templates WHERE id = ?').run(id);
+        socket.emit('deploy_template_deleted', { id });
+      } catch (err) {
+        console.error('[IT] delete_deploy_template error:', err.message);
       }
     });
 

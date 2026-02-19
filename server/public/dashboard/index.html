@@ -396,6 +396,14 @@
         }
         .alert-filter-btn.active { background: #2a475e; color: #c7d5e0; border-color: #66c0f4; }
 
+        /* File manager checkboxes */
+        .file-row-cb { accent-color: #66c0f4; cursor:pointer; width:14px; height:14px; }
+        .file-action-toolbar { display:none; }
+        .file-action-toolbar.visible { display:flex; }
+
+        /* Collapsible section headers */
+        .section-title.collapsible:hover { color: #66c0f4; }
+
         /* File browser */
         .file-browser {
             background: #0f1923;
@@ -739,8 +747,10 @@
                 <div id="detail-diagnostics"></div>
               </div>
 
-              <h2 class="section-title">System Tools</h2>
+              <h2 class="section-title" onclick="toggleSysToolsSection()" style="cursor:pointer; user-select:none;" title="Click to expand/collapse">System Tools <span id="sys-tools-toggle" style="font-size:14px; color:#8f98a0;">&#x25BC;</span></h2>
+              <input type="hidden" id="sys-tools-section-loaded" value="" />
               <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
+                <div id="sys-tools-content" style="display:none;">
                 <div class="sys-tools-tabs">
                   <button class="sys-tools-tab active" onclick="switchSysTab('processes')">Processes</button>
                   <button class="sys-tools-tab" onclick="switchSysTab('services')">Services</button>
@@ -808,16 +818,41 @@
                     <div style="color:#8f98a0; font-size:13px;">Select filters and click Query</div>
                   </div>
                 </div>
+                </div><!-- end sys-tools-content -->
               </div>
 
-              <h2 class="section-title">File Browser</h2>
+              <h2 class="section-title" onclick="toggleFileBrowserSection()" style="cursor:pointer; user-select:none;" title="Click to expand/collapse">File Browser <span id="file-section-toggle" style="font-size:14px; color:#8f98a0;">&#x25BC;</span></h2>
+              <input type="hidden" id="file-section-loaded" value="" />
               <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
+                <div id="file-section-content" style="display:none;">
+                <!-- Action toolbar (shown when files are selected) -->
+                <div id="file-action-toolbar" style="display:none; background:#0e1621; border:1px solid #2a475e; border-radius:6px; padding:8px 12px; margin-bottom:10px; flex-wrap:wrap; align-items:center; gap:8px;">
+                  <span id="file-selection-count" style="font-size:13px; color:#8f98a0; margin-right:4px;">0 items selected</span>
+                  <button class="diag-btn" onclick="fileActionCopy()" style="font-size:12px; padding:4px 10px;">Copy</button>
+                  <button class="diag-btn" onclick="fileActionCut()" style="font-size:12px; padding:4px 10px;">Cut</button>
+                  <button id="file-paste-btn" class="diag-btn" onclick="fileActionPaste()" style="font-size:12px; padding:4px 10px;" disabled>Paste</button>
+                  <button class="diag-btn" onclick="fileActionDelete()" style="font-size:12px; padding:4px 10px; background:#4a1919; color:#ef5350;">Delete</button>
+                  <button class="diag-btn" onclick="fileActionCopyPaths()" style="font-size:12px; padding:4px 10px;">Copy Paths</button>
+                  <button class="diag-btn" onclick="fileActionProperties()" style="font-size:12px; padding:4px 10px;" id="file-properties-btn">Properties</button>
+                  <button class="diag-btn" onclick="fileActionUpload()" style="font-size:12px; padding:4px 10px;">Upload</button>
+                  <button class="diag-btn" onclick="fileActionDownload()" style="font-size:12px; padding:4px 10px;">Download</button>
+                </div>
+                <input type="file" id="file-upload-input" multiple style="display:none;" onchange="onFileUploadSelected(event)" />
                 <!-- Breadcrumb navigation bar -->
                 <div id="file-breadcrumb" style="display:flex; align-items:center; gap:4px; margin-bottom:12px; padding:8px 12px; background:#0e1621; border-radius:6px; flex-wrap:wrap; min-height:36px;">
                   <span style="color:#66c0f4; cursor:pointer; font-size:14px;" onclick="browseFiles('')" title="Drives">&#x1F4BB; Drives</span>
                 </div>
                 <!-- File listing area -->
                 <div id="file-browser-area" style="min-height:200px; max-height:500px; overflow-y:auto;"></div>
+                <!-- Properties panel -->
+                <div id="file-properties-panel" style="display:none; margin-top:12px; background:#0a0f14; border:1px solid #2a475e; border-radius:6px; padding:12px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:13px; font-weight:600; color:#c7d5e0;">File Properties</span>
+                    <button onclick="document.getElementById('file-properties-panel').style.display='none'" style="background:#2a475e; color:#c7d5e0; border:none; border-radius:4px; padding:3px 10px; cursor:pointer; font-size:12px;">&#x2715;</button>
+                  </div>
+                  <div id="file-properties-content" style="font-size:12px; font-family:monospace; color:#a8b4c0; line-height:1.6;"></div>
+                </div>
+                </div><!-- end file-section-content -->
               </div>
 
               <h2 class="section-title">Remote Scripts</h2>
@@ -1624,6 +1659,26 @@
                 if (data.deviceId === currentDeviceId) renderFileContent(data);
             });
 
+            socket.on('file_delete_result', (data) => {
+                if (data.deviceId === currentDeviceId) handleFileDeleteResult(data);
+            });
+
+            socket.on('file_properties_result', (data) => {
+                if (data.deviceId === currentDeviceId) handleFilePropertiesResult(data);
+            });
+
+            socket.on('file_paste_result', (data) => {
+                if (data.deviceId === currentDeviceId) handleFilePasteResult(data);
+            });
+
+            socket.on('file_download_result', (data) => {
+                if (data.deviceId === currentDeviceId) handleFileDownloadResult(data);
+            });
+
+            socket.on('file_upload_result', (data) => {
+                if (data.deviceId === currentDeviceId) handleFileUploadResult(data);
+            });
+
             socket.on('script_result', (data) => {
                 if (data.deviceId === currentDeviceId) renderScriptResult(data);
             });
@@ -2051,17 +2106,24 @@
             }
 
             loadScriptLibrary();
-            browseFiles('');
+            // Reset file browser (lazy — user clicks header to load)
+            currentBrowsePath = '';
+            selectedFiles = new Set();
+            fileClipboard = { operation: null, paths: [], sourcePath: '' };
+            document.getElementById('file-browser-area').innerHTML = '<div style="color:#8f98a0; padding:20px; text-align:center;">Click the File Browser header to open.</div>';
+            document.getElementById('file-section-content').style.display = 'none';
+            document.getElementById('file-section-loaded').value = '';
             document.getElementById('script-output-area').innerHTML = '';
-            // Reset and auto-load system tools
+            // Reset and lazy-load system tools
             cachedProcessList = null;
             cachedServiceList = null;
             cachedEventList = null;
+            document.getElementById('proc-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Click Refresh to load processes</div>';
             document.getElementById('svc-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Click Refresh to load services</div>';
             document.getElementById('evt-table-container').innerHTML = '<div style="color:#8f98a0; font-size:13px;">Select filters and click Query</div>';
             if (document.getElementById('evt-search')) document.getElementById('evt-search').value = '';
-            switchSysTab('processes');
-            loadProcesses();
+            document.getElementById('sys-tools-content').style.display = 'none';
+            document.getElementById('sys-tools-section-loaded').value = '';
             // Reset and load activity history
             document.getElementById('activity-category-filter').value = '';
             document.getElementById('activity-date-from').value = '';
@@ -2536,9 +2598,49 @@
             }
         }
 
+        // ---- Lazy section toggles ----
+        function toggleSysToolsSection() {
+            const content = document.getElementById('sys-tools-content');
+            const toggle = document.getElementById('sys-tools-toggle');
+            const loaded = document.getElementById('sys-tools-section-loaded');
+            const isOpen = content.style.display !== 'none';
+            if (isOpen) {
+                content.style.display = 'none';
+                toggle.innerHTML = '&#x25BC;';
+            } else {
+                content.style.display = '';
+                toggle.innerHTML = '&#x25B2;';
+                if (!loaded.value) {
+                    loaded.value = '1';
+                    switchSysTab('processes');
+                    loadProcesses();
+                }
+            }
+        }
+
+        function toggleFileBrowserSection() {
+            const content = document.getElementById('file-section-content');
+            const toggle = document.getElementById('file-section-toggle');
+            const loaded = document.getElementById('file-section-loaded');
+            const isOpen = content.style.display !== 'none';
+            if (isOpen) {
+                content.style.display = 'none';
+                toggle.innerHTML = '&#x25BC;';
+            } else {
+                content.style.display = '';
+                toggle.innerHTML = '&#x25B2;';
+                if (!loaded.value) {
+                    loaded.value = '1';
+                    browseFiles('');
+                }
+            }
+        }
+
         // ---- File Browser ----
         let currentBrowsePath = '';
         let fileBrowserHistory = [];
+        let selectedFiles = new Set();
+        let fileClipboard = { operation: null, paths: [], sourcePath: '' };
 
         function browseFiles(path) {
             if (!currentDeviceId || !socket) return;
@@ -2574,6 +2676,10 @@
         }
 
         function renderFileBrowser(data) {
+            // Clear selection on every new browse result
+            selectedFiles = new Set();
+            updateFileActionToolbar();
+
             const area = document.getElementById('file-browser-area');
             if (!data.approved) {
                 area.innerHTML = '<div style="color:#ef5350; padding:20px; text-align:center;">Access denied by user</div>';
@@ -2596,7 +2702,7 @@
             const isDrives = entries.some(e => e.Type === 'drive' || e.type === 'drive');
 
             if (isDrives) {
-                // Render drives as a grid
+                // Drives: no checkboxes, just grid
                 let html = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; padding:8px;">';
                 entries.forEach(entry => {
                     const name = entry.Name || entry.name;
@@ -2616,21 +2722,23 @@
                 return;
             }
 
-            // Render file/folder list
+            // Render file/folder list with checkboxes
             let html = '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
             html += '<thead><tr style="border-bottom:1px solid #2a475e; color:#8f98a0; font-size:11px; text-transform:uppercase;">';
+            html += '<th style="padding:6px 8px; width:28px;"><input type="checkbox" class="file-row-cb" id="file-select-all" onchange="toggleSelectAll(this.checked)" /></th>';
             html += '<th style="text-align:left; padding:6px 8px;">Name</th>';
             html += '<th style="text-align:right; padding:6px 8px; width:90px;">Size</th>';
             html += '<th style="text-align:right; padding:6px 8px; width:150px;">Modified</th>';
             html += '</tr></thead><tbody>';
 
-            // Back navigation
+            // Back navigation row — no checkbox
             if (data.path) {
                 const parentPath = data.path.replace(/\\[^\\]+\\?$/, '');
                 const backTarget = (parentPath === data.path || parentPath.length <= 2) ? '' : parentPath;
                 html += `<tr onclick="browseFiles('${backTarget.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')"
                     style="cursor:pointer; border-bottom:1px solid #1b2838;"
                     onmouseover="this.style.background='#1b2838'" onmouseout="this.style.background='transparent'">
+                    <td style="padding:8px;"></td>
                     <td style="padding:8px; color:#66c0f4;">&#x2B06;&#xFE0F; ..</td>
                     <td></td><td></td>
                 </tr>`;
@@ -2654,6 +2762,12 @@
                 const icon = isDir ? '&#x1F4C1;' : getFileIcon(name);
 
                 const fullPath = (data.path || '').replace(/\\$/, '') + '\\' + name;
+                const escapedPath = fullPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const cbId = 'cb-' + fullPath.replace(/[\\: ]/g, '_');
+
+                const clickAction = isDir
+                    ? `browseFiles('${escapedPath}')`
+                    : `requestFileRead('${escapedPath}')`;
 
                 let sizeStr = '';
                 if (!isDir) {
@@ -2668,13 +2782,14 @@
                     try { modStr = new Date(modified).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e) {}
                 }
 
-                const clickAction = isDir
-                    ? `browseFiles('${fullPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')`
-                    : `requestFileRead('${fullPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')`;
-
                 html += `<tr onclick="${clickAction}"
                     style="cursor:pointer; border-bottom:1px solid #1b2838;"
                     onmouseover="this.style.background='#1b2838'" onmouseout="this.style.background='transparent'">
+                    <td style="padding:8px;" onclick="event.stopPropagation()">
+                        <input type="checkbox" class="file-row-cb" id="${cbId}"
+                            data-path="${fullPath.replace(/"/g, '&quot;')}"
+                            onchange="onFileCheckboxChange(this)" />
+                    </td>
                     <td style="padding:8px; color:${isDir ? '#66c0f4' : '#c7d5e0'};">${icon} ${escapeHtml(name)}</td>
                     <td style="padding:8px; color:#8f98a0; text-align:right; font-size:12px;">${sizeStr}</td>
                     <td style="padding:8px; color:#8f98a0; text-align:right; font-size:12px;">${modStr}</td>
@@ -2683,6 +2798,242 @@
 
             html += '</tbody></table>';
             area.innerHTML = html;
+        }
+
+        function toggleSelectAll(checked) {
+            selectedFiles = new Set();
+            document.querySelectorAll('#file-browser-area input[type=checkbox].file-row-cb[data-path]').forEach(cb => {
+                cb.checked = checked;
+                if (checked) selectedFiles.add(cb.dataset.path);
+            });
+            updateFileActionToolbar();
+        }
+
+        function onFileCheckboxChange(cb) {
+            if (cb.checked) {
+                selectedFiles.add(cb.dataset.path);
+            } else {
+                selectedFiles.delete(cb.dataset.path);
+            }
+            // Sync select-all checkbox
+            const all = document.querySelectorAll('#file-browser-area input[type=checkbox].file-row-cb[data-path]');
+            const selectAll = document.getElementById('file-select-all');
+            if (selectAll) selectAll.checked = all.length > 0 && [...all].every(c => c.checked);
+            updateFileActionToolbar();
+        }
+
+        function updateFileActionToolbar() {
+            const toolbar = document.getElementById('file-action-toolbar');
+            if (!toolbar) return;
+            const count = selectedFiles.size;
+            if (count > 0) {
+                toolbar.style.display = 'flex';
+                document.getElementById('file-selection-count').textContent = count + ' item' + (count !== 1 ? 's' : '') + ' selected';
+            } else {
+                toolbar.style.display = 'none';
+            }
+            // Enable paste only when clipboard has items and we're in a folder (not drives view)
+            const pasteBtn = document.getElementById('file-paste-btn');
+            if (pasteBtn) {
+                pasteBtn.disabled = !(fileClipboard.operation && fileClipboard.paths.length > 0 && currentBrowsePath);
+            }
+        }
+
+        function updatePasteBtn() {
+            const pasteBtn = document.getElementById('file-paste-btn');
+            if (pasteBtn) {
+                pasteBtn.disabled = !(fileClipboard.operation && fileClipboard.paths.length > 0 && currentBrowsePath);
+            }
+        }
+
+        // ---- File actions ----
+        function fileActionCopy() {
+            if (selectedFiles.size === 0) return;
+            fileClipboard = { operation: 'copy', paths: [...selectedFiles], sourcePath: currentBrowsePath };
+            updatePasteBtn();
+            showFileBrowserMsg('Copied ' + selectedFiles.size + ' item(s) to clipboard');
+        }
+
+        function fileActionCut() {
+            if (selectedFiles.size === 0) return;
+            fileClipboard = { operation: 'move', paths: [...selectedFiles], sourcePath: currentBrowsePath };
+            updatePasteBtn();
+            showFileBrowserMsg('Cut ' + selectedFiles.size + ' item(s) to clipboard');
+        }
+
+        function fileActionPaste() {
+            if (!fileClipboard.operation || fileClipboard.paths.length === 0 || !currentBrowsePath || !currentDeviceId || !socket) return;
+            socket.emit('request_file_paste', {
+                deviceId: currentDeviceId,
+                operation: fileClipboard.operation,
+                paths: fileClipboard.paths,
+                destination: currentBrowsePath
+            });
+            showFileBrowserMsg('Paste operation sent...');
+        }
+
+        function fileActionDelete() {
+            if (selectedFiles.size === 0 || !currentDeviceId || !socket) return;
+            const count = selectedFiles.size;
+            if (!confirm('Delete ' + count + ' item' + (count !== 1 ? 's' : '') + '? This cannot be undone.')) return;
+            socket.emit('request_file_delete', {
+                deviceId: currentDeviceId,
+                paths: [...selectedFiles]
+            });
+            showFileBrowserMsg('Delete operation sent...');
+        }
+
+        function fileActionCopyPaths() {
+            if (selectedFiles.size === 0) return;
+            navigator.clipboard.writeText([...selectedFiles].join('\n')).then(() => {
+                showFileBrowserMsg('Paths copied to clipboard');
+            }).catch(() => {
+                alert([...selectedFiles].join('\n'));
+            });
+        }
+
+        function fileActionProperties() {
+            if (selectedFiles.size === 0 || !currentDeviceId || !socket) return;
+            const path = [...selectedFiles][0];
+            socket.emit('request_file_properties', { deviceId: currentDeviceId, path });
+            showFileBrowserMsg('Loading properties...');
+        }
+
+        function fileActionUpload() {
+            const input = document.getElementById('file-upload-input');
+            if (input) input.click();
+        }
+
+        function onFileUploadSelected(event) {
+            if (!currentDeviceId || !socket) return;
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+            const MAX_SIZE = 50 * 1024 * 1024;
+            for (const file of files) {
+                if (file.size > MAX_SIZE) {
+                    alert('File "' + file.name + '" is too large (max 50MB)');
+                    continue;
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const base64 = e.target.result.split(',')[1];
+                    socket.emit('request_file_upload', {
+                        deviceId: currentDeviceId,
+                        destinationPath: currentBrowsePath,
+                        filename: file.name,
+                        data: base64,
+                        size: file.size
+                    });
+                    showFileBrowserMsg('Uploading ' + file.name + '...');
+                };
+                reader.readAsDataURL(file);
+            }
+            event.target.value = '';
+        }
+
+        function fileActionDownload() {
+            if (selectedFiles.size === 0 || !currentDeviceId || !socket) return;
+            [...selectedFiles].forEach(path => {
+                socket.emit('request_file_download', { deviceId: currentDeviceId, path });
+            });
+            showFileBrowserMsg('Download request sent for ' + selectedFiles.size + ' file(s)...');
+        }
+
+        function showFileBrowserMsg(msg) {
+            const area = document.getElementById('file-browser-area');
+            const existing = document.getElementById('fb-msg');
+            if (existing) existing.remove();
+            const el = document.createElement('div');
+            el.id = 'fb-msg';
+            el.style.cssText = 'color:#66c0f4; font-size:12px; padding:4px 8px; margin-bottom:6px; background:#0e1621; border-radius:4px;';
+            el.textContent = msg;
+            if (area && area.parentNode) area.parentNode.insertBefore(el, area);
+            setTimeout(() => { el.remove(); }, 3000);
+        }
+
+        // ---- File operation result handlers ----
+        function handleFileDeleteResult(data) {
+            const failed = (data.results || []).filter(r => !r.ok);
+            if (failed.length > 0) {
+                alert('Delete failed for:\n' + failed.map(r => r.path + ': ' + r.error).join('\n'));
+            } else {
+                showFileBrowserMsg('Deleted successfully');
+            }
+            browseFiles(currentBrowsePath);
+        }
+
+        function handleFilePasteResult(data) {
+            if (!data.success) {
+                const failed = (data.results || []).filter(r => !r.ok);
+                alert('Paste failed:\n' + (failed.length > 0 ? failed.map(r => r.path + ': ' + r.error).join('\n') : data.error || 'Unknown error'));
+            } else {
+                showFileBrowserMsg('Paste completed');
+                if (fileClipboard.operation === 'move') {
+                    fileClipboard = { operation: null, paths: [], sourcePath: '' };
+                }
+            }
+            browseFiles(currentBrowsePath);
+        }
+
+        function handleFilePropertiesResult(data) {
+            const panel = document.getElementById('file-properties-panel');
+            const content = document.getElementById('file-properties-content');
+            if (!panel || !content) return;
+            if (!data.success) {
+                content.textContent = 'Error: ' + (data.error || 'Unknown error');
+                panel.style.display = '';
+                return;
+            }
+            const props = data.properties || {};
+            const rows = Object.entries(props).map(([k, v]) => {
+                let display = v;
+                if (k === 'size') display = formatFileSize(Number(v));
+                else if (k === 'created' || k === 'modified' || k === 'accessed') {
+                    try { display = new Date(v).toLocaleString(); } catch(e) {}
+                }
+                return `<div style="display:flex; gap:8px; padding:2px 0;"><span style="color:#8f98a0; min-width:120px;">${escapeHtml(k)}:</span><span>${escapeHtml(String(display))}</span></div>`;
+            }).join('');
+            content.innerHTML = rows || '<span style="color:#8f98a0;">No properties</span>';
+            panel.style.display = '';
+        }
+
+        function handleFileDownloadResult(data) {
+            if (!data.success) {
+                alert('Download failed: ' + (data.error || 'Unknown error'));
+                return;
+            }
+            try {
+                const bytes = atob(data.data);
+                const arr = new Uint8Array(bytes.length);
+                for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+                const blob = new Blob([arr], { type: data.mimeType || 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = data.filename || 'download';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('Download error: ' + e.message);
+            }
+        }
+
+        function handleFileUploadResult(data) {
+            if (!data.success) {
+                alert('Upload failed: ' + (data.error || 'Unknown error'));
+            } else {
+                showFileBrowserMsg('Upload complete: ' + (data.path || ''));
+                browseFiles(currentBrowsePath);
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes > 1024*1024*1024) return (bytes/(1024*1024*1024)).toFixed(2) + ' GB';
+            if (bytes > 1024*1024) return (bytes/(1024*1024)).toFixed(2) + ' MB';
+            if (bytes > 1024) return (bytes/1024).toFixed(2) + ' KB';
+            return bytes + ' B';
         }
 
         function getFileIcon(name) {

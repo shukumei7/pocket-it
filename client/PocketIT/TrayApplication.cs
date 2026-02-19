@@ -105,6 +105,11 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnDesktopQualityUpdate += OnServerDesktopQualityUpdate;
         _serverConnection.OnSystemToolRequest += OnServerSystemToolRequest;
         _serverConnection.OnUpdateAvailable += OnServerUpdateAvailable;
+        _serverConnection.OnFileDeleteRequest += OnServerFileDeleteRequest;
+        _serverConnection.OnFilePropertiesRequest += OnServerFilePropertiesRequest;
+        _serverConnection.OnFilePasteRequest += OnServerFilePasteRequest;
+        _serverConnection.OnFileDownloadRequest += OnServerFileDownloadRequest;
+        _serverConnection.OnFileUploadRequest += OnServerFileUploadRequest;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -777,6 +782,122 @@ public class TrayApplication : ApplicationContext
             {
                 Logger.Error($"System tool execution failed: {tool}", ex);
                 await _serverConnection.SendSystemToolResult(requestId, tool, false, null, ex.Message);
+            }
+        });
+    }
+
+    private void OnServerFileDeleteRequest(string requestId, string[] paths)
+    {
+        Logger.Info($"IT-initiated file delete: {paths.Length} paths (requestId: {requestId})");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var results = _fileAccess.DeleteFiles(paths);
+                bool allOk = results.All(r => r.Ok);
+                var resultData = results.Select(r => new { path = r.Path, ok = r.Ok, error = r.Error });
+                await _serverConnection.SendFileDeleteResult(requestId, allOk, resultData);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"File delete failed", ex);
+                await _serverConnection.SendFileDeleteResult(requestId, false, new[] { new { path = "", ok = false, error = ex.Message } });
+            }
+        });
+    }
+
+    private void OnServerFilePropertiesRequest(string requestId, string path)
+    {
+        Logger.Info($"IT-initiated file properties: {path} (requestId: {requestId})");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var props = _fileAccess.GetFileProperties(path);
+                await _serverConnection.SendFilePropertiesResult(requestId, true, props, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"File properties failed: {path}", ex);
+                await _serverConnection.SendFilePropertiesResult(requestId, false, null, ex.Message);
+            }
+        });
+    }
+
+    private void OnServerFilePasteRequest(string requestId, string[] paths, string destination, bool move)
+    {
+        Logger.Info($"IT-initiated file paste: {(move ? "move" : "copy")} {paths.Length} items to {destination} (requestId: {requestId})");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var results = _fileAccess.CopyOrMoveFiles(paths, destination, move);
+                bool allOk = results.All(r => r.Ok);
+                var resultData = results.Select(r => new { path = r.Path, ok = r.Ok, error = r.Error });
+                await _serverConnection.SendFilePasteResult(requestId, allOk, resultData, allOk ? null : "Some operations failed");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"File paste failed", ex);
+                await _serverConnection.SendFilePasteResult(requestId, false, Array.Empty<object>(), ex.Message);
+            }
+        });
+    }
+
+    private void OnServerFileDownloadRequest(string requestId, string path)
+    {
+        Logger.Info($"IT-initiated file download: {path} (requestId: {requestId})");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var (bytes, error) = _fileAccess.ReadFileBytes(path);
+                if (bytes == null)
+                {
+                    await _serverConnection.SendFileDownloadResult(requestId, false, path, null, null, null, 0, error);
+                    return;
+                }
+                var filename = System.IO.Path.GetFileName(path);
+                var base64 = Convert.ToBase64String(bytes);
+                var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                var mimeType = ext switch
+                {
+                    ".pdf" => "application/pdf",
+                    ".png" => "image/png",
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".gif" => "image/gif",
+                    ".txt" or ".log" or ".md" => "text/plain",
+                    ".json" => "application/json",
+                    ".xml" => "application/xml",
+                    ".zip" => "application/zip",
+                    _ => "application/octet-stream"
+                };
+                await _serverConnection.SendFileDownloadResult(requestId, true, path, filename, base64, mimeType, bytes.Length, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"File download failed: {path}", ex);
+                await _serverConnection.SendFileDownloadResult(requestId, false, path, null, null, null, 0, ex.Message);
+            }
+        });
+    }
+
+    private void OnServerFileUploadRequest(string requestId, string destinationPath, string filename, string base64Data)
+    {
+        Logger.Info($"IT-initiated file upload: {filename} to {destinationPath} (requestId: {requestId})");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var bytes = Convert.FromBase64String(base64Data);
+                var (ok, error) = _fileAccess.WriteUploadedFile(destinationPath, filename, bytes);
+                var fullPath = ok ? System.IO.Path.Combine(destinationPath, filename) : null;
+                await _serverConnection.SendFileUploadResult(requestId, ok, fullPath, error);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"File upload failed: {filename}", ex);
+                await _serverConnection.SendFileUploadResult(requestId, false, null, ex.Message);
             }
         });
     }

@@ -687,6 +687,199 @@ function setup(io, app) {
       }
     });
 
+    // File management operations (IT-initiated, unrestricted)
+    socket.on('request_file_delete', (data) => {
+      const { deviceId, paths } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      if (!Array.isArray(paths) || paths.length === 0) {
+        socket.emit('error_message', { message: 'paths must be a non-empty array' });
+        return;
+      }
+
+      if (!checkOpRateLimit(socket.id, 'request_file_delete', 20)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for file delete (20/min)' });
+        return;
+      }
+
+      console.log(`[IT] File delete request for ${deviceId}: ${paths.length} paths`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'file_delete_requested', deviceId, JSON.stringify({ paths }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `fd-${Date.now()}`;
+          deviceSocket.emit('request_file_delete', { requestId, paths });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('request_file_properties', (data) => {
+      const { deviceId, path: filePath } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      console.log(`[IT] File properties request for ${deviceId}: ${filePath}`);
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `fp-${Date.now()}`;
+          deviceSocket.emit('request_file_properties', { requestId, path: filePath });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('request_file_paste', (data) => {
+      const { deviceId, operation, paths, destination } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      if (!Array.isArray(paths) || paths.length === 0) {
+        socket.emit('error_message', { message: 'paths must be a non-empty array' });
+        return;
+      }
+
+      if (!['copy', 'move'].includes(operation)) {
+        socket.emit('error_message', { message: 'operation must be "copy" or "move"' });
+        return;
+      }
+
+      if (!checkOpRateLimit(socket.id, 'request_file_paste', 20)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for file paste (20/min)' });
+        return;
+      }
+
+      console.log(`[IT] File paste request for ${deviceId}: ${operation} ${paths.length} items to ${destination}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'file_paste_requested', deviceId, JSON.stringify({ operation, paths, destination }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `fp-${Date.now()}`;
+          deviceSocket.emit('request_file_paste', { requestId, operation, paths, destination });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('request_file_download', (data) => {
+      const { deviceId, path: filePath } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      if (!checkOpRateLimit(socket.id, 'request_file_download', 20)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for file download (20/min)' });
+        return;
+      }
+
+      console.log(`[IT] File download request for ${deviceId}: ${filePath}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'file_download_requested', deviceId, JSON.stringify({ path: filePath }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `fdl-${Date.now()}`;
+          deviceSocket.emit('request_file_download', { requestId, path: filePath });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('request_file_upload', (data) => {
+      const { deviceId, destinationPath, filename, data: base64Data, size } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      if (!filename || typeof filename !== 'string' || filename.length === 0 || filename.length > 255) {
+        socket.emit('error_message', { message: 'Invalid filename' });
+        return;
+      }
+
+      const MAX_UPLOAD_SIZE = 52_428_800; // 50MB
+      if (size && size > MAX_UPLOAD_SIZE) {
+        socket.emit('error_message', { message: `File too large. Maximum is 50MB.` });
+        return;
+      }
+
+      if (!checkOpRateLimit(socket.id, 'request_file_upload', 10)) {
+        socket.emit('error_message', { message: 'Rate limit exceeded for file upload (10/min)' });
+        return;
+      }
+
+      console.log(`[IT] File upload request for ${deviceId}: ${filename} to ${destinationPath}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'file_upload_requested', deviceId, JSON.stringify({ filename, destinationPath, size }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `fu-${Date.now()}`;
+          deviceSocket.emit('request_file_upload', { requestId, destinationPath, filename, data: base64Data });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`[IT] Dashboard disconnected: ${socket.id}`);
       watchers.delete(socket.id);

@@ -797,6 +797,93 @@ function setup(io, app) {
       });
     });
 
+    // File management results from client (IT-initiated)
+    socket.on('file_delete_result', (data) => {
+      console.log(`[Agent] File delete result from ${deviceId}: ${data.requestId}`);
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'file_delete_completed', deviceId, JSON.stringify({ requestId: data.requestId, success: data.success }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+      emitToScoped(itNs, db, deviceId, 'file_delete_result', {
+        deviceId,
+        requestId: data.requestId,
+        success: data.success,
+        results: data.results || []
+      });
+    });
+
+    socket.on('file_properties_result', (data) => {
+      console.log(`[Agent] File properties result from ${deviceId}: ${data.requestId}`);
+      emitToScoped(itNs, db, deviceId, 'file_properties_result', {
+        deviceId,
+        requestId: data.requestId,
+        success: data.success,
+        properties: data.properties || null,
+        error: data.error || null
+      });
+    });
+
+    socket.on('file_paste_result', (data) => {
+      console.log(`[Agent] File paste result from ${deviceId}: ${data.requestId}`);
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'file_paste_completed', deviceId, JSON.stringify({ requestId: data.requestId, success: data.success }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+      emitToScoped(itNs, db, deviceId, 'file_paste_result', {
+        deviceId,
+        requestId: data.requestId,
+        success: data.success,
+        results: data.results || [],
+        error: data.error || null
+      });
+    });
+
+    socket.on('file_download_result', (data) => {
+      console.log(`[Agent] File download result from ${deviceId}: ${data.requestId} (size=${data.size})`);
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'file_download_completed', data.path || '', JSON.stringify({ requestId: data.requestId, success: data.success, size: data.size }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+      emitToScoped(itNs, db, deviceId, 'file_download_result', {
+        deviceId,
+        requestId: data.requestId,
+        success: data.success,
+        path: data.path,
+        filename: data.filename,
+        data: data.data || null,
+        mimeType: data.mimeType || 'application/octet-stream',
+        size: data.size || 0,
+        error: data.error || null
+      });
+    });
+
+    socket.on('file_upload_result', (data) => {
+      console.log(`[Agent] File upload result from ${deviceId}: ${data.requestId}`);
+      try {
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(deviceId, 'file_upload_completed', data.path || '', JSON.stringify({ requestId: data.requestId, success: data.success }));
+      } catch (err) {
+        console.error('[Agent] Audit log error:', err.message);
+      }
+      emitToScoped(itNs, db, deviceId, 'file_upload_result', {
+        deviceId,
+        requestId: data.requestId,
+        success: data.success,
+        path: data.path || null,
+        error: data.error || null
+      });
+    });
+
     // Disconnect
     socket.on('disconnect', () => {
       console.log(`[Agent] Device disconnected: ${deviceId}`);

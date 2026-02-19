@@ -40,6 +40,11 @@ public class ServerConnection : IDisposable
     public event Action<int, int, float>? OnDesktopQualityUpdate; // quality, fps, scale
     public event Action<string, string, string>? OnSystemToolRequest; // requestId, tool, paramsJson
     public event Action<string>? OnUpdateAvailable; // json payload
+    public event Action<string, string[]>? OnFileDeleteRequest; // requestId, paths
+    public event Action<string, string>? OnFilePropertiesRequest; // requestId, path
+    public event Action<string, string[], string, bool>? OnFilePasteRequest; // requestId, paths, destination, move
+    public event Action<string, string>? OnFileDownloadRequest; // requestId, path
+    public event Action<string, string, string, string>? OnFileUploadRequest; // requestId, destinationPath, filename, base64data
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -255,6 +260,58 @@ public class ServerConnection : IDisposable
             OnUpdateAvailable?.Invoke(data.GetRawText());
         });
 
+        _socket.On("request_file_delete", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.TryGetProperty("requestId", out var ridProp) ? ridProp.GetString() ?? "" : "";
+            var pathsEl = json.GetProperty("paths");
+            var paths = pathsEl.EnumerateArray().Select(p => p.GetString() ?? "").Where(p => p.Length > 0).ToArray();
+            Logger.Info($"File delete request: {paths.Length} paths (requestId: {requestId})");
+            OnFileDeleteRequest?.Invoke(requestId, paths);
+        });
+
+        _socket.On("request_file_properties", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.TryGetProperty("requestId", out var ridProp) ? ridProp.GetString() ?? "" : "";
+            var path = json.GetProperty("path").GetString() ?? "";
+            Logger.Info($"File properties request: {path}");
+            OnFilePropertiesRequest?.Invoke(requestId, path);
+        });
+
+        _socket.On("request_file_paste", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.TryGetProperty("requestId", out var ridProp) ? ridProp.GetString() ?? "" : "";
+            var operation = json.GetProperty("operation").GetString() ?? "copy";
+            var pathsEl = json.GetProperty("paths");
+            var paths = pathsEl.EnumerateArray().Select(p => p.GetString() ?? "").Where(p => p.Length > 0).ToArray();
+            var destination = json.GetProperty("destination").GetString() ?? "";
+            bool move = operation == "move";
+            Logger.Info($"File paste request: {operation} {paths.Length} items to {destination}");
+            OnFilePasteRequest?.Invoke(requestId, paths, destination, move);
+        });
+
+        _socket.On("request_file_download", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.TryGetProperty("requestId", out var ridProp) ? ridProp.GetString() ?? "" : "";
+            var path = json.GetProperty("path").GetString() ?? "";
+            Logger.Info($"File download request: {path}");
+            OnFileDownloadRequest?.Invoke(requestId, path);
+        });
+
+        _socket.On("request_file_upload", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.TryGetProperty("requestId", out var ridProp) ? ridProp.GetString() ?? "" : "";
+            var destinationPath = json.GetProperty("destinationPath").GetString() ?? "";
+            var filename = json.GetProperty("filename").GetString() ?? "";
+            var data = json.GetProperty("data").GetString() ?? "";
+            Logger.Info($"File upload request: {filename} to {destinationPath}");
+            OnFileUploadRequest?.Invoke(requestId, destinationPath, filename, data);
+        });
+
         try
         {
             await _socket.ConnectAsync();
@@ -394,6 +451,31 @@ public class ServerConnection : IDisposable
     public async Task SendSystemToolResult(string requestId, string tool, bool success, object? data, string? error)
     {
         await EmitAsync("system_tool_result", new { requestId, tool, success, data, error });
+    }
+
+    public async Task SendFileDeleteResult(string requestId, bool success, object results)
+    {
+        await EmitAsync("file_delete_result", new { requestId, success, results });
+    }
+
+    public async Task SendFilePropertiesResult(string requestId, bool success, object? properties, string? error)
+    {
+        await EmitAsync("file_properties_result", new { requestId, success, properties, error });
+    }
+
+    public async Task SendFilePasteResult(string requestId, bool success, object results, string? error)
+    {
+        await EmitAsync("file_paste_result", new { requestId, success, results, error });
+    }
+
+    public async Task SendFileDownloadResult(string requestId, bool success, string? path, string? filename, string? data, string? mimeType, long size, string? error)
+    {
+        await EmitAsync("file_download_result", new { requestId, success, path, filename, data, mimeType, size, error });
+    }
+
+    public async Task SendFileUploadResult(string requestId, bool success, string? path, string? error)
+    {
+        await EmitAsync("file_upload_result", new { requestId, success, path, error });
     }
 
     private async Task EmitAsync(string eventName, object data)

@@ -206,4 +206,188 @@ public class FileAccessService
     {
         return Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
     }
+
+    // ---- IT-initiated file management methods (unrestricted) ----
+
+    private static readonly string[] ProtectedPaths = new[]
+    {
+        Environment.GetFolderPath(Environment.SpecialFolder.System),
+        Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)
+    };
+
+    private bool IsProtectedPath(string fullPath)
+    {
+        foreach (var p in ProtectedPaths)
+        {
+            if (!string.IsNullOrEmpty(p) && fullPath.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    public List<(string Path, bool Ok, string? Error)> DeleteFiles(string[] paths)
+    {
+        var results = new List<(string, bool, string?)>();
+        foreach (var path in paths)
+        {
+            var full = Path.GetFullPath(path);
+            if (IsProtectedPath(full))
+            {
+                results.Add((path, false, "Cannot delete: protected system path"));
+                continue;
+            }
+            try
+            {
+                if (Directory.Exists(full))
+                    Directory.Delete(full, recursive: true);
+                else if (File.Exists(full))
+                    File.Delete(full);
+                else
+                {
+                    results.Add((path, false, "Not found"));
+                    continue;
+                }
+                results.Add((path, true, null));
+            }
+            catch (Exception ex)
+            {
+                results.Add((path, false, ex.Message));
+            }
+        }
+        return results;
+    }
+
+    public List<(string Path, bool Ok, string? Error)> CopyOrMoveFiles(string[] paths, string destination, bool move)
+    {
+        var results = new List<(string, bool, string?)>();
+        var destFull = Path.GetFullPath(destination);
+        if (!Directory.Exists(destFull))
+        {
+            results.Add((destination, false, "Destination directory not found"));
+            return results;
+        }
+        foreach (var path in paths)
+        {
+            var srcFull = Path.GetFullPath(path);
+            var name = Path.GetFileName(srcFull);
+            var target = Path.Combine(destFull, name);
+            try
+            {
+                if (move && IsProtectedPath(srcFull))
+                {
+                    results.Add((path, false, "Cannot move: protected system path"));
+                    continue;
+                }
+                if (Directory.Exists(srcFull))
+                {
+                    CopyDirectory(srcFull, target);
+                    if (move) Directory.Delete(srcFull, true);
+                }
+                else if (File.Exists(srcFull))
+                {
+                    File.Copy(srcFull, target, overwrite: true);
+                    if (move) File.Delete(srcFull);
+                }
+                else
+                {
+                    results.Add((path, false, "Not found"));
+                    continue;
+                }
+                results.Add((path, true, null));
+            }
+            catch (Exception ex)
+            {
+                results.Add((path, false, ex.Message));
+            }
+        }
+        return results;
+    }
+
+    private void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.GetFiles(source))
+            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), true);
+        foreach (var dir in Directory.GetDirectories(source))
+            CopyDirectory(dir, Path.Combine(destination, Path.GetFileName(dir)));
+    }
+
+    public Dictionary<string, object> GetFileProperties(string path)
+    {
+        var full = Path.GetFullPath(path);
+        var props = new Dictionary<string, object>();
+
+        if (File.Exists(full))
+        {
+            var info = new FileInfo(full);
+            props["name"] = info.Name;
+            props["fullPath"] = info.FullName;
+            props["type"] = "file";
+            props["size"] = info.Length;
+            props["created"] = info.CreationTimeUtc.ToString("o");
+            props["modified"] = info.LastWriteTimeUtc.ToString("o");
+            props["accessed"] = info.LastAccessTimeUtc.ToString("o");
+            props["isReadOnly"] = info.IsReadOnly;
+            props["isHidden"] = (info.Attributes & FileAttributes.Hidden) != 0;
+            props["isSystem"] = (info.Attributes & FileAttributes.System) != 0;
+            props["extension"] = info.Extension;
+        }
+        else if (Directory.Exists(full))
+        {
+            var info = new DirectoryInfo(full);
+            props["name"] = info.Name;
+            props["fullPath"] = info.FullName;
+            props["type"] = "directory";
+            props["created"] = info.CreationTimeUtc.ToString("o");
+            props["modified"] = info.LastWriteTimeUtc.ToString("o");
+            props["accessed"] = info.LastAccessTimeUtc.ToString("o");
+            props["isHidden"] = (info.Attributes & FileAttributes.Hidden) != 0;
+            props["isSystem"] = (info.Attributes & FileAttributes.System) != 0;
+            try
+            {
+                props["fileCount"] = Directory.GetFiles(full).Length;
+                props["folderCount"] = Directory.GetDirectories(full).Length;
+            }
+            catch { }
+        }
+
+        return props;
+    }
+
+    public (bool Ok, string? Error) WriteUploadedFile(string destinationDir, string filename, byte[] data)
+    {
+        try
+        {
+            var destFull = Path.GetFullPath(Path.Combine(destinationDir, filename));
+            if (!destFull.StartsWith(Path.GetFullPath(destinationDir), StringComparison.OrdinalIgnoreCase))
+                return (false, "Invalid filename: path traversal detected");
+            File.WriteAllBytes(destFull, data);
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    public (byte[]? Data, string? Error) ReadFileBytes(string path, long maxSize = 52_428_800)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path);
+            if (!File.Exists(full))
+                return (null, "File not found");
+            var info = new FileInfo(full);
+            if (info.Length > maxSize)
+                return (null, $"File too large ({info.Length / (1024 * 1024)}MB). Maximum is {maxSize / (1024 * 1024)}MB.");
+            return (File.ReadAllBytes(full), null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex.Message);
+        }
+    }
 }

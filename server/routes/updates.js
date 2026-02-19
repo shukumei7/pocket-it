@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { requireIT, requireDevice, isLocalhost } = require('../auth/middleware');
+const { checkForUpdates, applyUpdate, getServerVersion, getCurrentCommit } = require('../services/serverUpdate');
 
 const router = express.Router();
 
@@ -11,6 +12,12 @@ const router = express.Router();
 const uploadsDir = path.join(__dirname, '..', 'updates');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Ensure releases/ directory exists (at project root for git tracking)
+const releasesDir = path.join(__dirname, '..', '..', 'releases');
+if (!fs.existsSync(releasesDir)) {
+  fs.mkdirSync(releasesDir, { recursive: true });
 }
 
 const upload = multer({
@@ -329,6 +336,23 @@ router.post('/publish-local', async (req, res) => {
       console.error('[Updates] Audit log error:', err.message);
     }
 
+    // Copy to releases/ for git tracking
+    try {
+      const releasesZipPath = path.join(releasesDir, 'PocketIT-latest.zip');
+      fs.copyFileSync(destPath, releasesZipPath);
+
+      const versionJson = {
+        version,
+        sha256,
+        fileSize,
+        publishedAt: new Date().toISOString()
+      };
+      fs.writeFileSync(path.join(releasesDir, 'version.json'), JSON.stringify(versionJson, null, 2) + '\n');
+      console.log(`[Updates] Release files updated for v${version}`);
+    } catch (releaseErr) {
+      console.error('[Updates] Failed to copy to releases/:', releaseErr.message);
+    }
+
     // Push update_available to all outdated connected devices
     let notified = 0;
     const connectedDevices = req.app.locals.connectedDevices;
@@ -347,6 +371,42 @@ router.post('/publish-local', async (req, res) => {
   } catch (err) {
     console.error('[Updates] Publish-local error:', err.message);
     res.status(500).json({ error: 'Publish failed: ' + err.message });
+  }
+});
+
+// GET /api/updates/server-check — check if server updates available via git (IT auth)
+router.get('/server-check', requireIT, async (req, res) => {
+  try {
+    const result = await checkForUpdates();
+    result.serverVersion = getServerVersion();
+    res.json(result);
+  } catch (err) {
+    console.error('[Updates] Server check error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/updates/server-apply — pull server update from git (IT auth)
+router.post('/server-apply', requireIT, async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const io = req.app.locals.io;
+    const result = await applyUpdate(db, io);
+
+    // Audit log
+    try {
+      const actor = req.user?.username || 'localhost';
+      db.prepare(
+        "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+      ).run(actor, 'server_updated', 'server', JSON.stringify(result));
+    } catch (logErr) {
+      console.error('[Updates] Audit log error:', logErr.message);
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('[Updates] Server apply error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -399,6 +399,105 @@ body {
     scrollbar-color: #2a475e #0a0f14;
 }
 
+/* Approval banner (remediation / diagnostic) */
+.approval-banner-container {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+}
+
+.approval-banner {
+    background: #1a1a2e;
+    border: 2px solid #f59e0b;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 8px 12px 0;
+    animation: bannerSlideIn 0.3s ease-out;
+    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.15);
+}
+
+.approval-banner.diagnostic {
+    border-color: #66c0f4;
+    box-shadow: 0 4px 16px rgba(102, 192, 244, 0.15);
+}
+
+@keyframes bannerSlideIn {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.approval-banner .banner-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.approval-banner .banner-icon {
+    font-size: 20px;
+}
+
+.approval-banner .banner-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #f59e0b;
+}
+
+.approval-banner.diagnostic .banner-label {
+    color: #66c0f4;
+}
+
+.approval-banner .banner-description {
+    font-size: 14px;
+    font-weight: 500;
+    color: #e0e0e0;
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.approval-banner .banner-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.approval-banner .banner-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.approval-banner .banner-btn:active {
+    transform: scale(0.97);
+}
+
+.approval-banner .banner-btn.approve {
+    background: #2e7d32;
+    color: white;
+}
+.approval-banner .banner-btn.approve:hover { background: #388e3c; }
+
+.approval-banner .banner-btn.deny {
+    background: #424242;
+    color: #e0e0e0;
+}
+.approval-banner .banner-btn.deny:hover { background: #555; }
+
+.approval-banner .banner-result {
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 0 0;
+}
+
 /* Remote terminal session banner */
 .terminal-active-banner {
     display: flex;

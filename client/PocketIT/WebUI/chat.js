@@ -570,15 +570,13 @@
                             remDesc += ` (${data.parameter})`;
                         }
                     }
-                    addMessage(`${agentName} wants to run: **${remDesc}**`, 'ai', {
-                        action: { type: 'remediate', actionId: data.actionId, requestId: data.requestId, parameter: data.parameter || null }
-                    });
+                    addMessage(`${agentName} wants to run: **${remDesc}**`, 'ai');
+                    showApprovalBanner(remDesc, { type: 'remediate', actionId: data.actionId, requestId: data.requestId, parameter: data.parameter || null });
                     break;
 
                 case 'diagnostic_request':
-                    addMessage(`${agentName} wants to run: **${data.description || data.checkType}**`, 'ai', {
-                        action: { type: 'diagnostic', checkType: data.checkType, requestId: data.requestId }
-                    });
+                    addMessage(`${agentName} wants to run: **${data.description || data.checkType}**`, 'ai');
+                    showApprovalBanner(data.description || data.checkType, { type: 'diagnostic', checkType: data.checkType, requestId: data.requestId });
                     break;
 
                 case 'file_access_request':
@@ -617,6 +615,90 @@
                     console.log('Unknown message type:', data.type);
             }
         });
+    }
+
+    // Approval banner container — sticky at top of chat scroll area
+    const approvalBannersEl = document.createElement('div');
+    approvalBannersEl.className = 'approval-banner-container';
+    approvalBannersEl.id = 'approval-banners';
+    messagesEl.insertBefore(approvalBannersEl, messagesEl.firstChild);
+
+    function showApprovalBanner(description, action) {
+        const isDialognostic = action.type === 'diagnostic';
+        const banner = document.createElement('div');
+        banner.className = 'approval-banner' + (isDialognostic ? ' diagnostic' : '');
+        banner.id = 'approval-banner-' + action.requestId;
+
+        const header = document.createElement('div');
+        header.className = 'banner-header';
+
+        const icon = document.createElement('span');
+        icon.className = 'banner-icon';
+        icon.textContent = isDialognostic ? '\uD83D\uDD0D' : '\u26A0\uFE0F';
+        header.appendChild(icon);
+
+        const label = document.createElement('span');
+        label.className = 'banner-label';
+        label.textContent = isDialognostic ? 'Diagnostic Request' : 'Remediation Request';
+        header.appendChild(label);
+
+        banner.appendChild(header);
+
+        const desc = document.createElement('div');
+        desc.className = 'banner-description';
+        desc.textContent = description;
+        banner.appendChild(desc);
+
+        const actions = document.createElement('div');
+        actions.className = 'banner-actions';
+
+        function removeBanner() {
+            banner.style.transition = 'opacity 0.4s';
+            banner.style.opacity = '0';
+            setTimeout(function() { banner.remove(); }, 400);
+        }
+
+        const approveBtn = document.createElement('button');
+        approveBtn.className = 'banner-btn approve';
+        approveBtn.textContent = 'Approve';
+        approveBtn.onclick = function() {
+            const msgType = isDialognostic ? 'approve_diagnostic' : 'approve_remediation';
+            const payload = isDialognostic
+                ? { checkType: action.checkType, requestId: action.requestId }
+                : { actionId: action.actionId, requestId: action.requestId, parameter: action.parameter || null };
+            sendBridgeMessage(msgType, payload);
+            actions.innerHTML = '';
+            const result = document.createElement('div');
+            result.className = 'banner-result';
+            result.style.color = '#66bb6a';
+            result.textContent = isDialognostic ? 'Approved \u2014 running diagnostic...' : 'Approved \u2014 running...';
+            banner.appendChild(result);
+            setTimeout(removeBanner, 2000);
+        };
+
+        const denyBtn = document.createElement('button');
+        denyBtn.className = 'banner-btn deny';
+        denyBtn.textContent = 'Deny';
+        denyBtn.onclick = function() {
+            const msgType = isDialognostic ? 'deny_diagnostic' : 'deny_remediation';
+            const payload = isDialognostic
+                ? { checkType: action.checkType, requestId: action.requestId }
+                : { actionId: action.actionId, requestId: action.requestId };
+            sendBridgeMessage(msgType, payload);
+            actions.innerHTML = '';
+            const result = document.createElement('div');
+            result.className = 'banner-result';
+            result.style.color = '#ef5350';
+            result.textContent = 'Denied';
+            banner.appendChild(result);
+            setTimeout(removeBanner, 2000);
+        };
+
+        actions.appendChild(approveBtn);
+        actions.appendChild(denyBtn);
+        banner.appendChild(actions);
+
+        approvalBannersEl.prepend(banner);
     }
 
     // Welcome message — will be replaced by server greeting once connected

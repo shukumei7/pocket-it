@@ -22,3 +22,6 @@ Thumbs.db
 # IDE
 .idea/
 *.swp
+
+# Git-tracked releases (client ZIP for remote servers)
+!releases/

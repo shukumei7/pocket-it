@@ -228,6 +228,16 @@ schedulerService.start();
 // v0.14.0: Deployment scheduler
 const deploymentScheduler = require('./services/deploymentScheduler');
 deploymentScheduler.start(db, io);
+
+// Auto-register release ZIP from git (if present)
+const { registerReleaseZip } = require('./services/serverUpdate');
+registerReleaseZip(db).then(result => {
+  if (result.registered) {
+    console.log(`[Updates] Registered release v${result.version} from git`);
+  }
+}).catch(err => {
+  console.error('[Updates] Release registration error:', err.message);
+});
 // Scheduler needs access to connected devices map
 io._connectedDevices = app.locals.connectedDevices;
 

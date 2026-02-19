@@ -752,12 +752,16 @@
         /* Deploy page */
         .deploy-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
         .deploy-tabs .diag-btn.active { background: #1a3a5c; }
-        .deploy-section { margin-bottom: 20px; }
-        .deploy-section-title { font-size: 14px; font-weight: 600; color: #66c0f4; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #2a475e; }
+        .deploy-form-row { display: flex; gap: 16px; flex-wrap: wrap; }
+        .deploy-form-row > .deploy-section { flex: 1; min-width: 280px; }
+        .deploy-section { background: #1b2838; border: 1px solid #2a475e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        .deploy-section-title { font-size: 14px; font-weight: 600; color: #66c0f4; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #2a475e; }
+        .deploy-section > label { display: block; font-size: 12px; color: #8f98a0; margin: 12px 0 4px; }
+        .deploy-section > label:first-of-type { margin-top: 0; }
         .deploy-radio-group { display: flex; gap: 16px; margin: 8px 0; }
         .deploy-radio-group label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: #c7d5e0; }
-        .deploy-select { max-width: 400px; padding: 8px; background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; border-radius: 6px; width: 100%; font-size: 13px; }
-        .deploy-textarea { width: 100%; min-height: 100px; max-width: 600px; background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; padding: 10px; border-radius: 6px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; resize: vertical; }
+        .deploy-select { max-width: 100%; padding: 8px; background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; border-radius: 6px; width: 100%; font-size: 13px; }
+        .deploy-textarea { width: 100%; min-height: 100px; background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; padding: 10px; border-radius: 6px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; resize: vertical; }
         .deploy-input-sm { width: 80px; background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
         .deploy-device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: 300px; overflow-y: auto; padding: 4px; }
         .deploy-device-card { background: #0f1923; border: 1px solid #2a475e; border-radius: 8px; padding: 12px; cursor: pointer; transition: border-color 0.2s, background 0.2s; user-select: none; position: relative; }
@@ -794,9 +798,8 @@
         .deploy-result-meta { font-size: 11px; color: #8f98a0; }
         .deploy-schedule-input { background: #0f1923; border: 1px solid #2a475e; color: #c7d5e0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
         .deploy-schedule-input:disabled { opacity: 0.4; }
-        .deploy-checkbox-label { display: flex; align-items: center; gap: 6px; margin-top: 8px; cursor: pointer; font-size: 13px; color: #c7d5e0; }
-        .deploy-form-row { display: flex; gap: 20px; flex-wrap: wrap; }
-        .deploy-form-row > .deploy-section { flex: 1; min-width: 280px; }
+        .deploy-checkbox-box { background: #0f1923; border: 1px solid #2a475e; border-radius: 6px; padding: 8px 12px; margin-top: 10px; }
+        .deploy-checkbox-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: #c7d5e0; }
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -874,7 +877,10 @@
                 </div>
             </div>
 
-            <h2 class="section-title">Devices</h2>
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:4px;">
+                <h2 class="section-title" style="margin-bottom:0;">Devices</h2>
+                <button id="fleet-installer-btn" class="diag-btn" style="display:none; font-size:12px; padding:5px 14px;" onclick="downloadInstaller(selectedClientId, this)">Download Installer</button>
+            </div>
             <div class="device-grid" id="device-grid">
                 <div class="empty-state">No devices enrolled yet. Generate an enrollment token to get started.</div>
             </div>
@@ -1569,17 +1575,17 @@
                             </select>
                             <button class="diag-btn" onclick="saveDeployTemplate()" style="font-size:12px; padding:5px 12px; white-space:nowrap;">Save as Template</button>
                         </div>
-                        <label class="client-form-label">Deployment Name</label>
-                        <input type="text" id="deploy-name" placeholder="e.g. Install Chrome, Run cleanup script" style="max-width:400px;">
+                        <label>Deployment Name</label>
+                        <input type="text" id="deploy-name" placeholder="e.g. Install Chrome, Run cleanup script" style="width:100%;">
 
-                        <label class="client-form-label" style="margin-top:4px;">Type</label>
+                        <label>Type</label>
                         <div class="deploy-radio-group">
                             <label><input type="radio" name="deploy-type" value="script" checked onchange="toggleDeployType()"> Script</label>
                             <label><input type="radio" name="deploy-type" value="installer" onchange="toggleDeployType()"> File</label>
                         </div>
                         <div style="display:flex; align-items:center; gap:12px; margin-top:4px;">
                             <div>
-                                <label>Timeout</label>
+                                <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Timeout</label>
                                 <input type="number" id="deploy-timeout" value="300" min="30" max="600" class="deploy-input-sm">
                             </div>
                             <span style="font-size:11px; color:#8f98a0; margin-top:18px;">seconds (30-600)</span>
@@ -1593,11 +1599,13 @@
                         <select id="deploy-script-select" class="deploy-select" onchange="onDeployScriptSelect()">
                             <option value="">-- Ad-hoc script --</option>
                         </select>
-                        <label style="margin-top:8px;">Script Content</label>
+                        <label>Script Content</label>
                         <textarea id="deploy-script-content" class="deploy-textarea" placeholder="Enter PowerShell script..."></textarea>
-                        <label class="deploy-checkbox-label">
-                            <input type="checkbox" id="deploy-elevation"> Requires elevation
-                        </label>
+                        <div class="deploy-checkbox-box">
+                            <label class="deploy-checkbox-label">
+                                <input type="checkbox" id="deploy-elevation"> Requires elevation
+                            </label>
+                        </div>
                     </div>
 
                     <!-- File panel -->
@@ -1607,7 +1615,7 @@
                         <input type="file" id="deploy-installer-file" accept=".exe,.msi,.ps1,.bat" style="margin:8px 0;" onchange="onDeployInstallerSelected()">
                         <div id="deploy-installer-info" class="deploy-file-info"></div>
                         <label>Silent Arguments</label>
-                        <input type="text" id="deploy-silent-args" placeholder="e.g. /S or /qn ALLUSERS=1" style="max-width:400px;">
+                        <input type="text" id="deploy-silent-args" placeholder="e.g. /S or /qn ALLUSERS=1" style="width:100%;">
                     </div>
                 </div>
 
@@ -1621,10 +1629,10 @@
                             <button class="diag-btn" onclick="deploySelectNone()">Clear</button>
                         </div>
                         <span style="color:#2a475e; margin:0 2px;">|</span>
-                        <select id="deploy-filter-client" style="width:150px; padding:5px 8px; font-size:12px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:6px;" onchange="filterDeployDevices()">
+                        <select id="deploy-filter-client" class="deploy-input-sm" style="width:150px;" onchange="filterDeployDevices()">
                             <option value="">All Clients</option>
                         </select>
-                        <input type="text" id="deploy-filter-search" placeholder="Search hostname..." style="width:160px; padding:5px 8px; font-size:12px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:6px;" oninput="filterDeployDevices()">
+                        <input type="text" id="deploy-filter-search" placeholder="Search hostname..." class="deploy-input-sm" style="width:160px;" oninput="filterDeployDevices()">
                         <span id="deploy-selected-count" style="font-size:12px; color:#66c0f4; margin-left:auto;">0 selected</span>
                     </div>
                     <div id="deploy-device-list" class="deploy-device-grid"></div>
@@ -1815,6 +1823,34 @@
                     <span id="sys-info-provider" style="color:#c7d5e0;">-</span>
                     <span style="color:#8f98a0;">Online Devices:</span>
                     <span id="sys-info-devices" style="color:#c7d5e0;">-</span>
+                </div>
+            </div>
+
+            <!-- Server Update -->
+            <div class="client-form" style="margin-bottom: 24px;" id="server-update-card">
+                <h3 style="margin-bottom: 12px; color: #c7d5e0;">Server Update</h3>
+                <div style="display:grid;grid-template-columns:150px 1fr;gap:8px;font-size:13px;margin-bottom:16px;">
+                    <span style="color:#8f98a0;">Server version:</span>
+                    <span id="srv-update-version" style="color:#c7d5e0;">—</span>
+                    <span style="color:#8f98a0;">Current commit:</span>
+                    <span id="srv-update-commit" style="color:#c7d5e0;">—</span>
+                    <span style="color:#8f98a0;">Last checked:</span>
+                    <span id="srv-update-checked" style="color:#8f98a0;">Never</span>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <button class="diag-btn" onclick="checkServerUpdate()" id="btn-check-update" style="padding:8px 18px;">Check for Updates</button>
+                </div>
+                <div id="srv-update-result" style="display:none;margin-bottom:12px;padding:12px;background:#0f1923;border:1px solid #2a475e;border-radius:6px;font-size:13px;">
+                    <div id="srv-update-status" style="color:#66c0f4;margin-bottom:8px;font-weight:bold;"></div>
+                    <div id="srv-update-details" style="color:#c7d5e0;"></div>
+                    <div id="srv-update-commits" style="color:#8f98a0;margin-top:8px;font-size:12px;max-height:120px;overflow-y:auto;"></div>
+                    <div style="margin-top:12px;display:none;" id="srv-update-apply-wrap">
+                        <button class="diag-btn" onclick="applyServerUpdate()" id="btn-apply-update" style="padding:8px 18px;background:#b45309;border-color:#d97706;">Update Server</button>
+                        <span style="font-size:11px;color:#fbbf24;margin-left:8px;">Server will restart</span>
+                    </div>
+                </div>
+                <div id="srv-update-progress" style="display:none;padding:12px;background:#0f1923;border:1px solid #2a475e;border-radius:6px;font-size:13px;">
+                    <div id="srv-update-progress-steps"></div>
                 </div>
             </div>
 
@@ -4763,7 +4799,20 @@
                 document.getElementById('nav-admin-dropdown').style.display = '';
             }
 
+            // Show fleet installer button if a client is selected
+            updateFleetInstallerBtn();
+        }
 
+        function updateFleetInstallerBtn() {
+            const btn = document.getElementById('fleet-installer-btn');
+            if (!btn) return;
+            if (selectedClientId) {
+                const client = currentClients.find(c => c.id === selectedClientId);
+                btn.textContent = 'Download Installer for ' + (client ? client.name : 'Client');
+                btn.style.display = '';
+            } else {
+                btn.style.display = 'none';
+            }
         }
 
         function onClientChange() {
@@ -4771,6 +4820,8 @@
             const val = sel.value;
             selectedClientId = val ? parseInt(val) : null;
             sessionStorage.setItem('pocket_it_selected_client', val);
+            // Show/hide fleet installer button
+            updateFleetInstallerBtn();
             // Reload current page data
             const activePage = document.querySelector('.nav-link.active');
             if (activePage) {
@@ -5279,6 +5330,139 @@
         }
 
         // ========== SETTINGS ==========
+
+        // ---- Server Update ----
+        let _lastUpdateCheck = null;
+
+        async function checkServerUpdate() {
+            const btn = document.getElementById('btn-check-update');
+            btn.disabled = true;
+            btn.textContent = 'Checking...';
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/updates/server-check`);
+                const data = await res.json();
+
+                document.getElementById('srv-update-version').textContent = data.serverVersion || '—';
+                document.getElementById('srv-update-commit').textContent = data.currentCommit || '—';
+                _lastUpdateCheck = new Date();
+                document.getElementById('srv-update-checked').textContent = _lastUpdateCheck.toLocaleTimeString();
+
+                const resultDiv = document.getElementById('srv-update-result');
+                const statusEl = document.getElementById('srv-update-status');
+                const detailsEl = document.getElementById('srv-update-details');
+                const commitsEl = document.getElementById('srv-update-commits');
+                const applyWrap = document.getElementById('srv-update-apply-wrap');
+
+                resultDiv.style.display = 'block';
+
+                if (data.available) {
+                    statusEl.textContent = 'Update Available';
+                    statusEl.style.color = '#fbbf24';
+                    detailsEl.textContent = `Remote: ${data.remoteCommit} (${data.commitsBehind} commit${data.commitsBehind !== 1 ? 's' : ''} behind)`;
+                    commitsEl.innerHTML = (data.summary || []).map(s => `<div style="padding:2px 0;">• ${s.replace(/</g, '&lt;')}</div>`).join('');
+                    applyWrap.style.display = 'block';
+                } else {
+                    statusEl.textContent = 'Up to date';
+                    statusEl.style.color = '#66bb6a';
+                    detailsEl.textContent = `Current: ${data.currentCommit}`;
+                    commitsEl.innerHTML = '';
+                    applyWrap.style.display = 'none';
+                }
+            } catch (err) {
+                const resultDiv = document.getElementById('srv-update-result');
+                resultDiv.style.display = 'block';
+                document.getElementById('srv-update-status').textContent = 'Check failed';
+                document.getElementById('srv-update-status').style.color = '#ef5350';
+                document.getElementById('srv-update-details').textContent = err.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Check for Updates';
+            }
+        }
+
+        async function applyServerUpdate() {
+            if (!confirm('Apply server update? The server will restart and you will be briefly disconnected.')) return;
+
+            const btn = document.getElementById('btn-apply-update');
+            btn.disabled = true;
+            btn.textContent = 'Updating...';
+
+            const progressDiv = document.getElementById('srv-update-progress');
+            const stepsDiv = document.getElementById('srv-update-progress-steps');
+            progressDiv.style.display = 'block';
+            stepsDiv.innerHTML = '';
+
+            const addStep = (step, status, detail) => {
+                const icon = status === 'done' ? '✓' : status === 'in_progress' ? '○' : status === 'warning' ? '⚠' : '✗';
+                const color = status === 'done' ? '#66bb6a' : status === 'in_progress' ? '#66c0f4' : status === 'warning' ? '#fbbf24' : '#ef5350';
+                const existing = document.getElementById('srv-step-' + step);
+                const html = `<div style="padding:3px 0;color:${color};">${icon} ${step}: ${(detail || '').replace(/</g, '&lt;')}</div>`;
+                if (existing) {
+                    existing.outerHTML = html.replace('<div ', `<div id="srv-step-${step}" `);
+                } else {
+                    stepsDiv.insertAdjacentHTML('beforeend', html.replace('<div ', `<div id="srv-step-${step}" `));
+                }
+            };
+
+            // Listen for progress events
+            if (socket) {
+                socket.on('server_update_progress', (data) => {
+                    addStep(data.step, data.status, data.detail);
+
+                    if (data.step === 'restart' && data.status === 'in_progress') {
+                        addStep('reconnect', 'in_progress', 'Waiting for server to come back...');
+                        pollServerHealth();
+                    }
+                });
+            }
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/updates/server-apply`, { method: 'POST' });
+                const data = await res.json();
+                if (!data.success) {
+                    addStep('error', 'failed', data.error || 'Unknown error');
+                }
+            } catch (err) {
+                // Expected — server is restarting, connection drops
+                addStep('reconnect', 'in_progress', 'Server restarting, waiting for reconnect...');
+                pollServerHealth();
+            }
+        }
+
+        function pollServerHealth() {
+            let attempts = 0;
+            const maxAttempts = 30;
+            const interval = setInterval(async () => {
+                attempts++;
+                try {
+                    const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(2000) });
+                    if (res.ok) {
+                        clearInterval(interval);
+                        const existing = document.getElementById('srv-step-reconnect');
+                        if (existing) {
+                            existing.outerHTML = '<div id="srv-step-reconnect" style="padding:3px 0;color:#66bb6a;">✓ reconnect: Server back online!</div>';
+                        }
+                        document.getElementById('btn-apply-update').disabled = false;
+                        document.getElementById('btn-apply-update').textContent = 'Update Server';
+                        document.getElementById('srv-update-apply-wrap').style.display = 'none';
+                        // Refresh update status
+                        setTimeout(() => checkServerUpdate(), 1000);
+                    }
+                } catch {
+                    // Server still down, keep polling
+                }
+                if (attempts >= maxAttempts) {
+                    clearInterval(interval);
+                    const existing = document.getElementById('srv-step-reconnect');
+                    if (existing) {
+                        existing.outerHTML = '<div id="srv-step-reconnect" style="padding:3px 0;color:#ef5350;">✗ reconnect: Server did not come back after 60s. Check manually.</div>';
+                    }
+                    document.getElementById('btn-apply-update').disabled = false;
+                    document.getElementById('btn-apply-update').textContent = 'Update Server';
+                }
+            }, 2000);
+        }
 
         function loadSettings() {
             fetchWithAuth(`${API}/api/admin/settings`)

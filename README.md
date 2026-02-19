@@ -222,6 +222,71 @@ Computer Configuration → Administrative Templates → Windows Components → W
 Test-WSMan -ComputerName WS-042
 ```
 
+## Client Auto-Update Pipeline
+
+The server dictates the expected client version. When a client connects with an older version, the server automatically pushes an update notification. No manual intervention is required after the initial build and publish step.
+
+### Build & Publish (dev machine)
+
+```bash
+# 1. Bump version in PocketIT.csproj (<Version> and <InformationalVersion>)
+# 2. Build client
+cd client/PocketIT
+dotnet publish -c Release -r win-x64 --self-contained -o "../publish/win-x64"
+# 3. Register update package and push to all outdated clients
+curl -X POST http://localhost:9100/api/updates/publish-local
+```
+
+Step 3 does all of the following automatically:
+- Reads version from `PocketIT.csproj`
+- Zips the `client/publish/win-x64/` directory
+- Computes SHA-256 hash
+- Upserts into the `update_packages` table (allows rebuilds of the same version)
+- Pushes `update_available` to all connected devices running older versions
+
+### Server-Side Auto-Push (on device connect)
+
+- Server compares the connected device's `client_version` against the latest `update_packages` entry
+- If the server version is newer, it emits `update_available` to the device immediately
+- This happens automatically on every device connection — no manual intervention needed
+
+### Client-Side Update Flow
+
+- Client receives `update_available` event, or polls `GET /api/updates/check?version=X.Y.Z` every 4 hours
+- Downloads ZIP from `GET /api/updates/download/{version}`
+- Verifies SHA-256 hash (aborts if mismatch)
+- Extracts to a staging directory
+- Generates and runs a batch script that:
+  - Waits for the current process to exit
+  - Copies files via robocopy (preserves `appsettings.json` and `pocket-it.db`)
+  - Sets NTFS permissions via `icacls`
+  - Starts the new executable
+  - Cleans up temp files
+
+### Remote Server Deployment
+
+When deploying to a remote server, you only need to:
+1. Deploy the server code (with the `updates/` directory containing the ZIP)
+2. The `update_packages` table entry travels with the DB
+3. When remote clients connect, they will auto-update to the version the server has registered
+
+### Key API Endpoints
+
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `/api/updates/publish-local` | POST | localhost only | Auto-register build and push to outdated clients |
+| `/api/updates/check?version=X.Y.Z` | GET | device auth | Client checks for available update |
+| `/api/updates/download/:version` | GET | device auth | Client downloads update ZIP |
+| `/api/updates/push/:version` | POST | IT auth | Manually push update notification |
+| `/api/updates/latest` | GET | IT auth | Get latest version info |
+| `/api/updates/fleet-versions` | GET | IT auth | Version distribution across fleet |
+
+### Integrity Protection
+
+- Server stores SHA-256 of the update ZIP and EXE hash per version
+- On connect, server compares the device's reported `exe_hash` against the known hash for its version
+- If mismatch, `integrity_warning` is emitted to the IT dashboard (potential tampering indicator)
+
 ## Building the Installer
 
 For enterprise deployment, Pocket IT includes an Inno Setup installer that creates a self-contained, production-ready package.

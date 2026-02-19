@@ -6,6 +6,38 @@
     <title>Pocket IT — Dashboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        /* Normalize form controls for consistent vertical alignment */
+        select, input[type="text"], input[type="number"], input[type="password"],
+        input[type="date"], input[type="time"], input[type="datetime-local"] {
+            height: 36px !important;
+            margin: 0 !important;
+            padding: 6px 10px !important;
+            font-size: 13px !important;
+            font-family: inherit;
+            background: #0f1923;
+            color: #c7d5e0;
+            border: 1px solid #2a475e;
+            border-radius: 6px;
+            outline: none;
+            vertical-align: middle;
+            line-height: normal !important;
+        }
+        textarea {
+            padding: 6px 10px !important;
+            font-size: 13px !important;
+            font-family: inherit;
+            background: #0f1923;
+            color: #c7d5e0;
+            border: 1px solid #2a475e;
+            border-radius: 6px;
+            outline: none;
+        }
+        select:focus, input[type="text"]:focus, input[type="number"]:focus,
+        input[type="password"]:focus, input[type="date"]:focus, input[type="time"]:focus,
+        input[type="datetime-local"]:focus, textarea:focus {
+            border-color: #66c0f4;
+        }
         body {
             font-family: 'Segoe UI', system-ui, sans-serif;
             background: #0f1923;
@@ -1135,10 +1167,12 @@
                     <div style="min-width:200px; position:relative;">
                         <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Device *</label>
                         <input type="hidden" id="new-ticket-device" value="">
-                        <input type="text" id="new-ticket-device-search" placeholder="Search device..." autocomplete="off"
-                            style="width:100%; box-sizing:border-box; padding:8px 10px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; border-radius:6px; font-size:13px;"
-                            oninput="filterTicketDevices()" onfocus="filterTicketDevices()">
-                        <div id="new-ticket-device-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; z-index:50; max-height:180px; overflow-y:auto; background:#0f1923; border:1px solid #2a475e; border-top:none; border-radius:0 0 6px 6px; box-shadow:0 4px 12px rgba(0,0,0,0.4);"></div>
+                        <div style="position:relative;">
+                            <input type="text" id="new-ticket-device-search" placeholder="Search device..." autocomplete="off"
+                                style="width:100%; box-sizing:border-box;"
+                                oninput="filterTicketDevices()" onfocus="filterTicketDevices()">
+                            <div id="new-ticket-device-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; z-index:50; max-height:180px; overflow-y:auto; background:#0f1923; border:1px solid #2a475e; border-top:none; border-radius:0 0 6px 6px; box-shadow:0 4px 12px rgba(0,0,0,0.4);"></div>
+                        </div>
                     </div>
                 </div>
                 <div style="display:flex; gap:16px; margin-top:12px; flex-wrap:wrap;">

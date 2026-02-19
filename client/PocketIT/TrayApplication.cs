@@ -670,7 +670,7 @@ public class TrayApplication : ApplicationContext
                 _remoteTerminal?.Dispose();
                 _remoteTerminal = null;
                 var endMsg = JsonSerializer.Serialize(new { type = "terminal_session_ended", exitCode });
-                _uiContext.Post(_ => _chatWindow?.SendToWebView(endMsg), null);
+                _uiContext.Post(_ => { _chatWindow?.SendToWebView(endMsg); TryAutoApplyPendingUpdate(); }, null);
             };
 
             _remoteTerminal.StartSession();
@@ -703,6 +703,7 @@ public class TrayApplication : ApplicationContext
         _remoteTerminal?.StopSession();
         _remoteTerminal?.Dispose();
         _remoteTerminal = null;
+        _uiContext.Post(_ => TryAutoApplyPendingUpdate(), null);
     }
 
     private void OnServerDesktopStartRequest(string requestId, bool itInitiated)
@@ -725,7 +726,7 @@ public class TrayApplication : ApplicationContext
                 _ = _serverConnection.SendDesktopStopped(requestId, "session_ended");
                 _remoteDesktop?.Dispose();
                 _remoteDesktop = null;
-                _uiContext.Post(_ => { _remoteDesktopActive = false; UpdateTrayIcon(); }, null);
+                _uiContext.Post(_ => { _remoteDesktopActive = false; UpdateTrayIcon(); TryAutoApplyPendingUpdate(); }, null);
             };
 
             _remoteDesktop.StartSession();
@@ -754,7 +755,7 @@ public class TrayApplication : ApplicationContext
         _remoteDesktop?.StopSession();
         _remoteDesktop?.Dispose();
         _remoteDesktop = null;
-        _uiContext.Post(_ => { _remoteDesktopActive = false; UpdateTrayIcon(); }, null);
+        _uiContext.Post(_ => { _remoteDesktopActive = false; UpdateTrayIcon(); TryAutoApplyPendingUpdate(); }, null);
     }
 
     private void OnServerDesktopQualityUpdate(int quality, int fps, float scale)
@@ -983,7 +984,7 @@ public class TrayApplication : ApplicationContext
                         _remoteTerminal?.Dispose();
                         _remoteTerminal = null;
                         var endMsg = JsonSerializer.Serialize(new { type = "terminal_session_ended", exitCode });
-                        _uiContext.Post(_ => _chatWindow?.SendToWebView(endMsg), null);
+                        _uiContext.Post(_ => { _chatWindow?.SendToWebView(endMsg); TryAutoApplyPendingUpdate(); }, null);
                     };
 
                     _remoteTerminal.StartSession();
@@ -1089,11 +1090,33 @@ public class TrayApplication : ApplicationContext
     private void OnUpdateAvailableNotification(UpdateInfo info)
     {
         _pendingUpdate = info;
+
+        // Auto-apply if not being controlled remotely
+        if (!_remoteDesktopActive && _remoteTerminal == null)
+        {
+            Logger.Info($"Auto-applying update {info.LatestVersion} (no active remote session)");
+            _ = _updateService?.DownloadAndApplyAsync(info);
+            return;
+        }
+
+        // Deferred: show balloon, auto-apply when session ends
+        Logger.Info($"Update {info.LatestVersion} deferred (remote session active)");
         _uiContext.Post(_ =>
         {
             _trayIcon.ShowBalloonTip(10000, "Pocket IT Update Available",
-                $"Version {info.LatestVersion} is available. Click to install.", ToolTipIcon.Info);
+                $"Version {info.LatestVersion} is available. Will install after remote session ends.", ToolTipIcon.Info);
         }, null);
+    }
+
+    private void TryAutoApplyPendingUpdate()
+    {
+        if (_pendingUpdate == null || _updateService == null) return;
+        if (_remoteDesktopActive || _remoteTerminal != null) return;
+
+        var info = _pendingUpdate;
+        _pendingUpdate = null;
+        Logger.Info($"Remote session ended, auto-applying deferred update {info.LatestVersion}");
+        _ = _updateService.DownloadAndApplyAsync(info);
     }
 
     private void OnServerUpdateAvailable(string json)

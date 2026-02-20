@@ -24,7 +24,9 @@ try { $result.firewall = Get-NetFirewallProfile | Select-Object Name, Enabled } 
 try { $result.localAdmins = (Get-LocalGroupMember -Group 'Administrators').Name } catch { $result.localAdmins = @{error=$_.Exception.Message} }
 $result | ConvertTo-Json -Depth 3";
 
-            var info = new ProcessStartInfo(psPath, $"-NoProfile -Command \"{script.Replace("\"", "\\\"")}\"")
+            var scriptBytes = System.Text.Encoding.Unicode.GetBytes(script);
+            var encodedScript = Convert.ToBase64String(scriptBytes);
+            var info = new ProcessStartInfo(psPath, $"-NoProfile -EncodedCommand {encodedScript}")
             {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,

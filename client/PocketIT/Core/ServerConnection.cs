@@ -88,11 +88,11 @@ public class ServerConnection : IDisposable
             {
                 new("deviceId", _deviceId),
                 new("hostname", DeviceIdentity.GetHostname()),
-                new("deviceSecret", _deviceSecret),
                 new("clientVersion", AppVersion.Current),
                 new("exeHash", IntegrityCheck.GetExeHash()),
                 new("lastSeenChat", LastSeenChat)
             },
+            Auth = new { deviceSecret = _deviceSecret },
             Reconnection = true,
             ReconnectionAttempts = 50,
             ReconnectionDelay = 5000,

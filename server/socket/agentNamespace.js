@@ -1,5 +1,7 @@
 const { emitToScoped, emitToAll } = require('./scopedEmit');
 const deploymentScheduler = require('../services/deploymentScheduler');
+const { VALID_ACTIONS, ALLOWED_SERVICES } = require('../config/actionWhitelist');
+const bcrypt = require('bcryptjs');
 
 function setup(io, app) {
   const agentNs = io.of('/agent');
@@ -58,7 +60,7 @@ function setup(io, app) {
     const db = app.locals.db;
 
     // Verify device secret
-    const deviceSecret = socket.handshake.query.deviceSecret;
+    const deviceSecret = socket.handshake.auth?.deviceSecret || socket.handshake.query.deviceSecret;
     const fullDevice = db.prepare('SELECT device_id, device_secret FROM devices WHERE device_id = ?').get(deviceId);
     if (!fullDevice) {
       console.log(`[Agent] Connection rejected: unknown device ${deviceId}`);
@@ -70,7 +72,11 @@ function setup(io, app) {
       socket.disconnect();
       return;
     }
-    if (fullDevice.device_secret !== deviceSecret) {
+    const isHashed = fullDevice.device_secret.startsWith('$2');
+    const secretValid = isHashed
+      ? bcrypt.compareSync(deviceSecret, fullDevice.device_secret)
+      : fullDevice.device_secret === deviceSecret;
+    if (!secretValid) {
       console.log(`[Agent] Connection rejected: invalid secret for ${deviceId}`);
       socket.disconnect();
       return;
@@ -101,7 +107,7 @@ function setup(io, app) {
         if (knownPkg && knownPkg.exe_hash && knownPkg.exe_hash !== exeHash) {
           console.warn(`[Agent] INTEGRITY WARNING: Device ${deviceId} (v${clientVersion}) has unexpected EXE hash. Expected: ${knownPkg.exe_hash.substring(0, 16)}... Got: ${exeHash.substring(0, 16)}...`);
           // Notify IT dashboard
-          emitToAll(itNs, 'integrity_warning', { deviceId, hostname, clientVersion, expectedHash: knownPkg.exe_hash, actualHash: exeHash });
+          emitToScoped(itNs, db, deviceId, 'integrity_warning', { deviceId, hostname, clientVersion, expectedHash: knownPkg.exe_hash, actualHash: exeHash });
         }
       }
     } catch (err) {
@@ -316,7 +322,6 @@ function setup(io, app) {
 
         // If action is remediate, validate action ID before requesting approval
         if (response.action && response.action.type === 'remediate') {
-          const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service', 'restart_explorer', 'sfc_scan', 'dism_repair', 'clear_update_cache', 'reset_network_adapter'];
           if (VALID_ACTIONS.includes(response.action.actionId)) {
             // Audit log: AI remediation requested
             try {
@@ -346,7 +351,6 @@ function setup(io, app) {
                 }
               }
             } else if (response.action.actionId === 'restart_service') {
-              const ALLOWED_SERVICES = ['spooler', 'wuauserv', 'bits', 'dnscache', 'w32time', 'winmgmt', 'themes', 'audiosrv', 'wsearch', 'tabletinputservice', 'sysmain', 'diagtrack'];
               if (!param || !ALLOWED_SERVICES.includes(param.toLowerCase())) {
                 console.warn(`[Agent] Blocked restart_service with invalid service: ${param}`);
               } else {
@@ -645,7 +649,6 @@ function setup(io, app) {
           });
 
           if (response.action && response.action.type === 'remediate') {
-            const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service', 'restart_explorer', 'sfc_scan', 'dism_repair', 'clear_update_cache', 'reset_network_adapter'];
             if (VALID_ACTIONS.includes(response.action.actionId)) {
               // Validate parameters for parameterized actions
               const param = response.action.parameter || null;
@@ -667,7 +670,6 @@ function setup(io, app) {
                   }
                 }
               } else if (response.action.actionId === 'restart_service') {
-                const ALLOWED_SERVICES = ['spooler', 'wuauserv', 'bits', 'dnscache', 'w32time', 'winmgmt', 'themes', 'audiosrv', 'wsearch', 'tabletinputservice', 'sysmain', 'diagtrack'];
                 if (!param || !ALLOWED_SERVICES.includes(param.toLowerCase())) {
                   console.warn(`[Agent] Blocked restart_service with invalid service: ${param}`);
                 } else {

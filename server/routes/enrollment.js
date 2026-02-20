@@ -1,6 +1,8 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { requireAdmin } = require('../auth/middleware');
+const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
@@ -30,7 +32,15 @@ router.post('/token', requireAdmin, (req, res) => {
   res.json({ token, expiresAt, client_id, client_name: client.name });
 });
 
-router.post('/enroll', (req, res) => {
+const enrollmentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many enrollment attempts. Try again later.' }
+});
+
+router.post('/enroll', enrollmentLimiter, (req, res) => {
   const db = req.app.locals.db;
   const { token, deviceId, hostname, osVersion } = req.body;
 
@@ -57,12 +67,13 @@ router.post('/enroll', (req, res) => {
 
   // Generate device secret for Socket.IO authentication
   const deviceSecret = uuidv4();
+  const hashedSecret = bcrypt.hashSync(deviceSecret, 10);
 
-  // Insert new device
+  // Insert new device (store hashed secret)
   db.prepare(`
     INSERT INTO devices (device_id, hostname, os_version, status, enrolled_at, last_seen, device_secret, client_id)
     VALUES (?, ?, ?, 'online', ?, ?, ?, ?)
-  `).run(deviceId, hostname, osVersion, enrolledAt, enrolledAt, deviceSecret, tokenRecord.client_id || null);
+  `).run(deviceId, hostname, osVersion, enrolledAt, enrolledAt, hashedSecret, tokenRecord.client_id || null);
 
   // Mark token as used
   db.prepare(`
@@ -87,7 +98,16 @@ router.get('/status/:deviceId', (req, res) => {
     return res.status(404).json({ enrolled: false });
   }
 
-  if (!device.device_secret || device.device_secret !== deviceSecret) {
+  if (!device.device_secret) {
+    return res.status(401).json({ error: 'Invalid device secret' });
+  }
+
+  // Support both bcrypt hashed and legacy plaintext secrets
+  const isHashed = device.device_secret.startsWith('$2');
+  const secretValid = isHashed
+    ? bcrypt.compareSync(deviceSecret, device.device_secret)
+    : device.device_secret === deviceSecret;
+  if (!secretValid) {
     return res.status(401).json({ error: 'Invalid device secret' });
   }
 

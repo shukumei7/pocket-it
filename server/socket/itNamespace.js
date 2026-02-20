@@ -1,6 +1,7 @@
 const { verifyToken } = require('../auth/userAuth');
 const jwt = require('jsonwebtoken');
 const { emitToScoped } = require('./scopedEmit');
+const { VALID_ACTIONS } = require('../config/actionWhitelist');
 
 // Rate limiter for sensitive operations
 const opRateLimits = new Map(); // key: `${socketId}:${eventType}` → { count, resetTime }
@@ -101,7 +102,7 @@ function setup(io, app) {
       ).all(decoded.id);
       socket.userScope = { isAdmin: false, clientIds: assignments.map(a => a.client_id) };
     } else {
-      socket.userScope = { isAdmin: true, clientIds: null }; // fallback for localhost without token
+      socket.userScope = { isAdmin: false, clientIds: [] }; // fallback: no access (localhost handled above)
     }
 
     console.log(`[IT] Dashboard connected: ${socket.id}`);
@@ -1299,7 +1300,6 @@ function setup(io, app) {
 
         // If action is remediate, execute immediately on device (IT authority)
         if (response.action && response.action.type === 'remediate') {
-          const VALID_ACTIONS = ['flush_dns', 'clear_temp', 'restart_spooler', 'repair_network', 'clear_browser_cache', 'kill_process', 'restart_service', 'restart_explorer', 'sfc_scan', 'dism_repair', 'clear_update_cache', 'reset_network_adapter'];
           if (VALID_ACTIONS.includes(response.action.actionId)) {
             const connectedDevices = app.locals.connectedDevices;
             if (connectedDevices) {

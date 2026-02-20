@@ -78,6 +78,33 @@ public class LocalDatabase : IDisposable
         return cmd.ExecuteScalar() as string;
     }
 
+    public void SetProtectedSetting(string key, string value)
+    {
+        var plainBytes = System.Text.Encoding.UTF8.GetBytes(value);
+        var encryptedBytes = System.Security.Cryptography.ProtectedData.Protect(
+            plainBytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+        var base64 = Convert.ToBase64String(encryptedBytes);
+        SetSetting(key, base64);
+    }
+
+    public string? GetProtectedSetting(string key)
+    {
+        var base64 = GetSetting(key);
+        if (string.IsNullOrEmpty(base64)) return null;
+        try
+        {
+            var encryptedBytes = Convert.FromBase64String(base64);
+            var plainBytes = System.Security.Cryptography.ProtectedData.Unprotect(
+                encryptedBytes, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            return System.Text.Encoding.UTF8.GetString(plainBytes);
+        }
+        catch
+        {
+            // Fallback: if the value isn't encrypted (legacy), return as-is
+            return base64;
+        }
+    }
+
     public int PurgeSyncedMessages(int olderThanDays = 7)
     {
         using var cmd = _connection.CreateCommand();

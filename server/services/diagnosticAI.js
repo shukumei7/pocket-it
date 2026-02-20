@@ -3,7 +3,24 @@ const { parseResponse } = require('../ai/decisionEngine');
 const { getITGuidancePrompt } = require('../ai/itGuidancePrompt');
 
 function sanitizeForLLM(text) {
-  return text.replace(/\[ACTION:[A-Z_]+(?::[^\]]+)?\]/gi, '[BLOCKED_TAG]');
+  return text
+    .replace(/\[ACTION:[A-Z_]+(?::[^\]]+)?\]/gi, '[BLOCKED_TAG]')
+    .replace(/\[DIAGNOSTIC RESULTS[^\]]*\]/gi, '[BLOCKED_TAG]')
+    .replace(/<\/?(user_message|it_guidance|system|assistant|tool_result)[^>]*>/gi, '[BLOCKED_TAG]')
+    .replace(/^(system|assistant|user)\s*:/gim, '[BLOCKED_TAG]:');
+}
+
+function sanitizeDiagnosticData(data) {
+  if (typeof data === 'string') return sanitizeForLLM(data);
+  if (Array.isArray(data)) return data.map(sanitizeDiagnosticData);
+  if (data && typeof data === 'object') {
+    const sanitized = {};
+    for (const [key, value] of Object.entries(data)) {
+      sanitized[key] = sanitizeDiagnosticData(value);
+    }
+    return sanitized;
+  }
+  return data;
 }
 
 class DiagnosticAI {
@@ -87,7 +104,8 @@ class DiagnosticAI {
   async processDiagnosticResult(deviceId, checkType, results) {
     const ctx = this.getOrCreateContext(deviceId, {});
 
-    const resultText = sanitizeForLLM(`[DIAGNOSTIC RESULTS - ${checkType}]\n${JSON.stringify(results, null, 2)}`);
+    const sanitizedResults = sanitizeDiagnosticData(results);
+    const resultText = `[DIAGNOSTIC RESULTS - ${sanitizeForLLM(checkType)}]\n${JSON.stringify(sanitizedResults, null, 2)}`;
     ctx.messages.push({ role: 'user', content: resultText });
 
     const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName);
@@ -278,7 +296,8 @@ class DiagnosticAI {
   async processITGuidanceDiagnosticResult(deviceId, checkType, results) {
     const ctx = this.getOrCreateITGuidanceContext(deviceId, {});
 
-    const resultText = sanitizeForLLM(`[DIAGNOSTIC RESULTS - ${checkType}]\n${JSON.stringify(results, null, 2)}`);
+    const sanitizedResults = sanitizeDiagnosticData(results);
+    const resultText = `[DIAGNOSTIC RESULTS - ${sanitizeForLLM(checkType)}]\n${JSON.stringify(sanitizedResults, null, 2)}`;
     ctx.messages.push({ role: 'user', content: resultText });
 
     const systemPrompt = getITGuidancePrompt(ctx.deviceInfo, ctx.agentName);

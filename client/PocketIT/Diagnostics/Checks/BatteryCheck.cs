@@ -34,7 +34,9 @@ if ($battery) {
     @{ hasBattery = $false } | ConvertTo-Json
 }";
 
-            var info = new ProcessStartInfo(psPath, $"-NoProfile -Command \"{script.Replace("\"", "\\\"")}\"")
+            var scriptBytes = System.Text.Encoding.Unicode.GetBytes(script);
+            var encodedScript = Convert.ToBase64String(scriptBytes);
+            var info = new ProcessStartInfo(psPath, $"-NoProfile -EncodedCommand {encodedScript}")
             {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,

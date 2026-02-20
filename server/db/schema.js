@@ -1,4 +1,5 @@
 const Database = require('better-sqlite3');
+const bcrypt = require('bcryptjs');
 
 function initDatabase(dbPath) {
   const db = new Database(dbPath);
@@ -534,6 +535,21 @@ function initDatabase(dbPath) {
   if (defaultClient) {
     db.prepare('UPDATE devices SET client_id = ? WHERE client_id IS NULL').run(defaultClient.id);
     db.prepare('UPDATE enrollment_tokens SET client_id = ? WHERE client_id IS NULL').run(defaultClient.id);
+  }
+
+  // Security migration: hash plaintext device secrets
+  try {
+    const devices = db.prepare('SELECT device_id, device_secret FROM devices WHERE device_secret IS NOT NULL').all();
+    const updateSecret = db.prepare('UPDATE devices SET device_secret = ? WHERE device_id = ?');
+    for (const device of devices) {
+      // Skip already-hashed secrets (bcrypt hashes start with $2)
+      if (device.device_secret && !device.device_secret.startsWith('$2')) {
+        const hashed = bcrypt.hashSync(device.device_secret, 10);
+        updateSecret.run(hashed, device.device_id);
+      }
+    }
+  } catch (err) {
+    console.error('[Schema] Device secret migration error:', err.message);
   }
 
   return db;

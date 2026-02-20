@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAdmin, requireIT, isLocalhost } = require('../auth/middleware');
 const { generateToken, hashPassword, comparePassword } = require('../auth/userAuth');
 const { resolveClientScope } = require('../auth/clientScope');
+const { encrypt, decrypt } = require('../config/encryption');
 
 const router = express.Router();
 
@@ -270,6 +271,13 @@ router.get('/settings', requireAdmin, (req, res) => {
     }
   }
 
+  // Decrypt API keys before masking
+  for (const key of ['llm.openai.apiKey', 'llm.anthropic.apiKey']) {
+    if (settings[key]) {
+      settings[key] = decrypt(settings[key]);
+    }
+  }
+
   // Mask API keys in response
   const masked = { ...settings };
   for (const key of ['llm.openai.apiKey', 'llm.anthropic.apiKey']) {
@@ -310,7 +318,11 @@ router.put('/settings', requireAdmin, (req, res) => {
       if ((key === 'llm.openai.apiKey' || key === 'llm.anthropic.apiKey') && value && value.includes('****')) {
         continue;
       }
-      upsert.run(key, value || '');
+      // Encrypt API keys before storing
+      const storeValue = (key === 'llm.openai.apiKey' || key === 'llm.anthropic.apiKey')
+        ? encrypt(value || '')
+        : (value || '');
+      upsert.run(key, storeValue);
     }
   });
 
@@ -322,7 +334,12 @@ router.put('/settings', requireAdmin, (req, res) => {
     // Read fresh settings from DB (to get actual API keys, not masked)
     const rows = db.prepare('SELECT key, value FROM server_settings').all();
     const fresh = {};
-    for (const row of rows) fresh[row.key] = row.value;
+    for (const row of rows) {
+      // Decrypt API keys for LLM use
+      fresh[row.key] = (row.key === 'llm.openai.apiKey' || row.key === 'llm.anthropic.apiKey')
+        ? decrypt(row.value)
+        : row.value;
+    }
 
     llmService.reconfigure({
       provider: fresh['llm.provider'] || process.env.POCKET_IT_LLM_PROVIDER || 'ollama',
@@ -383,10 +400,11 @@ router.post('/settings/test-llm', requireAdmin, async (req, res) => {
       response: response.substring(0, 200)
     });
   } catch (err) {
+    console.error('[Admin] LLM test error:', err.message);
     res.json({
       success: false,
       provider: llmService.provider,
-      error: err.message
+      error: 'LLM service error — check server logs for details'
     });
   }
 });

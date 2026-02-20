@@ -6,7 +6,7 @@ services:
     ports:
       - "9100:9100"
     volumes:
-      - ./data/db:/app/server/db
+      - ./data:/app/data
       - ./data/updates:/app/server/updates
     environment:
       - POCKET_IT_PORT=9100

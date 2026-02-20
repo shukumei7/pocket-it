@@ -3,19 +3,21 @@ const crypto = require('crypto');
 const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
+// Data directory: configurable for Docker (separate from db/ code directory)
+const DATA_DIR = process.env.POCKET_IT_DATA_DIR || path.join(__dirname, 'db');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
 // Security: resolve JWT secret — env var > persisted file > auto-generate (Docker only)
 if (!process.env.POCKET_IT_JWT_SECRET && process.env.NODE_ENV !== 'test') {
-  const secretFile = path.join(__dirname, 'db', '.jwt-secret');
+  const secretFile = path.join(DATA_DIR, '.jwt-secret');
   if (fs.existsSync(secretFile)) {
     process.env.POCKET_IT_JWT_SECRET = fs.readFileSync(secretFile, 'utf8').trim();
-    console.log('[Security] JWT secret loaded from db/.jwt-secret');
+    console.log('[Security] JWT secret loaded from', secretFile);
   } else if (process.env.POCKET_IT_DOCKER === 'true') {
-    const dbDir = path.join(__dirname, 'db');
-    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
     const secret = crypto.randomBytes(32).toString('hex');
     fs.writeFileSync(secretFile, secret, { mode: 0o600 });
     process.env.POCKET_IT_JWT_SECRET = secret;
-    console.log('[Security] JWT secret auto-generated and saved to db/.jwt-secret');
+    console.log('[Security] JWT secret auto-generated and saved to', secretFile);
   } else {
     console.error('[SECURITY] POCKET_IT_JWT_SECRET is not set. Server will not start without it.');
     console.error('[SECURITY] Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
@@ -105,12 +107,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const dbDir = path.join(__dirname, 'db');
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
-
-const db = initDatabase(path.join(dbDir, 'pocket-it.db'));
+const db = initDatabase(path.join(DATA_DIR, 'pocket-it.db'));
 app.locals.db = db;
 app.locals.itActiveChatDevices = new Map(); // deviceId → { socketId, timer }
 

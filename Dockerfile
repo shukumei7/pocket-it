@@ -12,12 +12,13 @@ RUN npm ci --omit=dev
 # Copy server source
 COPY server/ ./
 
-# Create volume mount points
-RUN mkdir -p db updates
+# Create volume mount points (data/ separate from db/ which has schema.js code)
+RUN mkdir -p /app/data updates
 
 ENV NODE_ENV=production
 ENV POCKET_IT_DOCKER=true
 ENV POCKET_IT_PORT=9100
+ENV POCKET_IT_DATA_DIR=/app/data
 
 EXPOSE 9100
 

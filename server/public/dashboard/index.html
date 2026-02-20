@@ -151,6 +151,23 @@
           <!-- Device info cards -->
           <div id="detail-info" class="stats-row" style="margin-bottom:20px;"></div>
 
+          <!-- Custom Fields -->
+          <div id="custom-fields-section" style="margin-bottom:20px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+              <h3 style="margin:0; color:#c7d5e0; font-size:15px;">Custom Fields</h3>
+              <button class="diag-btn" id="btn-add-custom-field" style="font-size:11px; padding:2px 8px;">+ Add Field</button>
+            </div>
+            <div id="custom-fields-add-form" style="display:none; background:#1b2838; border:1px solid #3d5a2e; border-radius:6px; padding:10px; margin-bottom:8px;">
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="text" id="cf-new-name" placeholder="Field name" maxlength="100" style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px;" />
+                <input type="text" id="cf-new-value" placeholder="Value" maxlength="2000" style="flex:2; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px;" />
+                <button class="diag-btn" id="btn-save-custom-field" style="font-size:12px;">Save</button>
+                <button class="diag-btn" id="btn-cancel-custom-field" style="font-size:12px; background:none; border-color:#2a475e; color:#8f98a0;">Cancel</button>
+              </div>
+            </div>
+            <div id="custom-fields-grid" class="stats-row" style="margin-bottom:0;"></div>
+          </div>
+
           <!-- Two-column layout: tools + chat -->
           <div style="display:grid; grid-template-columns:1fr 400px; gap:20px;">
             <!-- Left column: Diagnostics, File Browser, Scripts -->
@@ -300,6 +317,18 @@
                 </details>
                 <div id="script-output-area" style="margin-top:12px;"></div>
               </div>
+
+              <!-- Device Notes -->
+              <h2 class="section-title" id="device-notes-heading" style="cursor:pointer; user-select:none;" title="Click to expand/collapse">Device Notes <span id="device-notes-count" style="font-size:13px; color:#8f98a0;"></span> <span id="device-notes-toggle" style="font-size:14px; color:#8f98a0;">&#x25BC;</span></h2>
+              <div id="device-notes-section" style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
+                <div id="device-notes-content">
+                  <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <input type="text" id="device-note-input" placeholder="Add a note..." maxlength="5000" style="flex:1; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px 12px; border-radius:4px; font-size:13px;" />
+                    <button class="diag-btn" id="btn-add-device-note" style="background:#66c0f4; color:#1b2838; font-weight:600;">Add Note</button>
+                  </div>
+                  <div id="device-notes-list"></div>
+                </div>
+              </div>
             </div>
 
             <!-- Right column: Live Chat + AI Guidance -->
@@ -392,6 +421,7 @@
                 <option value="system_tool_requested,system_tool_completed">System Tools</option>
                 <option value="terminal_session_started,terminal_session_ended">Terminal</option>
                 <option value="ticket_created,ticket_updated,ticket_comment_added">Tickets</option>
+                <option value="device_note_added,device_note_deleted,custom_fields_updated,custom_field_deleted">Notes/Fields</option>
               </select>
               <label style="font-size:12px; color:#8f98a0;">From</label>
               <input type="date" id="activity-date-from" />

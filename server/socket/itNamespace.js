@@ -192,6 +192,14 @@ function setup(io, app) {
             const watcherList2 = Array.from(deviceWatchers.get(deviceId).values()).map(w => w.username);
             socket.emit('device_watchers', { deviceId, watchers: watcherList2 });
           }
+
+          // Device notes (last 20, newest first)
+          const notes = db.prepare('SELECT * FROM device_notes WHERE device_id = ? ORDER BY created_at DESC LIMIT 20').all(deviceId);
+          socket.emit('device_notes', { deviceId, notes });
+
+          // Custom fields
+          const fields = db.prepare('SELECT * FROM device_custom_fields WHERE device_id = ? ORDER BY field_name ASC').all(deviceId);
+          socket.emit('device_custom_fields', { deviceId, fields });
         } catch (err) {
           console.error('[IT] Watch device error:', err.message);
         }
@@ -1629,6 +1637,109 @@ function setup(io, app) {
         } catch (err) {}
       } catch (err) {
         console.error('[IT] update_feature_wish error:', err.message);
+      }
+    });
+
+    // v0.19.0: Device notes
+    socket.on('add_device_note', (data) => {
+      const { deviceId, content } = data || {};
+      if (!deviceId || !content || typeof content !== 'string') return;
+      if (content.length > 5000) {
+        socket.emit('error_message', { message: 'Note content too long (max 5000 chars)' });
+        return;
+      }
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const author = decoded?.username || decoded?.display_name || 'Admin';
+      try {
+        const result = db.prepare(
+          "INSERT INTO device_notes (device_id, author, content) VALUES (?, ?, ?)"
+        ).run(deviceId, author, content);
+        const note = db.prepare('SELECT * FROM device_notes WHERE id = ?').get(result.lastInsertRowid);
+        emitToScoped(itNs, db, deviceId, 'device_note_added', { deviceId, note });
+        db.prepare("INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+          .run(author, 'device_note_added', deviceId, JSON.stringify({ noteId: note.id }));
+      } catch (err) {
+        console.error('[IT] add_device_note error:', err.message);
+        socket.emit('error_message', { message: 'Failed to add note' });
+      }
+    });
+
+    socket.on('delete_device_note', (data) => {
+      const { deviceId, noteId } = data || {};
+      if (!deviceId || !noteId) return;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const author = decoded?.username || decoded?.display_name || 'Admin';
+      try {
+        db.prepare('DELETE FROM device_notes WHERE id = ? AND device_id = ?').run(noteId, deviceId);
+        emitToScoped(itNs, db, deviceId, 'device_note_deleted', { deviceId, noteId });
+        db.prepare("INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+          .run(author, 'device_note_deleted', deviceId, JSON.stringify({ noteId }));
+      } catch (err) {
+        console.error('[IT] delete_device_note error:', err.message);
+      }
+    });
+
+    // v0.19.0: Custom fields
+    socket.on('set_custom_fields', (data) => {
+      const { deviceId, fields } = data || {};
+      if (!deviceId || !fields || typeof fields !== 'object') return;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const author = decoded?.username || decoded?.display_name || 'Admin';
+      try {
+        const upsert = db.prepare(
+          `INSERT INTO device_custom_fields (device_id, field_name, field_value, updated_by)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(device_id, field_name) DO UPDATE
+           SET field_value = excluded.field_value, updated_at = datetime('now'), updated_by = excluded.updated_by`
+        );
+        const entries = Object.entries(fields);
+        for (const [name, value] of entries) {
+          if (typeof name !== 'string' || name.length > 100) continue;
+          const val = value === null ? null : String(value).slice(0, 2000);
+          upsert.run(deviceId, name, val, author);
+        }
+        const allFields = db.prepare('SELECT * FROM device_custom_fields WHERE device_id = ? ORDER BY field_name ASC').all(deviceId);
+        emitToScoped(itNs, db, deviceId, 'custom_fields_updated', { deviceId, fields: allFields });
+        db.prepare("INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+          .run(author, 'custom_fields_updated', deviceId, JSON.stringify({ fieldCount: entries.length }));
+      } catch (err) {
+        console.error('[IT] set_custom_fields error:', err.message);
+        socket.emit('error_message', { message: 'Failed to update custom fields' });
+      }
+    });
+
+    socket.on('delete_custom_field', (data) => {
+      const { deviceId, fieldName } = data || {};
+      if (!deviceId || !fieldName) return;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const author = decoded?.username || decoded?.display_name || 'Admin';
+      try {
+        db.prepare('DELETE FROM device_custom_fields WHERE device_id = ? AND field_name = ?').run(deviceId, fieldName);
+        emitToScoped(itNs, db, deviceId, 'custom_field_deleted', { deviceId, fieldName });
+        db.prepare("INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+          .run(author, 'custom_field_deleted', deviceId, JSON.stringify({ fieldName }));
+      } catch (err) {
+        console.error('[IT] delete_custom_field error:', err.message);
       }
     });
 

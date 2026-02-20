@@ -506,6 +506,28 @@ function initDatabase(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_feature_wishes_status ON feature_wishes(status);
   `);
 
+  // v0.19.0: Device notes and custom fields
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS device_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      device_id TEXT NOT NULL,
+      author TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_device_notes_device ON device_notes(device_id);
+
+    CREATE TABLE IF NOT EXISTS device_custom_fields (
+      device_id TEXT NOT NULL,
+      field_name TEXT NOT NULL,
+      field_value TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      updated_by TEXT NOT NULL,
+      PRIMARY KEY (device_id, field_name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_dcf_device ON device_custom_fields(device_id);
+  `);
+
   // v0.15.0: superadmin role — Note: SQLite does not support ALTER TABLE to modify CHECK
   // constraints on existing columns. The CREATE TABLE above now includes 'superadmin' so
   // new databases get the full constraint. Existing databases keep the old constraint but

@@ -500,6 +500,34 @@
                 }
             });
 
+            // v0.19.0: Device notes socket events
+            socket.on('device_notes', (data) => {
+                if (data.deviceId === currentDeviceId) renderDeviceNotes(data.notes);
+            });
+            socket.on('device_note_added', (data) => {
+                if (data.deviceId === currentDeviceId) prependDeviceNote(data.note);
+            });
+            socket.on('device_note_deleted', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    const el = document.getElementById('note-' + data.noteId);
+                    if (el) el.remove();
+                    updateNoteCount();
+                }
+            });
+
+            // v0.19.0: Custom fields socket events
+            socket.on('device_custom_fields', (data) => {
+                if (data.deviceId === currentDeviceId) renderCustomFields(data.fields);
+            });
+            socket.on('custom_fields_updated', (data) => {
+                if (data.deviceId === currentDeviceId) renderCustomFields(data.fields);
+            });
+            socket.on('custom_field_deleted', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    loadCustomFields(data.deviceId);
+                }
+            });
+
             socket.on('ticket_created', () => loadFleet());
 
             socket.on('new_alert', (data) => {
@@ -1695,6 +1723,107 @@
             }
         }
 
+        // v0.19.0: Device Notes functions
+        function renderDeviceNotes(notes) {
+            const list = document.getElementById('device-notes-list');
+            if (!list) return;
+            list.innerHTML = '';
+            if (!notes || notes.length === 0) {
+                list.innerHTML = '<div style="color:#8f98a0; font-size:13px; padding:8px 0;">No notes yet.</div>';
+            } else {
+                notes.forEach(note => prependDeviceNote(note, true));
+            }
+            updateNoteCount();
+        }
+
+        function prependDeviceNote(note, append) {
+            const list = document.getElementById('device-notes-list');
+            if (!list) return;
+            // Remove "no notes" placeholder
+            const placeholder = list.querySelector('div[style*="No notes"]');
+            if (placeholder) placeholder.remove();
+
+            const div = document.createElement('div');
+            div.id = 'note-' + note.id;
+            div.style.cssText = 'background:#0e1621; border:1px solid #2a475e; border-left:3px solid #3d5a2e; border-radius:4px; padding:10px 12px; margin-bottom:8px;';
+            const ts = note.created_at ? new Date(note.created_at + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+            div.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <span style="font-size:12px; color:#8f98a0;">${escapeHtml(note.author)} &mdash; ${escapeHtml(ts)}</span>
+                <button onclick="deleteDeviceNote(${note.id})" style="background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px; padding:0 4px;" title="Delete note">&times;</button>
+            </div>
+            <div style="font-size:13px; color:#c7d5e0; white-space:pre-wrap; word-break:break-word;">${escapeHtml(note.content)}</div>`;
+            if (append) {
+                list.appendChild(div);
+            } else {
+                list.prepend(div);
+            }
+            updateNoteCount();
+        }
+
+        function addDeviceNote() {
+            const input = document.getElementById('device-note-input');
+            const content = input.value.trim();
+            if (!content || !currentDeviceId || !socket) return;
+            socket.emit('add_device_note', { deviceId: currentDeviceId, content });
+            input.value = '';
+        }
+
+        function deleteDeviceNote(noteId) {
+            if (!currentDeviceId || !socket) return;
+            socket.emit('delete_device_note', { deviceId: currentDeviceId, noteId });
+        }
+
+        function updateNoteCount() {
+            const list = document.getElementById('device-notes-list');
+            const countEl = document.getElementById('device-notes-count');
+            if (!list || !countEl) return;
+            const count = list.querySelectorAll('[id^="note-"]').length;
+            countEl.textContent = count > 0 ? `(${count})` : '';
+        }
+
+        // v0.19.0: Custom Fields functions
+        function renderCustomFields(fields) {
+            const grid = document.getElementById('custom-fields-grid');
+            if (!grid) return;
+            if (!fields || fields.length === 0) {
+                grid.innerHTML = '<div style="color:#8f98a0; font-size:13px;">No custom fields.</div>';
+                return;
+            }
+            grid.innerHTML = fields.map(f => {
+                const ts = f.updated_at ? new Date(f.updated_at + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
+                const source = f.updated_by || 'unknown';
+                return `<div class="stat-card" style="border-left:3px solid #3d5a2e; position:relative;">
+                    <button onclick="deleteCustomField('${escapeHtml(f.field_name).replace(/'/g, "\\'")}')" style="position:absolute; top:4px; right:6px; background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px; padding:0;" title="Delete field">&times;</button>
+                    <div class="value" style="font-size:16px;">${escapeHtml(f.field_value || '—')}</div>
+                    <div class="label">${escapeHtml(f.field_name)}</div>
+                    <div style="font-size:10px; color:#616161; margin-top:2px;">by ${escapeHtml(source)} &middot; ${escapeHtml(ts)}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function loadCustomFields(deviceId) {
+            fetchWithAuth(`${API}/api/devices/${deviceId}/custom-fields`).then(r => r.json()).then(fields => {
+                renderCustomFields(fields);
+            }).catch(() => {});
+        }
+
+        function saveCustomField() {
+            const nameEl = document.getElementById('cf-new-name');
+            const valueEl = document.getElementById('cf-new-value');
+            const name = nameEl.value.trim();
+            const value = valueEl.value.trim();
+            if (!name || !currentDeviceId || !socket) return;
+            socket.emit('set_custom_fields', { deviceId: currentDeviceId, fields: { [name]: value } });
+            nameEl.value = '';
+            valueEl.value = '';
+            document.getElementById('custom-fields-add-form').style.display = 'none';
+        }
+
+        function deleteCustomField(fieldName) {
+            if (!currentDeviceId || !socket) return;
+            socket.emit('delete_custom_field', { deviceId: currentDeviceId, fieldName });
+        }
+
         // ---- Device Detail ----
         function openDevice(deviceId, skipPush) {
             cleanupTerminal();
@@ -1797,6 +1926,15 @@
             if (socket) {
                 socket.emit('watch_device', { deviceId });
             }
+
+            // Reset custom fields and notes
+            document.getElementById('custom-fields-grid').innerHTML = '';
+            document.getElementById('custom-fields-add-form').style.display = 'none';
+            document.getElementById('device-notes-list').innerHTML = '';
+            document.getElementById('device-note-input').value = '';
+            document.getElementById('device-notes-count').textContent = '';
+            // Device notes come via watch_device socket; custom fields loaded via REST as fallback
+            loadCustomFields(deviceId);
 
             loadScriptLibrary();
             // Reset file browser (lazy — user clicks header to load)
@@ -3876,6 +4014,10 @@
             'ticket_comment_added':      { label: 'Comment Added',           color: '#6b7280' },
             'alert_acknowledged':        { label: 'Alert Acknowledged',      color: '#eab308' },
             'alert_resolved':            { label: 'Alert Resolved',          color: '#22c55e' },
+            'device_note_added':         { label: 'Note Added',              color: '#4caf50' },
+            'device_note_deleted':       { label: 'Note Deleted',            color: '#6b7280' },
+            'custom_fields_updated':     { label: 'Fields Updated',          color: '#4caf50' },
+            'custom_field_deleted':      { label: 'Field Deleted',           color: '#6b7280' },
         };
 
         function formatActivityTimestamp(ts) {
@@ -5108,6 +5250,37 @@
             document.getElementById('btn-activity-apply').addEventListener('click', applyActivityFilter);
             document.getElementById('btn-activity-reset').addEventListener('click', () => loadDeviceActivity(currentDeviceId, 1, false));
             document.getElementById('btn-activity-load-more').addEventListener('click', loadMoreActivity);
+
+            // v0.19.0: Device notes events
+            document.getElementById('btn-add-device-note').addEventListener('click', addDeviceNote);
+            document.getElementById('device-note-input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addDeviceNote(); }
+            });
+            // Device notes collapsible
+            document.getElementById('device-notes-heading').addEventListener('click', () => {
+                const content = document.getElementById('device-notes-content');
+                const toggle = document.getElementById('device-notes-toggle');
+                if (content.style.display === 'none') {
+                    content.style.display = '';
+                    toggle.innerHTML = '&#x25BC;';
+                } else {
+                    content.style.display = 'none';
+                    toggle.innerHTML = '&#x25B6;';
+                }
+            });
+
+            // v0.19.0: Custom fields events
+            document.getElementById('btn-add-custom-field').addEventListener('click', () => {
+                document.getElementById('custom-fields-add-form').style.display = '';
+                document.getElementById('cf-new-name').focus();
+            });
+            document.getElementById('btn-cancel-custom-field').addEventListener('click', () => {
+                document.getElementById('custom-fields-add-form').style.display = 'none';
+            });
+            document.getElementById('btn-save-custom-field').addEventListener('click', saveCustomField);
+            document.getElementById('cf-new-value').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); saveCustomField(); }
+            });
 
             // Remove device
             document.getElementById('btn-remove-device').addEventListener('click', removeDevice);

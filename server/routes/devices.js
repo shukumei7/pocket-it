@@ -173,6 +173,8 @@ router.delete('/:id', requireAdmin, resolveClientScope, (req, res) => {
   // Remove device and related data
   db.prepare('DELETE FROM chat_messages WHERE device_id = ?').run(deviceId);
   db.prepare('DELETE FROM diagnostic_results WHERE device_id = ?').run(deviceId);
+  db.prepare('DELETE FROM device_notes WHERE device_id = ?').run(deviceId);
+  db.prepare('DELETE FROM device_custom_fields WHERE device_id = ?').run(deviceId);
   db.prepare('DELETE FROM devices WHERE device_id = ?').run(deviceId);
 
   // Log to audit
@@ -181,6 +183,115 @@ router.delete('/:id', requireAdmin, resolveClientScope, (req, res) => {
   ).run(req.user?.username || 'admin', 'device_removed', deviceId, JSON.stringify({ hostname: device.hostname }));
 
   res.json({ success: true, message: 'Device removed' });
+});
+
+// v0.19.0: Device notes
+router.get('/:id/notes', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  if (!isDeviceInScope(db, req.params.id, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const notes = db.prepare('SELECT * FROM device_notes WHERE device_id = ? ORDER BY created_at DESC LIMIT 50').all(req.params.id);
+  res.json(notes);
+});
+
+router.post('/:id/notes', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const deviceId = req.params.id;
+  if (!isDeviceInScope(db, deviceId, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const { content } = req.body;
+  if (!content || typeof content !== 'string' || content.length === 0) {
+    return res.status(400).json({ error: 'Content is required' });
+  }
+  if (content.length > 5000) {
+    return res.status(400).json({ error: 'Content too long (max 5000 chars)' });
+  }
+  const author = req.user?.username || 'admin';
+  try {
+    const result = db.prepare("INSERT INTO device_notes (device_id, author, content) VALUES (?, ?, ?)").run(deviceId, author, content);
+    const note = db.prepare('SELECT * FROM device_notes WHERE id = ?').get(result.lastInsertRowid);
+    db.prepare("INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+      .run(author, 'device_note_added', deviceId, JSON.stringify({ noteId: note.id }));
+    res.json(note);
+  } catch (err) {
+    console.error('[Devices] Add note error:', err.message);
+    res.status(500).json({ error: 'Failed to add note' });
+  }
+});
+
+router.delete('/:id/notes/:noteId', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const deviceId = req.params.id;
+  if (!isDeviceInScope(db, deviceId, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  try {
+    db.prepare('DELETE FROM device_notes WHERE id = ? AND device_id = ?').run(req.params.noteId, deviceId);
+    db.prepare("INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+      .run(req.user?.username || 'admin', 'device_note_deleted', deviceId, JSON.stringify({ noteId: req.params.noteId }));
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Devices] Delete note error:', err.message);
+    res.status(500).json({ error: 'Failed to delete note' });
+  }
+});
+
+// v0.19.0: Custom fields
+router.get('/:id/custom-fields', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  if (!isDeviceInScope(db, req.params.id, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const fields = db.prepare('SELECT * FROM device_custom_fields WHERE device_id = ? ORDER BY field_name ASC').all(req.params.id);
+  res.json(fields);
+});
+
+router.put('/:id/custom-fields', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const deviceId = req.params.id;
+  if (!isDeviceInScope(db, deviceId, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const { fields } = req.body;
+  if (!fields || typeof fields !== 'object') {
+    return res.status(400).json({ error: 'fields object is required' });
+  }
+  const author = req.user?.username || 'admin';
+  try {
+    const upsert = db.prepare(
+      `INSERT INTO device_custom_fields (device_id, field_name, field_value, updated_by)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(device_id, field_name) DO UPDATE
+       SET field_value = excluded.field_value, updated_at = datetime('now'), updated_by = excluded.updated_by`
+    );
+    for (const [name, value] of Object.entries(fields)) {
+      if (typeof name !== 'string' || name.length > 100) continue;
+      const val = value === null ? null : String(value).slice(0, 2000);
+      upsert.run(deviceId, name, val, author);
+    }
+    const allFields = db.prepare('SELECT * FROM device_custom_fields WHERE device_id = ? ORDER BY field_name ASC').all(deviceId);
+    res.json(allFields);
+  } catch (err) {
+    console.error('[Devices] Set custom fields error:', err.message);
+    res.status(500).json({ error: 'Failed to update fields' });
+  }
+});
+
+router.delete('/:id/custom-fields/:fieldName', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const deviceId = req.params.id;
+  if (!isDeviceInScope(db, deviceId, req.clientScope)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  try {
+    db.prepare('DELETE FROM device_custom_fields WHERE device_id = ? AND field_name = ?').run(deviceId, req.params.fieldName);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Devices] Delete custom field error:', err.message);
+    res.status(500).json({ error: 'Failed to delete field' });
+  }
 });
 
 module.exports = router;

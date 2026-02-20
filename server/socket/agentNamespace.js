@@ -281,6 +281,30 @@ function setup(io, app) {
       emitToScoped(itNs, db, deviceId, 'device_status_changed', { deviceId, status: 'online' });
     });
 
+    // v0.19.0: Device-reported custom fields
+    socket.on('report_custom_fields', (data) => {
+      const { fields } = data || {};
+      if (!fields || typeof fields !== 'object') return;
+
+      try {
+        const upsert = db.prepare(
+          `INSERT INTO device_custom_fields (device_id, field_name, field_value, updated_by)
+           VALUES (?, ?, ?, 'device')
+           ON CONFLICT(device_id, field_name) DO UPDATE
+           SET field_value = excluded.field_value, updated_at = datetime('now'), updated_by = 'device'`
+        );
+        for (const [name, value] of Object.entries(fields)) {
+          if (typeof name !== 'string' || name.length > 100) continue;
+          const val = value === null ? null : String(value).slice(0, 2000);
+          upsert.run(deviceId, name, val);
+        }
+        const allFields = db.prepare('SELECT * FROM device_custom_fields WHERE device_id = ? ORDER BY field_name ASC').all(deviceId);
+        emitToScoped(itNs, db, deviceId, 'custom_fields_updated', { deviceId, fields: allFields });
+      } catch (err) {
+        console.error('[Agent] report_custom_fields error:', err.message);
+      }
+    });
+
     // Chat message from user
     socket.on('chat_message', async (data) => {
       const content = data.content;
@@ -1038,6 +1062,34 @@ function setup(io, app) {
         }));
       } catch (err) {
         console.error('[Agent] Audit log error:', err.message);
+      }
+
+      // v0.19.0: Parse POCKET_IT_FIELDS: markers from script output
+      if (data.output && typeof data.output === 'string') {
+        const fieldLines = data.output.split('\n').filter(line => line.trim().startsWith('POCKET_IT_FIELDS:'));
+        for (const line of fieldLines) {
+          try {
+            const jsonStr = line.trim().substring('POCKET_IT_FIELDS:'.length);
+            const fields = JSON.parse(jsonStr);
+            if (fields && typeof fields === 'object' && !Array.isArray(fields)) {
+              const upsert = db.prepare(
+                `INSERT INTO device_custom_fields (device_id, field_name, field_value, updated_by)
+                 VALUES (?, ?, ?, 'script')
+                 ON CONFLICT(device_id, field_name) DO UPDATE
+                 SET field_value = excluded.field_value, updated_at = datetime('now'), updated_by = 'script'`
+              );
+              for (const [name, value] of Object.entries(fields)) {
+                if (typeof name !== 'string' || name.length > 100) continue;
+                const val = value === null ? null : String(value).slice(0, 2000);
+                upsert.run(deviceId, name, val);
+              }
+              const allFields = db.prepare('SELECT * FROM device_custom_fields WHERE device_id = ? ORDER BY field_name ASC').all(deviceId);
+              emitToScoped(itNs, db, deviceId, 'custom_fields_updated', { deviceId, fields: allFields });
+            }
+          } catch (parseErr) {
+            // Silently ignore malformed POCKET_IT_FIELDS lines
+          }
+        }
       }
 
       // Check if this is an AI-initiated script result — feed back to AI

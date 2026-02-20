@@ -2771,7 +2771,7 @@
                 scriptLibraryData = await res.json();
                 const sel = document.getElementById('script-library-select');
                 sel.innerHTML = '<option value="">-- Select from library --</option>' +
-                    scriptLibraryData.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.category)})</option>`).join('');
+                    [...scriptLibraryData].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.category)})</option>`).join('');
             } catch (err) {
                 console.error('Failed to load scripts:', err);
             }
@@ -2868,7 +2868,7 @@
             // Populate threshold dropdown
             fetchWithAuth(`${API}/api/alerts/thresholds`).then(r => r.json()).then(thresholds => {
                 const sel = document.getElementById('policy-threshold');
-                sel.innerHTML = thresholds.map(t =>
+                sel.innerHTML = [...thresholds].sort((a, b) => (a.check_type || '').localeCompare(b.check_type || '')).map(t =>
                     `<option value="${t.id}">${escapeHtml(t.check_type)} ${escapeHtml(t.operator)} ${t.threshold_value} (${t.severity})</option>`
                 ).join('');
             });
@@ -3111,7 +3111,7 @@
             const select = document.getElementById('report-device-select');
             const currentVal = select.value;
             select.innerHTML = '<option value="">Select a device...</option>' +
-              devices.map(d => `<option value="${d.device_id}">${d.hostname || d.device_id}</option>`).join('');
+              [...devices].sort((a, b) => (a.hostname || a.device_id || '').localeCompare(b.hostname || b.device_id || '')).map(d => `<option value="${d.device_id}">${d.hostname || d.device_id}</option>`).join('');
             if (currentVal) select.value = currentVal;
           } catch (err) { console.error('Load devices for reports error:', err); }
         }
@@ -3529,7 +3529,7 @@
             // Populate client selector in nav
             const sel = document.getElementById('client-selector');
             sel.innerHTML = '<option value="">All Clients</option>';
-            currentClients.forEach(c => {
+            [...currentClients].sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(c => {
                 sel.innerHTML += `<option value="${c.id}">${escapeHtml(c.name)}</option>`;
             });
 
@@ -3671,7 +3671,7 @@
                     currentClients = clients;
                     const sel = document.getElementById('client-selector');
                     sel.innerHTML = '<option value="">All Clients</option>' +
-                        clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+                        [...clients].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
                     if (selectedClientId) sel.value = String(selectedClientId);
                 } else {
                     const data = await res.json();
@@ -3734,7 +3734,7 @@
                 const res = await fetchWithAuth(`${API}/api/admin/users`);
                 const allUsers = await res.json();
                 const sel = document.getElementById('assign-user-select');
-                sel.innerHTML = allUsers.map(u =>
+                sel.innerHTML = [...allUsers].sort((a, b) => (a.display_name || a.username || '').localeCompare(b.display_name || b.username || '')).map(u =>
                     `<option value="${u.id}">${escapeHtml(u.display_name || u.username)} (${u.role})</option>`
                 ).join('');
             } catch (err) { console.error('Load all users error:', err); }
@@ -4309,6 +4309,8 @@
                     document.getElementById('setting-anthropic-key').value = settings['llm.anthropic.apiKey'] || '';
                     document.getElementById('setting-anthropic-model').value = settings['llm.anthropic.model'] || '';
                     document.getElementById('setting-claude-cli-model').value = settings['llm.claudeCli.model'] || '';
+                    document.getElementById('setting-gemini-key').value = settings['llm.gemini.apiKey'] || '';
+                    document.getElementById('setting-gemini-model').value = settings['llm.gemini.model'] || '';
                     document.getElementById('setting-llm-timeout').value = settings['llm.timeout'] ? Math.round(parseInt(settings['llm.timeout'], 10) / 1000) : 120;
 
                     const aiEnabled = settings['ai.enabled'] !== 'false';
@@ -4327,6 +4329,7 @@
             document.getElementById('llm-openai-settings').style.display = provider === 'openai' ? 'block' : 'none';
             document.getElementById('llm-anthropic-settings').style.display = provider === 'anthropic' ? 'block' : 'none';
             document.getElementById('llm-claude-cli-settings').style.display = provider === 'claude-cli' ? 'block' : 'none';
+            document.getElementById('llm-gemini-settings').style.display = provider === 'gemini' ? 'block' : 'none';
         }
 
         // Wire up provider change
@@ -4347,6 +4350,8 @@
                 'llm.anthropic.apiKey': document.getElementById('setting-anthropic-key').value.trim(),
                 'llm.anthropic.model': document.getElementById('setting-anthropic-model').value.trim(),
                 'llm.claudeCli.model': document.getElementById('setting-claude-cli-model').value.trim(),
+                'llm.gemini.apiKey': document.getElementById('setting-gemini-key').value.trim(),
+                'llm.gemini.model': document.getElementById('setting-gemini-model').value.trim(),
                 'llm.timeout': String(Math.max(15, Math.min(600, parseInt(document.getElementById('setting-llm-timeout').value, 10) || 120)) * 1000),
                 'ai.enabled': document.getElementById('setting-ai-enabled').checked ? 'true' : 'false'
             };
@@ -4480,7 +4485,7 @@
                 const scripts = await res.json();
                 const sel = document.getElementById('deploy-script-select');
                 sel.innerHTML = '<option value="">-- Ad-hoc script --</option>';
-                scripts.forEach(s => {
+                [...scripts].sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(s => {
                     sel.innerHTML += `<option value="${s.id}" data-content="${escapeHtml(s.script_content)}" data-elevation="${s.requires_elevation}">${escapeHtml(s.name)}</option>`;
                 });
             } catch (err) { console.error('Load scripts error:', err); }
@@ -4714,7 +4719,7 @@
                 // Update the dropdown in the form
                 sel.innerHTML = '<option value="">Load from template...</option>';
                 if (data.templates) {
-                    data.templates.forEach(t => {
+                    [...data.templates].sort((a, b) => (a.name || '').localeCompare(b.name || '')).forEach(t => {
                         sel.innerHTML += `<option value="${t.id}">${escapeHtml(t.name)} (${t.type})</option>`;
                     });
                 }

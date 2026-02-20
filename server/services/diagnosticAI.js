@@ -144,7 +144,7 @@ class DiagnosticAI {
 
     // Check if provider supports vision
     const provider = this.llm.provider;
-    const supportsVision = ['anthropic', 'openai'].includes(provider);
+    const supportsVision = ['anthropic', 'openai', 'gemini'].includes(provider);
 
     if (supportsVision) {
       ctx.messages.push({
@@ -235,7 +235,7 @@ class DiagnosticAI {
 
     // Check if provider supports vision
     const provider = this.llm.provider;
-    const supportsVision = ['anthropic', 'openai'].includes(provider);
+    const supportsVision = ['anthropic', 'openai', 'gemini'].includes(provider);
 
     if (supportsVision) {
       ctx.messages.push({

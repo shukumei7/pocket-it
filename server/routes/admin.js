@@ -441,7 +441,9 @@ router.get('/settings', requireAdmin, (req, res) => {
     'llm.openai.model': process.env.POCKET_IT_OPENAI_MODEL || 'gpt-4o-mini',
     'llm.anthropic.apiKey': process.env.POCKET_IT_ANTHROPIC_API_KEY || '',
     'llm.anthropic.model': process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
-    'llm.claudeCli.model': process.env.POCKET_IT_CLAUDE_CLI_MODEL || ''
+    'llm.claudeCli.model': process.env.POCKET_IT_CLAUDE_CLI_MODEL || '',
+    'llm.gemini.apiKey': process.env.POCKET_IT_GEMINI_API_KEY || '',
+    'llm.gemini.model': process.env.POCKET_IT_GEMINI_MODEL || 'gemini-2.0-flash'
   };
 
   // Fill in defaults for keys not in DB
@@ -452,7 +454,7 @@ router.get('/settings', requireAdmin, (req, res) => {
   }
 
   // Decrypt API keys before masking
-  for (const key of ['llm.openai.apiKey', 'llm.anthropic.apiKey']) {
+  for (const key of ['llm.openai.apiKey', 'llm.anthropic.apiKey', 'llm.gemini.apiKey']) {
     if (settings[key]) {
       settings[key] = decrypt(settings[key]);
     }
@@ -460,7 +462,7 @@ router.get('/settings', requireAdmin, (req, res) => {
 
   // Mask API keys in response
   const masked = { ...settings };
-  for (const key of ['llm.openai.apiKey', 'llm.anthropic.apiKey']) {
+  for (const key of ['llm.openai.apiKey', 'llm.anthropic.apiKey', 'llm.gemini.apiKey']) {
     if (masked[key] && masked[key].length > 8) {
       masked[key] = masked[key].substring(0, 4) + '****' + masked[key].substring(masked[key].length - 4);
     }
@@ -493,6 +495,7 @@ router.put('/settings', requireAdmin, (req, res) => {
     'llm.openai.apiKey', 'llm.openai.model',
     'llm.anthropic.apiKey', 'llm.anthropic.model',
     'llm.claudeCli.model',
+    'llm.gemini.apiKey', 'llm.gemini.model',
     'llm.timeout',
     'ai.enabled'
   ];
@@ -505,11 +508,11 @@ router.put('/settings', requireAdmin, (req, res) => {
     for (const [key, value] of entries) {
       if (!allowedKeys.includes(key)) continue;
       // Don't overwrite API keys with masked values
-      if ((key === 'llm.openai.apiKey' || key === 'llm.anthropic.apiKey') && value && value.includes('****')) {
+      if ((key === 'llm.openai.apiKey' || key === 'llm.anthropic.apiKey' || key === 'llm.gemini.apiKey') && value && value.includes('****')) {
         continue;
       }
       // Encrypt API keys before storing
-      const storeValue = (key === 'llm.openai.apiKey' || key === 'llm.anthropic.apiKey')
+      const storeValue = (key === 'llm.openai.apiKey' || key === 'llm.anthropic.apiKey' || key === 'llm.gemini.apiKey')
         ? encrypt(value || '')
         : (value || '');
       upsert.run(key, storeValue);
@@ -526,7 +529,7 @@ router.put('/settings', requireAdmin, (req, res) => {
     const fresh = {};
     for (const row of rows) {
       // Decrypt API keys for LLM use
-      fresh[row.key] = (row.key === 'llm.openai.apiKey' || row.key === 'llm.anthropic.apiKey')
+      fresh[row.key] = (row.key === 'llm.openai.apiKey' || row.key === 'llm.anthropic.apiKey' || row.key === 'llm.gemini.apiKey')
         ? decrypt(row.value)
         : row.value;
     }
@@ -540,6 +543,8 @@ router.put('/settings', requireAdmin, (req, res) => {
       anthropicKey: fresh['llm.anthropic.apiKey'] || process.env.POCKET_IT_ANTHROPIC_API_KEY || '',
       anthropicModel: fresh['llm.anthropic.model'] || process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
       claudeCliModel: fresh['llm.claudeCli.model'] || process.env.POCKET_IT_CLAUDE_CLI_MODEL || '',
+      geminiKey: fresh['llm.gemini.apiKey'] || process.env.POCKET_IT_GEMINI_API_KEY || '',
+      geminiModel: fresh['llm.gemini.model'] || process.env.POCKET_IT_GEMINI_MODEL || 'gemini-2.0-flash',
       timeoutMs: parseInt(fresh['llm.timeout'], 10) || 120000
     });
   }

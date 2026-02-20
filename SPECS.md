@@ -38,7 +38,7 @@ Version: 0.18.0
 │  │  DiagnosticAI Service                                        │   │
 │  │  ┌───────────────────┐  ┌──────────────┐  ┌──────────────┐ │   │
 │  │  │ Conversation Ctx  │→ │ LLM Service  │→ │ Decision     │ │   │
-│  │  │ (per device)      │  │ (4 providers)│  │ Engine       │ │   │
+│  │  │ (per device)      │  │ (5 providers)│  │ Engine       │ │   │
 │  │  └───────────────────┘  └──────────────┘  └──────────────┘ │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                      │
@@ -138,6 +138,7 @@ Check for action tags:
       │     → Client emits screenshot_result to server    │
       │     → Server passes image to AI (multimodal)      │
       │     → Ollama/Claude CLI receive text fallback     │
+      │     → Gemini receives image via inlineData        │
       │                                                    │
       ├─ [ACTION:RUN_SCRIPT:<id>] ────────────────────────┤
       │     → decisionEngine produces { type: 'run_script', scriptId }
@@ -1964,6 +1965,7 @@ Portal: **https://helpdesk.example.com**
 - OpenAI API: 1-3 seconds
 - Anthropic API: 2-4 seconds
 - Claude CLI: 2-5 seconds
+- Gemini API: 1-3 seconds
 
 **Mitigation:**
 - Show "typing" indicator in UI during LLM call
@@ -2110,7 +2112,10 @@ System tools follow the `ISystemTool` interface. Each tool receives a `params` d
 
 2. Update `chat()` method switch statement
 3. Add environment variables to `.env.example`
-4. Update documentation
+4. If the provider supports vision, add it to the `supportsVision` list in `diagnosticAI.js`
+5. Add settings keys (`llm.<provider>.apiKey`, `llm.<provider>.model`) in `routes/admin.js` defaults, allowedKeys, and encrypt/decrypt flows
+6. Add provider option and settings inputs to dashboard `index.html` and `dashboard.js`
+7. Update documentation
 
 ## Testing Strategy
 
@@ -2159,7 +2164,7 @@ npm run test:e2e
 **Requirements:**
 - Node.js 18+
 - SQLite 3
-- LLM provider (Ollama, OpenAI API key, or Claude CLI)
+- LLM provider (Ollama, OpenAI API key, Anthropic API key, Gemini API key, or Claude CLI)
 
 **Steps:**
 1. Clone repository
@@ -2194,6 +2199,9 @@ dotnet publish -c Release -r win-x64 --self-contained
 
 ## Version History
 
+**Unreleased**
+- Google Gemini LLM Provider: `_geminiChat()` in `llmService.js` using Gemini REST API with `systemInstruction`, multimodal `inlineData` for vision; env vars `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` (default: `gemini-2.0-flash`); settings keys `llm.gemini.apiKey` and `llm.gemini.model`; `'gemini'` added to `supportsVision` list in `diagnosticAI.js`; "Google Gemini" option in dashboard provider dropdown with API key and model inputs
+
 **0.18.0**
 - AI Script Toolbelt: `ai_tool INTEGER DEFAULT 0` column on `script_library`; AI-tool scripts injected into system prompt as available actions; `[ACTION:RUN_SCRIPT:<id>]` parsed by decision engine; `pendingAIScripts` Map in `agentNamespace.js` tracks in-flight AI script requests; `processScriptResult()` in `diagnosticAI.js` feeds script output back to the LLM; client consent card distinguishes AI-initiated (robot emoji) from IT-initiated scripts
 - Script Library Admin Page: "Scripts" page under Admin dropdown with full CRUD (create/edit form with `ai_tool` toggle, category filter bar, sortable table); admin dropdown alphabetized (Clients, Scripts, Settings, Updates, Users, Wishlist)
@@ -2227,7 +2235,7 @@ dotnet publish -c Release -r win-x64 --self-contained
 **0.12.8**
 - Current/previous user tracking: `previous_logged_in_users TEXT` column added to `devices`; `agentNamespace.js` saves old `logged_in_users` before overwriting; dashboard device cards show current user with 👤 icon; device detail shows "Current User" and "Previous User" stat cards
 - `DeviceIdentity.cs`: `Environment.UserName` fallback when `query user` fails
-- AI Screenshot Diagnostic: `[ACTION:SCREENSHOT]` in decision engine; server emits `screenshot_request` to client; client presents approval flow, captures at quality=40 scale=0.5f, emits `screenshot_result`; server routes image to AI (Anthropic/OpenAI: base64 multimodal; Ollama/Claude CLI: text fallback); `systemPrompt.js` updated with screenshot capability
+- AI Screenshot Diagnostic: `[ACTION:SCREENSHOT]` in decision engine; server emits `screenshot_request` to client; client presents approval flow, captures at quality=40 scale=0.5f, emits `screenshot_result`; server routes image to AI (Anthropic/OpenAI/Gemini: base64 multimodal; Ollama/Claude CLI: text fallback); `systemPrompt.js` updated with screenshot capability
 - Auto-push updates on connect: `agentNamespace.js` checks `update_packages` on device connect and emits `update_available` if client version is outdated
 - Users Management Page: admin-only dashboard page with full CRUD; `PUT /api/admin/users/:id` (update display_name, role, or password); `DELETE /api/admin/users/:id` (with self-deletion guard and audit log)
 - Admin Dropdown Navigation: Updates, Settings, Wishlist, Clients, and Users pages grouped under Admin dropdown; visible to `admin` and `superadmin` only; `navigateTo` guard prevents non-admin access

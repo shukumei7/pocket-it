@@ -111,6 +111,8 @@ const llmService = new LLMService({
   anthropicKey: process.env.POCKET_IT_ANTHROPIC_API_KEY || '',
   anthropicModel: process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
   claudeCliModel: process.env.POCKET_IT_CLAUDE_CLI_MODEL || '',
+  geminiKey: process.env.POCKET_IT_GEMINI_API_KEY || '',
+  geminiModel: process.env.POCKET_IT_GEMINI_MODEL || 'gemini-2.0-flash',
   ollamaModel: process.env.POCKET_IT_OLLAMA_MODEL || 'llama3.2',
   timeoutMs: 120000
 });
@@ -134,6 +136,8 @@ try {
       anthropicKey: s['llm.anthropic.apiKey'] || llmService.anthropicKey,
       anthropicModel: s['llm.anthropic.model'] || llmService.anthropicModel,
       claudeCliModel: s['llm.claudeCli.model'] || llmService.claudeCliModel,
+      geminiKey: s['llm.gemini.apiKey'] || llmService.geminiKey,
+      geminiModel: s['llm.gemini.model'] || llmService.geminiModel,
       timeoutMs: parseInt(s['llm.timeout'], 10) || 120000
     });
   }

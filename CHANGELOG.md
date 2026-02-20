@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Google Gemini LLM Provider** — Gemini added as a 5th AI provider alongside Ollama, OpenAI, Anthropic, and Claude CLI; supports chat and vision (screenshot analysis); configurable via dashboard Settings page or `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` environment variables; default model: `gemini-2.0-flash`
+
+### Technical
+- EDIT: `server/services/llmService.js` — `_geminiChat()` method using Gemini REST API with `systemInstruction`, multimodal `inlineData` for images, abort controller timeout; `geminiKey` and `geminiModel` properties; `getModels()` updated
+- EDIT: `server/server.js` — Gemini env vars in LLMService constructor and startup reconfigure
+- EDIT: `server/routes/admin.js` — `llm.gemini.apiKey` and `llm.gemini.model` in defaults, allowedKeys, decrypt/mask/encrypt flows, and PUT reconfigure
+- EDIT: `server/services/diagnosticAI.js` — `'gemini'` added to `supportsVision` provider list (both processScreenshotResult methods)
+- EDIT: `server/public/dashboard/index.html` — "Google Gemini" option in provider dropdown; Gemini settings div with API key and model inputs
+- EDIT: `server/public/dashboard/dashboard.js` — Gemini fields in loadSettings, toggleLLMProvider, saveSettings
+
 ## [0.18.0] - 2026-02-20
 
 ### Added

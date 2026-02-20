@@ -2,7 +2,7 @@ const { spawn } = require('child_process');
 
 class LLMService {
   constructor(config) {
-    this.provider = config.provider || 'ollama'; // 'openai', 'anthropic', 'claude-cli', or 'ollama'
+    this.provider = config.provider || 'ollama'; // 'openai', 'anthropic', 'claude-cli', 'gemini', or 'ollama'
     this.ollamaUrl = config.ollamaUrl || 'http://localhost:11434';
     this.openaiKey = config.openaiKey || '';
     this.openaiModel = config.openaiModel || 'gpt-4o-mini';
@@ -10,6 +10,8 @@ class LLMService {
     this.anthropicModel = config.anthropicModel || 'claude-sonnet-4-5-20250929';
     this.ollamaModel = config.ollamaModel || 'llama3.2';
     this.claudeCliModel = config.claudeCliModel || ''; // empty = use default
+    this.geminiKey = config.geminiKey || '';
+    this.geminiModel = config.geminiModel || 'gemini-2.0-flash';
     this.timeoutMs = config.timeoutMs || 120000; // default 120s
   }
 
@@ -22,6 +24,8 @@ class LLMService {
     if (config.anthropicKey !== undefined) this.anthropicKey = config.anthropicKey;
     if (config.anthropicModel !== undefined) this.anthropicModel = config.anthropicModel;
     if (config.claudeCliModel !== undefined) this.claudeCliModel = config.claudeCliModel;
+    if (config.geminiKey !== undefined) this.geminiKey = config.geminiKey;
+    if (config.geminiModel !== undefined) this.geminiModel = config.geminiModel;
     if (config.timeoutMs !== undefined) this.timeoutMs = config.timeoutMs;
     console.log(`[LLM] Reconfigured: provider=${this.provider}`);
   }
@@ -31,6 +35,7 @@ class LLMService {
       case 'openai': return this._openaiChat(messages);
       case 'anthropic': return this._anthropicChat(messages);
       case 'claude-cli': return this._claudeCliChat(messages);
+      case 'gemini': return this._geminiChat(messages);
       default: return this._ollamaChat(messages);
     }
   }
@@ -132,6 +137,48 @@ class LLMService {
     }
   }
 
+  async _geminiChat(messages) {
+    const systemMsg = messages.find(m => m.role === 'system');
+    const chatMessages = messages.filter(m => m.role !== 'system').map(m => {
+      const parts = [];
+      if (m.content) parts.push({ text: m.content });
+      if (m.images && m.images.length > 0) {
+        for (const img of m.images) {
+          parts.push({ inlineData: { mimeType: img.mediaType || 'image/jpeg', data: img.data } });
+        }
+      }
+      return { role: m.role === 'assistant' ? 'model' : 'user', parts };
+    });
+
+    const body = {
+      contents: chatMessages,
+      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+    };
+    if (systemMsg) {
+      body.systemInstruction = { parts: [{ text: systemMsg.content }] };
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Gemini API error: ${response.status} ${err}`);
+      }
+      const data = await response.json();
+      return data.candidates[0].content.parts[0].text;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async _claudeCliChat(messages) {
     // Use "claude -p" (pipe mode) — sends prompt via stdin, gets response on stdout
     const systemMsg = messages.find(m => m.role === 'system');
@@ -226,6 +273,7 @@ class LLMService {
       openai: this.openaiModel,
       anthropic: this.anthropicModel,
       'claude-cli': this.claudeCliModel || 'default',
+      gemini: this.geminiModel,
       ollama: this.ollamaModel
     };
     return {

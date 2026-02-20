@@ -14,11 +14,11 @@ public static class DesktopToolLauncher
                 "cmd" => ("cmd.exe", "", true),
                 "powershell" => ("powershell.exe", "", true),
                 "control" => ("control.exe", "", false),
-                "eventvwr" => ("mmc.exe", "eventvwr.msc", false),
-                "compmgmt" => ("mmc.exe", "compmgmt.msc", false),
+                "eventvwr" => ("mmc.exe", "eventvwr.msc", true),
+                "compmgmt" => ("mmc.exe", "compmgmt.msc", true),
                 "regedit" => ("regedit.exe", "", true),
-                "services" => ("mmc.exe", "services.msc", false),
-                "taskmgr" => ("taskmgr.exe", "", false),
+                "services" => ("mmc.exe", "services.msc", true),
+                "taskmgr" => ("taskmgr.exe", "", true),
                 _ => throw new ArgumentException($"Unknown tool: {tool}")
             };
 

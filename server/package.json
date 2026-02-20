@@ -9,6 +9,7 @@
     "test": "node --test __tests__/**/*.test.js"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "archiver": "^7.0.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.0.0",

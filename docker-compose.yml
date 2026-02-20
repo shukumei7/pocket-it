@@ -8,6 +8,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./data/updates:/app/server/updates
+      - ./releases:/app/releases:ro
+      - ./installer:/app/installer:ro
     environment:
       - POCKET_IT_PORT=9100
       - POCKET_IT_DOCKER=true

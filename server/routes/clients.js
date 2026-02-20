@@ -174,21 +174,25 @@ router.delete('/:id/users/:userId', requireAdmin, (req, res) => {
 // Per-client installer download (admin only)
 // Serves bootstrapper EXE with embedded config, or falls back to ZIP
 router.get('/:id/installer', requireAdmin, async (req, res) => {
-  if (process.env.POCKET_IT_DOCKER === 'true') {
-    return res.status(501).json({ error: 'Per-client installer generation is not available in Docker mode' });
-  }
-
   const db = req.app.locals.db;
   const clientId = parseInt(req.params.id);
   const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
   if (!client) return res.status(404).json({ error: 'Client not found' });
 
-  // Check for published client binaries
   const path = require('path');
   const fs = require('fs');
-  const publishDir = path.join(__dirname, '..', '..', 'client', 'publish', 'win-x64');
-  if (!fs.existsSync(publishDir)) {
-    return res.status(503).json({ error: 'Client binaries not built. Run installer/build.bat first.' });
+
+  // Resolve paths — Docker mounts releases/ and installer/ at /app/
+  const PROJECT_ROOT = path.join(__dirname, '..', '..');
+  const publishDir = path.join(PROJECT_ROOT, 'client', 'publish', 'win-x64');
+  const releaseZip = path.join(PROJECT_ROOT, 'releases', 'PocketIT-latest.zip');
+  const setupExePath = path.join(PROJECT_ROOT, 'installer', 'online', 'PocketIT.Setup', 'bin', 'Release', 'net8.0-windows', 'win-x64', 'publish', 'PocketIT.Setup.exe');
+
+  // Need either publish dir (local) or release ZIP (Docker/remote)
+  const hasPublishDir = fs.existsSync(publishDir);
+  const hasReleaseZip = fs.existsSync(releaseZip) && fs.statSync(releaseZip).size > 1000;
+  if (!hasPublishDir && !hasReleaseZip) {
+    return res.status(503).json({ error: 'Client binaries not available. Build the client or place PocketIT-latest.zip in releases/.' });
   }
 
   // Auto-generate an enrollment token for this client
@@ -202,10 +206,8 @@ router.get('/:id/installer', requireAdmin, async (req, res) => {
   // Determine server URL
   const serverUrl = process.env.POCKET_IT_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
 
-  // Check if bootstrapper EXE exists
-  const setupExePath = path.join(__dirname, '..', '..', 'installer', 'online', 'PocketIT.Setup', 'bin', 'Release', 'net8.0-windows', 'win-x64', 'publish', 'PocketIT.Setup.exe');
+  // Check if bootstrapper EXE exists — serve with embedded config
   if (fs.existsSync(setupExePath)) {
-    // Serve bootstrapper EXE with embedded config
     const exeBytes = fs.readFileSync(setupExePath);
     const config = JSON.stringify({ ServerUrl: serverUrl, EnrollmentToken: token });
     const configBytes = Buffer.from(config, 'utf8');
@@ -221,7 +223,7 @@ router.get('/:id/installer', requireAdmin, async (req, res) => {
     return res.send(result);
   }
 
-  // Fallback: serve ZIP package (no bootstrapper built)
+  // Fallback: serve ZIP with patched appsettings.json
   const archiver = require('archiver');
   const archive = archiver('zip', { zlib: { level: 5 } });
 
@@ -229,33 +231,55 @@ router.get('/:id/installer', requireAdmin, async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="PocketIT-${client.slug}-setup.zip"`);
   archive.pipe(res);
 
-  // Add all files from publish directory
-  const entries = fs.readdirSync(publishDir);
-  for (const entry of entries) {
-    const fullPath = path.join(publishDir, entry);
-    const stat = fs.statSync(fullPath);
-    if (entry === 'appsettings.json') continue; // handled below
-    if (stat.isDirectory()) {
-      archive.directory(fullPath, entry);
-    } else {
-      archive.file(fullPath, { name: entry });
+  if (hasPublishDir) {
+    // Local dev: use publish directory directly
+    const entries = fs.readdirSync(publishDir);
+    for (const entry of entries) {
+      const fullPath = path.join(publishDir, entry);
+      const stat = fs.statSync(fullPath);
+      if (entry === 'appsettings.json') continue; // patched below
+      if (stat.isDirectory()) {
+        archive.directory(fullPath, entry);
+      } else {
+        archive.file(fullPath, { name: entry });
+      }
     }
-  }
 
-  // Create patched appsettings.json
-  const appsettingsPath = path.join(publishDir, 'appsettings.json');
-  let appsettings = {};
-  if (fs.existsSync(appsettingsPath)) {
-    try {
-      appsettings = JSON.parse(fs.readFileSync(appsettingsPath, 'utf8'));
-    } catch (e) { /* use empty */ }
-  }
-  appsettings.Server = { Url: serverUrl };
-  appsettings.Enrollment = { Token: token };
-  if (!appsettings.Database) appsettings.Database = { Path: 'pocket-it.db' };
-  if (!appsettings.Monitoring) appsettings.Monitoring = { IntervalMinutes: 15 };
+    // Patch appsettings.json from publish dir
+    const appsettingsPath = path.join(publishDir, 'appsettings.json');
+    let appsettings = {};
+    if (fs.existsSync(appsettingsPath)) {
+      try { appsettings = JSON.parse(fs.readFileSync(appsettingsPath, 'utf8')); } catch (e) { /* use empty */ }
+    }
+    appsettings.Server = { Url: serverUrl };
+    appsettings.Enrollment = { Token: token };
+    if (!appsettings.Database) appsettings.Database = { Path: 'pocket-it.db' };
+    if (!appsettings.Monitoring) appsettings.Monitoring = { IntervalMinutes: 15 };
+    archive.append(JSON.stringify(appsettings, null, 2), { name: 'appsettings.json' });
+  } else {
+    // Docker/remote: repackage release ZIP with patched appsettings
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip(releaseZip);
+    const zipEntries = zip.getEntries();
+    let appsettings = {};
 
-  archive.append(JSON.stringify(appsettings, null, 2), { name: 'appsettings.json' });
+    for (const entry of zipEntries) {
+      if (entry.entryName === 'appsettings.json') {
+        try { appsettings = JSON.parse(entry.getData().toString('utf8')); } catch (e) { /* use empty */ }
+        continue; // patched below
+      }
+      if (entry.isDirectory) {
+        continue; // archiver handles directories implicitly
+      }
+      archive.append(entry.getData(), { name: entry.entryName });
+    }
+
+    appsettings.Server = { Url: serverUrl };
+    appsettings.Enrollment = { Token: token };
+    if (!appsettings.Database) appsettings.Database = { Path: 'pocket-it.db' };
+    if (!appsettings.Monitoring) appsettings.Monitoring = { IntervalMinutes: 15 };
+    archive.append(JSON.stringify(appsettings, null, 2), { name: 'appsettings.json' });
+  }
 
   await archive.finalize();
 });

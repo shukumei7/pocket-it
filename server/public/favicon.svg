@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#66c0f4"/>
+      <stop offset="100%" stop-color="#3a8fbf"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 2 L58 14 V30 C58 48 44 58 32 62 C20 58 6 48 6 30 V14 Z" fill="url(#g)"/>
+  <path d="M32 6 L54 16 V30 C54 46 42 55 32 58.5 C22 55 10 46 10 30 V16 Z" fill="#1b2838"/>
+  <text x="32" y="42" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="24" fill="#66c0f4">IT</text>
+</svg>

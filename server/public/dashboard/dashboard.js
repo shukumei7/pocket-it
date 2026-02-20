@@ -4,6 +4,7 @@
         let currentDeviceId = null;
         let currentTicketId = null;
         let authToken = sessionStorage.getItem('pocket_it_token') || '';
+        let tempToken = null;
         let term = null;
         let fitAddon = null;
         let terminalDeviceId = null;
@@ -38,6 +39,7 @@
         }
 
         function showLogin() {
+            resetLoginOverlay();
             document.getElementById('login-overlay').style.display = 'flex';
         }
 
@@ -58,16 +60,36 @@
                     body: JSON.stringify({ username, password })
                 });
                 const data = await res.json();
-                if (res.ok && data.token) {
-                    authToken = data.token;
-                    sessionStorage.setItem('pocket_it_token', authToken);
-                    setupClientData(data);
-                    hideLogin();
-                    initSocket();
-                    loadFleet();
-                } else {
+
+                if (!res.ok) {
                     errorEl.textContent = data.error || 'Login failed';
                     errorEl.style.display = 'block';
+                    return;
+                }
+
+                if (data.requires2FA) {
+                    // User has 2FA — show TOTP input
+                    tempToken = data.tempToken;
+                    document.getElementById('login-step-password').style.display = 'none';
+                    document.getElementById('login-step-totp').style.display = '';
+                    document.getElementById('login-subtitle').textContent = 'Two-Factor Authentication';
+                    document.getElementById('login-totp-code').value = '';
+                    document.getElementById('login-totp-code').focus();
+                    return;
+                }
+
+                if (data.requiresSetup) {
+                    // User needs to set up 2FA
+                    tempToken = data.tempToken;
+                    document.getElementById('login-step-password').style.display = 'none';
+                    document.getElementById('login-subtitle').textContent = 'Set Up Two-Factor Authentication';
+                    await start2FASetup();
+                    return;
+                }
+
+                // Direct token (shouldn't happen with mandatory 2FA, but handle gracefully)
+                if (data.token) {
+                    completeLogin(data);
                 }
             } catch (err) {
                 errorEl.textContent = 'Connection error';
@@ -75,9 +97,163 @@
             }
         }
 
+        function completeLogin(data) {
+            authToken = data.token;
+            sessionStorage.setItem('pocket_it_token', authToken);
+            tempToken = null;
+            setupClientData(data);
+            hideLogin();
+            initSocket();
+            loadFleet();
+        }
+
+        async function verify2FA() {
+            const code = document.getElementById('login-totp-code').value.trim();
+            const errorEl = document.getElementById('login-error');
+            errorEl.style.display = 'none';
+
+            if (!code) {
+                errorEl.textContent = 'Enter your verification code';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API}/api/admin/verify-2fa`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tempToken, code })
+                });
+                const data = await res.json();
+
+                if (res.ok && data.token) {
+                    completeLogin(data);
+                } else {
+                    errorEl.textContent = data.error || 'Verification failed';
+                    errorEl.style.display = 'block';
+                    document.getElementById('login-totp-code').value = '';
+                    document.getElementById('login-totp-code').focus();
+                }
+            } catch (err) {
+                errorEl.textContent = 'Connection error';
+                errorEl.style.display = 'block';
+            }
+        }
+
+        async function start2FASetup() {
+            const errorEl = document.getElementById('login-error');
+            errorEl.style.display = 'none';
+
+            try {
+                const res = await fetch(`${API}/api/admin/2fa/setup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tempToken })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    errorEl.textContent = data.error || 'Setup failed';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+
+                document.getElementById('setup-qr-image').src = data.qrDataUri;
+                document.getElementById('setup-manual-key').textContent = data.manualKey;
+                document.getElementById('login-step-setup').style.display = '';
+                document.getElementById('setup-totp-code').value = '';
+                document.getElementById('setup-totp-code').focus();
+            } catch (err) {
+                errorEl.textContent = 'Connection error';
+                errorEl.style.display = 'block';
+            }
+        }
+
+        async function confirm2FASetup() {
+            const code = document.getElementById('setup-totp-code').value.trim();
+            const errorEl = document.getElementById('login-error');
+            errorEl.style.display = 'none';
+
+            if (!code) {
+                errorEl.textContent = 'Enter the code from your authenticator';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API}/api/admin/2fa/confirm`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tempToken, code })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    errorEl.textContent = data.error || 'Verification failed';
+                    errorEl.style.display = 'block';
+                    document.getElementById('setup-totp-code').value = '';
+                    document.getElementById('setup-totp-code').focus();
+                    return;
+                }
+
+                // Show backup codes before completing login
+                showBackupCodes(data.backupCodes, data);
+            } catch (err) {
+                errorEl.textContent = 'Connection error';
+                errorEl.style.display = 'block';
+            }
+        }
+
+        function showBackupCodes(codes, loginData) {
+            document.getElementById('login-step-setup').style.display = 'none';
+            document.getElementById('login-step-totp').style.display = 'none';
+            document.getElementById('login-subtitle').textContent = 'Backup Recovery Codes';
+            document.getElementById('login-error').style.display = 'none';
+
+            const grid = document.getElementById('backup-codes-grid');
+            grid.innerHTML = codes.map(c =>
+                `<code style="background:#0f1923; color:#66c0f4; padding:6px 10px; border-radius:4px; font-size:14px; font-family:monospace;">${c}</code>`
+            ).join('');
+
+            document.getElementById('login-step-backup').style.display = '';
+
+            // Store login data for after user acknowledges
+            document.getElementById('btn-copy-backup').onclick = () => {
+                navigator.clipboard.writeText(codes.join('\n')).then(() => {
+                    document.getElementById('btn-copy-backup').textContent = 'Copied!';
+                    setTimeout(() => { document.getElementById('btn-copy-backup').textContent = 'Copy All Codes'; }, 2000);
+                });
+            };
+
+            document.getElementById('btn-backup-done').onclick = () => {
+                completeLogin(loginData);
+            };
+        }
+
+        function resetLoginOverlay() {
+            document.getElementById('login-step-password').style.display = '';
+            document.getElementById('login-step-totp').style.display = 'none';
+            document.getElementById('login-step-setup').style.display = 'none';
+            document.getElementById('login-step-backup').style.display = 'none';
+            document.getElementById('login-subtitle').textContent = 'IT Dashboard Login';
+            document.getElementById('login-error').style.display = 'none';
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-password').value = '';
+            tempToken = null;
+        }
+
         document.getElementById('login-password').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') doLogin();
         });
+        document.getElementById('btn-verify-totp').addEventListener('click', verify2FA);
+        document.getElementById('login-totp-code').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') verify2FA();
+        });
+        document.getElementById('btn-confirm-setup').addEventListener('click', confirm2FASetup);
+        document.getElementById('setup-totp-code').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') confirm2FASetup();
+        });
+        document.getElementById('btn-back-to-login').addEventListener('click', resetLoginOverlay);
 
         // ---- Navigation ----
         // Show a page without pushing history (used by popstate)
@@ -632,7 +808,7 @@
                 const users = await res.json();
                 const tbody = document.getElementById('users-table-body');
                 if (!users.length) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="padding:20px; text-align:center; color:#8f98a0;">No users found</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" style="padding:20px; text-align:center; color:#8f98a0;">No users found</td></tr>';
                     return;
                 }
                 tbody.innerHTML = users.map(u => `
@@ -651,9 +827,13 @@
                                 <option value="superadmin" ${u.role === 'superadmin' ? 'selected' : ''}>Superadmin</option>
                             </select>
                         </td>
+                        <td style="padding:8px 12px; font-size:12px;">
+                            ${u.totp_enabled ? '<span style="color:#66bb6a;">Enabled</span>' : '<span style="color:#8f98a0;">Not set up</span>'}
+                        </td>
                         <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
                         <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.created_at ? new Date(u.created_at).toLocaleString() : '-'}</td>
                         <td style="padding:8px 12px;">
+                            ${u.totp_enabled ? `<button class="diag-btn" data-action="user-reset-2fa" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; margin-right:4px;">Reset 2FA</button>` : ''}
                             <button class="diag-btn" data-action="user-reset-pw" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; margin-right:4px;">Reset PW</button>
                             <button class="diag-btn" data-action="user-delete" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; background:#ef5350; border-color:#ef5350;">Delete</button>
                         </td>
@@ -759,6 +939,26 @@
                 } else {
                     const data = await res.json();
                     alert(data.error || 'Failed to delete user');
+                }
+            } catch (err) {
+                alert('Network error: ' + err.message);
+            }
+        }
+
+        async function reset2FA(userId, username) {
+            if (!confirm(`Reset 2FA for "${username}"? They will need to set up 2FA again on next login.`)) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/2fa/disable`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: parseInt(userId) })
+                });
+                if (res.ok) {
+                    alert(`2FA has been reset for "${username}".`);
+                    loadUsers();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to reset 2FA');
                 }
             } catch (err) {
                 alert('Network error: ' + err.message);
@@ -4335,6 +4535,7 @@
             const id = parseInt(btn.dataset.id, 10);
             if (btn.dataset.action === 'user-reset-pw') resetUserPassword(id, btn.dataset.username);
             else if (btn.dataset.action === 'user-delete') deleteUser(id, btn.dataset.username);
+            else if (btn.dataset.action === 'user-reset-2fa') reset2FA(id, btn.dataset.username);
         });
 
         // Device grid — open device

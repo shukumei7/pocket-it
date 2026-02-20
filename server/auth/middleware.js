@@ -53,6 +53,9 @@ function requireIT(req, res, next) {
   try {
     const token = authHeader.slice(7);
     const decoded = jwt.verify(token, getJwtSecret());
+    if (decoded.purpose) {
+      return res.status(401).json({ error: 'Full authentication required' });
+    }
     req.user = decoded;
     next();
   } catch (err) {
@@ -69,6 +72,9 @@ function requireAdmin(req, res, next) {
   try {
     const token = authHeader.slice(7);
     const decoded = jwt.verify(token, getJwtSecret());
+    if (decoded.purpose) {
+      return res.status(401).json({ error: 'Full authentication required' });
+    }
     if (decoded.role !== 'admin') {
       return res.status(403).json({ error: 'Admin role required' });
     }

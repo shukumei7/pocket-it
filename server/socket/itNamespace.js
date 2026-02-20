@@ -80,6 +80,10 @@ function setup(io, app) {
           return;
         }
         decoded = jwt.verify(token, secret);
+        if (decoded.purpose) {
+          socket.disconnect();
+          return;
+        }
       } catch (err) {
         socket.disconnect();
         return;
@@ -89,6 +93,10 @@ function setup(io, app) {
       try {
         const secret = process.env.POCKET_IT_JWT_SECRET;
         if (secret) decoded = jwt.verify(token, secret);
+        if (decoded && decoded.purpose) {
+          socket.disconnect();
+          return;
+        }
       } catch (err) { /* ignore, treat as admin */ }
     }
 

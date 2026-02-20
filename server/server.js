@@ -157,6 +157,8 @@ const createLLMRouter = require('./routes/llm');
 
 app.use('/api/', apiLimiter);
 app.use('/api/admin/login', authLimiter);
+app.use('/api/admin/verify-2fa', authLimiter);
+app.use('/api/admin/2fa', authLimiter);
 app.use('/api/enrollment/token', authLimiter);
 
 app.use('/api/enrollment', enrollmentRouter);

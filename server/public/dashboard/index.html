@@ -808,13 +808,49 @@
 <body>
     <!-- Login overlay -->
     <div id="login-overlay" style="position:fixed; top:0; left:0; right:0; bottom:0; background:#0f1923; z-index:1000; display:flex; align-items:center; justify-content:center;">
-        <div style="background:#1b2838; border:1px solid #2a475e; border-radius:12px; padding:40px; width:360px; text-align:center;">
+        <div style="background:#1b2838; border:1px solid #2a475e; border-radius:12px; padding:40px; width:400px; text-align:center;">
             <div style="font-size:24px; font-weight:700; color:#66c0f4; margin-bottom:8px;">Pocket IT</div>
-            <div style="font-size:13px; color:#8f98a0; margin-bottom:24px;">IT Dashboard Login</div>
+            <div id="login-subtitle" style="font-size:13px; color:#8f98a0; margin-bottom:24px;">IT Dashboard Login</div>
             <div id="login-error" style="display:none; background:#4a1919; color:#ef5350; padding:8px 12px; border-radius:6px; font-size:13px; margin-bottom:16px;"></div>
-            <input type="text" id="login-username" placeholder="Username" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:10px 14px; border-radius:6px; font-size:14px; margin-bottom:12px;" />
-            <input type="password" id="login-password" placeholder="Password" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:10px 14px; border-radius:6px; font-size:14px; margin-bottom:16px;" />
-            <button id="btn-login" style="width:100%; background:#66c0f4; color:#0f1923; border:none; padding:10px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Sign In</button>
+
+            <!-- Step 1: Password -->
+            <div id="login-step-password">
+                <input type="text" id="login-username" placeholder="Username" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:10px 14px; border-radius:6px; font-size:14px; margin-bottom:12px;" />
+                <input type="password" id="login-password" placeholder="Password" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:10px 14px; border-radius:6px; font-size:14px; margin-bottom:16px;" />
+                <button id="btn-login" style="width:100%; background:#66c0f4; color:#0f1923; border:none; padding:10px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Sign In</button>
+            </div>
+
+            <!-- Step 2: TOTP verification (existing 2FA) -->
+            <div id="login-step-totp" style="display:none;">
+                <p style="color:#c7d5e0; font-size:13px; margin-bottom:16px;">Enter the 6-digit code from your authenticator app</p>
+                <input type="text" id="login-totp-code" placeholder="000 000" maxlength="7" autocomplete="one-time-code" style="width:180px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:12px 14px; border-radius:6px; font-size:20px; text-align:center; letter-spacing:4px; margin-bottom:8px;" />
+                <p style="color:#8f98a0; font-size:11px; margin-bottom:16px;">Or enter an 8-character backup code</p>
+                <button id="btn-verify-totp" style="width:100%; background:#66c0f4; color:#0f1923; border:none; padding:10px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Verify</button>
+                <button id="btn-back-to-login" style="width:100%; background:transparent; color:#8f98a0; border:1px solid #2a475e; padding:8px; border-radius:6px; font-size:13px; cursor:pointer; margin-top:8px;">Back</button>
+            </div>
+
+            <!-- Step 3: 2FA Setup (first time) -->
+            <div id="login-step-setup" style="display:none;">
+                <p style="color:#c7d5e0; font-size:13px; margin-bottom:16px;">Two-factor authentication is required. Scan this QR code with your authenticator app:</p>
+                <div id="setup-qr-container" style="margin-bottom:16px;">
+                    <img id="setup-qr-image" src="" alt="QR Code" style="width:200px; height:200px; border-radius:8px; background:#fff; padding:8px;" />
+                </div>
+                <details style="text-align:left; margin-bottom:16px;">
+                    <summary style="color:#8f98a0; font-size:12px; cursor:pointer;">Manual entry key</summary>
+                    <code id="setup-manual-key" style="display:block; background:#0f1923; color:#66c0f4; padding:8px 12px; border-radius:4px; font-size:13px; word-break:break-all; margin-top:8px;"></code>
+                </details>
+                <p style="color:#c7d5e0; font-size:13px; margin-bottom:12px;">Enter the code shown in your app to confirm:</p>
+                <input type="text" id="setup-totp-code" placeholder="000 000" maxlength="7" autocomplete="one-time-code" style="width:180px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:12px 14px; border-radius:6px; font-size:20px; text-align:center; letter-spacing:4px; margin-bottom:16px;" />
+                <button id="btn-confirm-setup" style="width:100%; background:#66c0f4; color:#0f1923; border:none; padding:10px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">Activate 2FA</button>
+            </div>
+
+            <!-- Step 4: Backup codes display (shown after setup) -->
+            <div id="login-step-backup" style="display:none;">
+                <p style="color:#c7d5e0; font-size:13px; margin-bottom:8px;">Save these backup codes in a safe place. Each code can only be used once.</p>
+                <div id="backup-codes-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:16px; text-align:left;"></div>
+                <button id="btn-copy-backup" style="width:100%; background:transparent; color:#8f98a0; border:1px solid #2a475e; padding:8px; border-radius:6px; font-size:13px; cursor:pointer; margin-bottom:8px;">Copy All Codes</button>
+                <button id="btn-backup-done" style="width:100%; background:#66c0f4; color:#0f1923; border:none; padding:10px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">I've Saved My Codes</button>
+            </div>
         </div>
     </div>
 
@@ -1895,6 +1931,7 @@
                         <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Username</th>
                         <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Display Name</th>
                         <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Role</th>
+                        <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">2FA</th>
                         <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Last Login</th>
                         <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Created</th>
                         <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Actions</th>

@@ -426,6 +426,20 @@ function initDatabase(dbPath) {
     // Index already exists
   }
 
+  // v0.16.0: TOTP 2FA columns for it_users
+  const totpColumns = [
+    { name: 'totp_secret', type: 'TEXT' },
+    { name: 'totp_enabled', type: 'INTEGER DEFAULT 0' },
+    { name: 'backup_codes', type: 'TEXT' },
+  ];
+  for (const col of totpColumns) {
+    try {
+      db.prepare(`ALTER TABLE it_users ADD COLUMN ${col.name} ${col.type}`).run();
+    } catch (err) {
+      // Column already exists
+    }
+  }
+
   // v0.13.0: Feature wishlist — AI logs capability gaps
   db.exec(`
     CREATE TABLE IF NOT EXISTS feature_wishes (

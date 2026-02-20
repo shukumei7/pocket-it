@@ -3,6 +3,7 @@ const { requireAdmin, requireIT, isLocalhost } = require('../auth/middleware');
 const { generateToken, hashPassword, comparePassword } = require('../auth/userAuth');
 const { resolveClientScope } = require('../auth/clientScope');
 const { encrypt, decrypt } = require('../config/encryption');
+const { generateTOTPSecret, verifyTOTP, generateTempToken, verifyTempToken, generateBackupCodes, hashBackupCodes, verifyBackupCode } = require('../auth/totpAuth');
 
 const router = express.Router();
 
@@ -74,40 +75,215 @@ router.post('/login', async (req, res) => {
     );
   } catch (e) { console.error('[Audit] Log write failed:', e.message); }
 
-  const jwtSecret = process.env.POCKET_IT_JWT_SECRET;
-  if (!jwtSecret) {
-    console.error('[SECURITY] JWT secret not configured');
-    return res.status(500).json({ error: 'Server configuration error' });
+  // 2FA check
+  if (user.totp_enabled) {
+    // User has 2FA enabled — require verification
+    const tempToken = generateTempToken(user, '2fa_verify');
+    return res.json({ requires2FA: true, tempToken });
   }
-  const token = generateToken(user, jwtSecret);
 
-  // Fetch clients for the user
-  let clients;
+  // User has no 2FA set up — force setup
+  const tempToken = generateTempToken(user, '2fa_setup');
+  return res.json({ requiresSetup: true, tempToken });
+});
+
+function getClientsForUser(db, user) {
   if (user.role === 'admin' || user.role === 'superadmin') {
-    clients = db.prepare('SELECT id, name, slug FROM clients ORDER BY name').all();
-  } else {
-    clients = db.prepare(`
-      SELECT c.id, c.name, c.slug FROM clients c
-      JOIN user_client_assignments uca ON c.id = uca.client_id
-      WHERE uca.user_id = ? ORDER BY c.name
-    `).all(user.id);
+    return db.prepare('SELECT id, name, slug FROM clients ORDER BY name').all();
   }
+  return db.prepare(`
+    SELECT c.id, c.name, c.slug FROM clients c
+    JOIN user_client_assignments uca ON c.id = uca.client_id
+    WHERE uca.user_id = ? ORDER BY c.name
+  `).all(user.id);
+}
+
+// Verify 2FA code (TOTP or backup code) to complete login
+router.post('/verify-2fa', async (req, res) => {
+  const { tempToken, code } = req.body;
+  if (!tempToken || !code) {
+    return res.status(400).json({ error: 'Token and code required' });
+  }
+
+  const decoded = verifyTempToken(tempToken, '2fa_verify');
+  if (!decoded) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+
+  const db = req.app.locals.db;
+  const user = db.prepare('SELECT * FROM it_users WHERE id = ?').get(decoded.id);
+  if (!user || !user.totp_enabled) {
+    return res.status(400).json({ error: 'User not found or 2FA not enabled' });
+  }
+
+  // Check lockout
+  const attempts = loginAttempts.get(user.username);
+  if (attempts && attempts.lockedUntil && Date.now() < attempts.lockedUntil) {
+    return res.status(429).json({ error: 'Account temporarily locked. Try again later.' });
+  }
+
+  const normalizedCode = code.replace(/\s/g, '');
+
+  // Try TOTP first
+  if (await verifyTOTP(user.totp_secret, normalizedCode)) {
+    loginAttempts.delete(user.username);
+    db.prepare('UPDATE it_users SET last_login = ? WHERE id = ?')
+      .run(new Date().toISOString(), user.id);
+
+    const jwtSecret = process.env.POCKET_IT_JWT_SECRET;
+    if (!jwtSecret) return res.status(500).json({ error: 'Server configuration error' });
+    const token = generateToken(user, jwtSecret);
+    const clients = getClientsForUser(db, user);
+
+    return res.json({
+      token,
+      user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role },
+      clients
+    });
+  }
+
+  // Try backup code
+  if (user.backup_codes && normalizedCode.length === 8) {
+    const result = verifyBackupCode(normalizedCode, user.backup_codes);
+    if (result.valid) {
+      db.prepare('UPDATE it_users SET backup_codes = ?, last_login = ? WHERE id = ?')
+        .run(result.remainingEncrypted, new Date().toISOString(), user.id);
+      loginAttempts.delete(user.username);
+
+      try {
+        db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+          user.username, '2fa_backup_code_used', 'auth', JSON.stringify({ ip: req.socket?.remoteAddress })
+        );
+      } catch (e) { console.error('[Audit] Log write failed:', e.message); }
+
+      const jwtSecret = process.env.POCKET_IT_JWT_SECRET;
+      if (!jwtSecret) return res.status(500).json({ error: 'Server configuration error' });
+      const token = generateToken(user, jwtSecret);
+      const clients = getClientsForUser(db, user);
+
+      return res.json({
+        token,
+        user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role },
+        clients
+      });
+    }
+  }
+
+  // Failed verification — count toward lockout
+  const current = loginAttempts.get(user.username) || { count: 0, lockedUntil: null };
+  current.count++;
+  if (current.count >= MAX_ATTEMPTS) {
+    current.lockedUntil = Date.now() + LOCKOUT_DURATION;
+    current.count = 0;
+  }
+  loginAttempts.set(user.username, current);
+
+  try {
+    db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+      user.username, '2fa_verification_failed', 'auth', JSON.stringify({ ip: req.socket?.remoteAddress })
+    );
+  } catch (e) { console.error('[Audit] Log write failed:', e.message); }
+
+  return res.status(401).json({ error: 'Invalid verification code' });
+});
+
+// Start 2FA setup — generate secret + QR
+router.post('/2fa/setup', async (req, res) => {
+  const { tempToken } = req.body;
+  if (!tempToken) return res.status(400).json({ error: 'Token required' });
+
+  const decoded = verifyTempToken(tempToken, '2fa_setup');
+  if (!decoded) return res.status(401).json({ error: 'Invalid or expired token' });
+
+  try {
+    const result = await generateTOTPSecret(decoded.username);
+    // Store encrypted secret temporarily — not yet enabled
+    const db = req.app.locals.db;
+    db.prepare('UPDATE it_users SET totp_secret = ? WHERE id = ?')
+      .run(result.secret, decoded.id);
+
+    res.json({
+      qrDataUri: result.qrDataUri,
+      manualKey: result.rawSecret,
+      otpauthUri: result.otpauthUri
+    });
+  } catch (err) {
+    console.error('[2FA] Setup error:', err.message);
+    res.status(500).json({ error: 'Failed to generate 2FA secret' });
+  }
+});
+
+// Confirm 2FA setup — verify first code, activate, return backup codes + full JWT
+router.post('/2fa/confirm', async (req, res) => {
+  const { tempToken, code } = req.body;
+  if (!tempToken || !code) return res.status(400).json({ error: 'Token and code required' });
+
+  const decoded = verifyTempToken(tempToken, '2fa_setup');
+  if (!decoded) return res.status(401).json({ error: 'Invalid or expired token' });
+
+  const db = req.app.locals.db;
+  const user = db.prepare('SELECT * FROM it_users WHERE id = ?').get(decoded.id);
+  if (!user || !user.totp_secret) {
+    return res.status(400).json({ error: 'Run setup first' });
+  }
+
+  const normalizedCode = code.replace(/\s/g, '');
+  if (!await verifyTOTP(user.totp_secret, normalizedCode)) {
+    return res.status(401).json({ error: 'Invalid code. Check your authenticator and try again.' });
+  }
+
+  // Generate backup codes
+  const backupCodes = generateBackupCodes();
+  const encryptedBackupCodes = hashBackupCodes(backupCodes);
+
+  // Activate 2FA
+  db.prepare('UPDATE it_users SET totp_enabled = 1, backup_codes = ?, last_login = ? WHERE id = ?')
+    .run(encryptedBackupCodes, new Date().toISOString(), user.id);
+
+  try {
+    db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+      user.username, '2fa_enabled', 'auth', JSON.stringify({ ip: req.socket?.remoteAddress })
+    );
+  } catch (e) { console.error('[Audit] Log write failed:', e.message); }
+
+  // Issue full JWT
+  const jwtSecret = process.env.POCKET_IT_JWT_SECRET;
+  if (!jwtSecret) return res.status(500).json({ error: 'Server configuration error' });
+  const token = generateToken(user, jwtSecret);
+  const clients = getClientsForUser(db, user);
 
   res.json({
     token,
-    user: {
-      id: user.id,
-      username: user.username,
-      display_name: user.display_name,
-      role: user.role
-    },
-    clients
+    user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role },
+    clients,
+    backupCodes
   });
+});
+
+// Disable 2FA for another user (admin recovery)
+router.post('/2fa/disable', requireAdmin, (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  const db = req.app.locals.db;
+  const target = db.prepare('SELECT id, username FROM it_users WHERE id = ?').get(userId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+
+  db.prepare('UPDATE it_users SET totp_enabled = 0, totp_secret = NULL, backup_codes = NULL WHERE id = ?')
+    .run(userId);
+
+  try {
+    db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+      req.user?.username || 'admin', '2fa_disabled', target.username, JSON.stringify({ targetUserId: userId, ip: req.socket?.remoteAddress })
+    );
+  } catch (e) { console.error('[Audit] Log write failed:', e.message); }
+
+  res.json({ success: true });
 });
 
 router.get('/users', requireAdmin, (req, res) => {
   const db = req.app.locals.db;
-  const users = db.prepare('SELECT id, username, display_name, role, created_at, last_login FROM it_users').all();
+  const users = db.prepare('SELECT id, username, display_name, role, totp_enabled, created_at, last_login FROM it_users').all();
   res.json(users);
 });
 

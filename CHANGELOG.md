@@ -17,6 +17,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - EDIT: `server/public/dashboard/index.html` — "Google Gemini" option in provider dropdown; Gemini settings div with API key and model inputs
 - EDIT: `server/public/dashboard/dashboard.js` — Gemini fields in loadSettings, toggleLLMProvider, saveSettings
 
+### Security
+- **[C1]** IT Guidance auto-remediate now validates PID range and service whitelist before auto-executing
+- **[C2]** Gemini API key moved from URL query parameter to `x-goog-api-key` request header
+- **[H1]** Encryption salt now configurable via `POCKET_IT_ENCRYPTION_SALT` env var (warns if using default)
+- **[H2]** Device secret plaintext comparison uses `crypto.timingSafeEqual` (prevents timing attacks)
+- **[M1]** System tools `service_action` blocks stop/restart of security-critical services (WinDefend, Sysmon, EventLog, etc.)
+- **[M2]** IT Guidance error responses no longer leak internal error details to clients
+- **[M3]** Removed `file://` from CORS allowed origins
+- **[M4]** Chat messages limited to 10,000 characters to prevent LLM cost abuse
+- **[L3]** Fixed DB size calculation in settings (was returning 0 due to incorrect destructuring)
+
 ## [0.18.0] - 2026-02-20
 
 ### Added

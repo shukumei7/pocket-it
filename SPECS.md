@@ -1974,40 +1974,76 @@ Portal: **https://helpdesk.example.com**
 
 ## Security Threat Model
 
-### Implemented Security Controls (v0.1.4)
+### Implemented Security Controls (current)
 
 | Control | Implementation | Location |
 |---------|---------------|----------|
 | JWT secret required | Server exits on startup if `POCKET_IT_JWT_SECRET` unset (no hardcoded fallback) | `server.js:5-9`, `socket/itNamespace.js` |
 | Device DB validation | `requireDevice` middleware verifies device_id in database | `auth/middleware.js:17-31` |
 | Device secret auth (Socket.IO) | Socket.IO handshake validates `device_secret` from enrollment; null secrets rejected | `socket/agentNamespace.js:23-35` |
-| Device secret auth (HTTP) | `requireDevice` middleware validates `x-device-secret` header (v0.1.4) | `auth/middleware.js` |
+| Device secret auth (HTTP) | `requireDevice` middleware validates `x-device-secret` header | `auth/middleware.js` |
+| Device secret timing-safe compare | `crypto.timingSafeEqual` used for plaintext secret comparison (prevents timing attacks) | `auth/middleware.js` |
 | Re-enrollment protection | Existing device_id returns 409 Conflict | `routes/enrollment.js:43-44` |
 | Enrollment status check | `GET /api/enrollment/status/:deviceId` validates device with `x-device-secret` header | `routes/enrollment.js` |
 | Ticket auth | `POST /api/tickets` requires authenticated device | `routes/tickets.js:29` |
-| Prompt injection defense | User messages wrapped in `<user_message>` tags | `services/diagnosticAI.js:30` |
-| XSS prevention | All user-controlled data in dashboard escaped via `escapeHtml()` (v0.1.4) | `public/dashboard/*.html` |
-| Socket.IO chat rate limiting | 20 messages/minute per device (v0.1.4) | `socket/agentNamespace.js` |
-| CORS hardened | No wildcard, no null origin allowed | `server.js:48-61` |
+| Prompt injection defense | Hardened `sanitizeForLLM()` strips injection markers, XML tags, and role markers; `sanitizeDiagnosticData()` recursively sanitizes JSON before LLM | `services/diagnosticAI.js` |
+| XSS prevention | All user-controlled data in dashboard escaped via `escapeHtml()` | `public/dashboard/*.html` |
+| Socket.IO chat rate limiting | 20 messages/minute per device | `socket/agentNamespace.js` |
+| Chat message size limit | 10,000 character cap per message (prevents LLM cost abuse) | `socket/agentNamespace.js` |
+| CORS hardened | No wildcard, no null origin, `file://` origin removed | `server.js` |
 | Body size limit | 100KB max JSON payload | `server.js:63` |
 | Account lockout | 5 failures → 15-minute lockout | `routes/admin.js:8-61` |
 | LLM timeouts | 30s AbortController on HTTP calls | `services/llmService.js` |
-| Server-side action whitelist | Remediation actions validated before forwarding | `socket/agentNamespace.js:104-112` |
+| LLM API key transport | Gemini API key sent via `x-goog-api-key` header (not URL query parameter) | `services/llmService.js` |
+| LLM error sanitization | Provider errors not forwarded verbatim to clients; generic message returned, full error logged server-side | `services/llmService.js`, `routes/` |
+| LLM API keys encrypted at rest | AES-256-GCM via `server/config/encryption.js`; salt configurable via `POCKET_IT_ENCRYPTION_SALT` env var | `config/encryption.js`, `routes/admin.js` |
+| Server-side action whitelist | Remediation actions validated before forwarding; centralized in `actionWhitelist.js` | `config/actionWhitelist.js` |
+| Auto-remediate PID/service guard | IT Guidance auto-remediate validates PID range and service whitelist before executing | `socket/agentNamespace.js` |
+| Critical service protection | `service_action` system tool blocks stop/restart of WinDefend, Sysmon, EventLog, and other security-critical services | `config/actionWhitelist.js` |
 | Status/priority validation | Ticket PATCH validates enum values | `routes/tickets.js:76-84` |
-| JWT secret fallback removed | Admin login route no longer has hardcoded fallback (v0.1.4) | `routes/admin.js` |
+| JWT secret fallback removed | Admin login route no longer has hardcoded fallback | `routes/admin.js` |
+| Admin JWT fallback corrected | JWT decode failure in itNamespace defaults to `{ isAdmin: false, clientIds: [] }` | `socket/itNamespace.js` |
+| Device secrets hashed at rest | bcrypt hashes stored in server DB; backward-compatible migration on startup | `db/schema.js` |
+| Enrollment rate limiting | 5 requests per IP per 15 minutes | `routes/enrollment.js` |
+| PowerShell Base64 encoding | Scripts passed via `-EncodedCommand` with Base64 (no string escaping) | `SecurityCheck.cs`, `BatteryCheck.cs` |
+| DPAPI client credential protection | Device secret encrypted with Windows DPAPI in local SQLite | `Core/LocalDatabase.cs` |
+| Device secret out of query string | Transmitted in Socket.IO `auth` object (not URL/query string) | `Core/ServerConnection.cs` |
+| CSP `unsafe-inline` removed | `scriptSrc` and `scriptSrcAttr` no longer include `unsafe-inline` | `server.js` |
+| Device secret sanitization | `GET /api/devices` and `GET /api/devices/:id` strip `device_secret` and `certificate_fingerprint` via `sanitizeDevice()` | `routes/devices.js` |
+| Scoped integrity warnings | `integrity_warning` events emitted only to IT users whose scope includes the affected device | `socket/agentNamespace.js` |
+| Chat history scope check | `GET /api/chat/:deviceId` returns 403 if device not in user's client scope | `routes/chat.js` |
+
+### Security Audit Remediation (post-0.18.0)
+
+The following controls were added following an internal security audit. Items are labeled by severity: **[C]** critical, **[H]** high, **[M]** medium, **[L]** low.
+
+| ID | Area | Measure |
+|----|------|---------|
+| C1 | IT Guidance | Auto-remediate validates PID range and service whitelist before executing any action |
+| C2 | Gemini provider | API key moved from URL query parameter to `x-goog-api-key` request header |
+| H1 | Encryption | AES-256-GCM salt configurable via `POCKET_IT_ENCRYPTION_SALT`; warns on default value at startup |
+| H2 | Device auth | Plaintext device secret comparison uses `crypto.timingSafeEqual` to prevent timing attacks |
+| M1 | System tools | `service_action` blocks stop/restart of security-critical services (WinDefend, Sysmon, EventLog, etc.) |
+| M2 | Error handling | IT Guidance error responses sanitized; internal details no longer leaked to clients |
+| M3 | CORS | `file://` origin removed from allowed origins list |
+| M4 | Chat input | Messages capped at 10,000 characters to prevent LLM cost abuse |
+| L3 | Settings | DB size calculation fixed (incorrect destructuring was returning 0) |
 
 ### Threats and Mitigations
 
 | Threat | Mitigation |
 |--------|-----------|
-| Malicious remediation actions | Hardcoded whitelist, user approval required |
-| Unauthorized device enrollment | One-time tokens with expiration |
+| Malicious remediation actions | Hardcoded whitelist, user approval required, PID/service validation on auto-remediate |
+| Unauthorized device enrollment | One-time tokens with expiration, 5 req/IP/15 min rate limit |
 | Impersonation of IT staff | JWT authentication with TOTP (production) |
 | Eavesdropping on chat | TLS encryption (production), mTLS (future) |
-| Privilege escalation | Role-based access control for IT staff |
-| LLM prompt injection | Structured action parsing, no eval() of LLM output |
+| Privilege escalation | Role-based access control for IT staff; JWT fallback defaults to no access |
+| LLM prompt injection | Structured action parsing, no eval() of LLM output, hardened sanitizeForLLM() |
 | Database injection | Parameterized queries (better-sqlite3 prepared statements) |
-| Denial of service | Rate limiting (future), connection limits |
+| Denial of service | Rate limiting on enrollment, chat rate limiting, message size cap |
+| API key exposure | Keys encrypted at rest (AES-256-GCM), sent via headers not URL params |
+| Timing attacks | `crypto.timingSafeEqual` for secret comparison |
+| Critical service sabotage | Service action whitelist blocks stops of security-critical Windows services |
 
 ### Data Privacy
 

@@ -1,7 +1,7 @@
 const { verifyToken } = require('../auth/userAuth');
 const jwt = require('jsonwebtoken');
 const { emitToScoped } = require('./scopedEmit');
-const { VALID_ACTIONS } = require('../config/actionWhitelist');
+const { VALID_ACTIONS, ALLOWED_SERVICES } = require('../config/actionWhitelist');
 
 // Rate limiter for sensitive operations
 const opRateLimits = new Map(); // key: `${socketId}:${eventType}` → { count, resetTime }
@@ -41,6 +41,11 @@ function validateToolParams(tool, params) {
       if (!params?.serviceName || !namePattern.test(params.serviceName)) return { valid: false, reason: 'serviceName must be alphanumeric/underscores/hyphens/dots, max 256 chars' };
       const validActions = ['start', 'stop', 'restart'];
       if (!validActions.includes(params?.action)) return { valid: false, reason: `action must be one of: ${validActions.join(', ')}` };
+      // Block stop/restart of security-critical services
+      const BLOCKED_SERVICES = ['windefend', 'sense', 'sysmon', 'sysmon64', 'eventlog', 'mpssvc', 'wscsvc'];
+      if (BLOCKED_SERVICES.includes(params.serviceName.toLowerCase()) && params.action !== 'start') {
+        return { valid: false, reason: `Cannot stop/restart security-critical service: ${params.serviceName}` };
+      }
       return { valid: true };
     }
     case 'event_log_query': {
@@ -1484,16 +1489,35 @@ function setup(io, app) {
         // If action is remediate, execute immediately on device (IT authority)
         if (response.action && response.action.type === 'remediate') {
           if (VALID_ACTIONS.includes(response.action.actionId)) {
-            const connectedDevices = app.locals.connectedDevices;
-            if (connectedDevices) {
-              const deviceSocket = connectedDevices.get(deviceId);
-              if (deviceSocket) {
-                deviceSocket.emit('remediation_request', {
-                  actionId: response.action.actionId,
-                  requestId: `itg-${Date.now()}`,
-                  parameter: response.action.parameter || null,
-                  autoApprove: true  // IT authority: auto-approve
-                });
+            const param = response.action.parameter || null;
+            let validated = true;
+
+            // Defense-in-depth: validate parameters even for IT-authority auto-execute
+            if (response.action.actionId === 'kill_process') {
+              const pid = parseInt(param, 10);
+              if (!Number.isInteger(pid) || pid < 1 || pid > 65535) {
+                console.warn(`[IT Guidance] Blocked kill_process with invalid PID: ${param}`);
+                validated = false;
+              }
+            } else if (response.action.actionId === 'restart_service') {
+              if (!param || !ALLOWED_SERVICES.includes(param.toLowerCase())) {
+                console.warn(`[IT Guidance] Blocked restart_service with non-whitelisted service: ${param}`);
+                validated = false;
+              }
+            }
+
+            if (validated) {
+              const connectedDevices = app.locals.connectedDevices;
+              if (connectedDevices) {
+                const deviceSocket = connectedDevices.get(deviceId);
+                if (deviceSocket) {
+                  deviceSocket.emit('remediation_request', {
+                    actionId: response.action.actionId,
+                    requestId: `itg-${Date.now()}`,
+                    parameter: response.action.actionId === 'restart_service' ? param.toLowerCase() : param,
+                    autoApprove: true  // IT authority: auto-approve
+                  });
+                }
               }
             }
           }
@@ -1533,8 +1557,8 @@ function setup(io, app) {
         }
 
       } catch (err) {
-        console.error('[IT] it_guidance_message error:', err.message);
-        socket.emit('it_guidance_response', { deviceId: deviceId || null, text: 'Error processing guidance request: ' + err.message, action: null });
+        console.error('[IT] it_guidance_message error:', err.stack || err.message);
+        socket.emit('it_guidance_response', { deviceId: deviceId || null, text: 'An error occurred while processing your request. Please try again.', action: null });
       }
     });
 

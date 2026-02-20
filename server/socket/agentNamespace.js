@@ -2,6 +2,7 @@ const { emitToScoped, emitToAll } = require('./scopedEmit');
 const deploymentScheduler = require('../services/deploymentScheduler');
 const { VALID_ACTIONS, ALLOWED_SERVICES } = require('../config/actionWhitelist');
 const bcrypt = require('bcryptjs');
+const crypto = require('node:crypto');
 
 function checkAIDisabled(db, app, deviceId) {
   // 1. Global AI disabled
@@ -103,7 +104,8 @@ function setup(io, app) {
     const isHashed = fullDevice.device_secret.startsWith('$2');
     const secretValid = isHashed
       ? bcrypt.compareSync(deviceSecret, fullDevice.device_secret)
-      : fullDevice.device_secret === deviceSecret;
+      : (fullDevice.device_secret.length === deviceSecret.length &&
+         crypto.timingSafeEqual(Buffer.from(fullDevice.device_secret), Buffer.from(deviceSecret)));
     if (!secretValid) {
       console.log(`[Agent] Connection rejected: invalid secret for ${deviceId}`);
       socket.disconnect();
@@ -282,6 +284,17 @@ function setup(io, app) {
     // Chat message from user
     socket.on('chat_message', async (data) => {
       const content = data.content;
+
+      if (!content || typeof content !== 'string' || content.length === 0) return;
+      if (content.length > 10000) {
+        socket.emit('chat_response', {
+          text: 'Your message is too long. Please keep messages under 10,000 characters.',
+          sender: 'system',
+          action: null
+        });
+        return;
+      }
+
       console.log(`[Agent] Chat from ${deviceId}: ${content.substring(0, 50)}...`);
 
       // Rate limit: 20 messages per minute per device

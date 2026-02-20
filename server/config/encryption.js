@@ -8,12 +8,18 @@ const TAG_LENGTH = 16;
  * Derive a 256-bit key from a passphrase.
  * Uses the ADMIN_TOKEN or a dedicated ENCRYPTION_KEY env var.
  */
+let _saltWarned = false;
 function getEncryptionKey() {
   const passphrase = process.env.POCKET_IT_ENCRYPTION_KEY || process.env.POCKET_IT_JWT_SECRET;
   if (!passphrase) {
     throw new Error('No encryption key available (set POCKET_IT_ENCRYPTION_KEY or POCKET_IT_JWT_SECRET)');
   }
-  return crypto.scryptSync(passphrase, 'pocket-it-settings', 32);
+  const salt = process.env.POCKET_IT_ENCRYPTION_SALT || 'pocket-it-settings';
+  if (salt === 'pocket-it-settings' && !_saltWarned) {
+    _saltWarned = true;
+    console.warn('[SECURITY] POCKET_IT_ENCRYPTION_SALT not set — using default salt. Set a unique random value for production.');
+  }
+  return crypto.scryptSync(passphrase, salt, 32);
 }
 
 /**

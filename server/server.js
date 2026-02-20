@@ -23,6 +23,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "https://cdn.jsdelivr.net"],
       scriptSrcAttr: [],
+      // unsafe-inline required for inline style="" attributes across dashboard HTML
       styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
       connectSrc: ["'self'", "ws:", "wss:", "https://cdn.jsdelivr.net"],
       imgSrc: ["'self'", "data:"],
@@ -62,7 +63,6 @@ const extraOrigins = (process.env.POCKET_IT_CORS_ORIGINS || '').split(',').filte
 const allowedOrigins = [
     'http://localhost:9100',
     'https://localhost:9100',
-    'file://',
     ...extraOrigins
 ];
 

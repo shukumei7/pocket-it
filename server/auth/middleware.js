@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('node:crypto');
 
 function getJwtSecret() {
   const secret = process.env.POCKET_IT_JWT_SECRET;
@@ -35,7 +36,8 @@ function requireDevice(req, res, next) {
   const isHashed = device.device_secret.startsWith('$2');
   const secretValid = isHashed
     ? bcrypt.compareSync(deviceSecret, device.device_secret)
-    : device.device_secret === deviceSecret;
+    : (device.device_secret.length === deviceSecret.length &&
+       crypto.timingSafeEqual(Buffer.from(device.device_secret), Buffer.from(deviceSecret)));
   if (!secretValid) {
     return res.status(403).json({ error: 'Invalid device credentials' });
   }

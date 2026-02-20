@@ -470,9 +470,9 @@ router.get('/settings', requireAdmin, (req, res) => {
 
   // Include DB size
   try {
-    const { page_count } = db.pragma('page_count', { simple: true }) ? { page_count: db.pragma('page_count', { simple: true }) } : { page_count: 0 };
-    const { page_size } = db.pragma('page_size', { simple: true }) ? { page_size: db.pragma('page_size', { simple: true }) } : { page_size: 4096 };
-    masked['_dbSizeBytes'] = page_count * page_size;
+    const pageCount = db.pragma('page_count', { simple: true }) || 0;
+    const pageSize = db.pragma('page_size', { simple: true }) || 4096;
+    masked['_dbSizeBytes'] = pageCount * pageSize;
   } catch (e) {
     masked['_dbSizeBytes'] = 0;
   }

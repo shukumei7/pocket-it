@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { requireAdmin } = require('../auth/middleware');
 const bcrypt = require('bcryptjs');
+const crypto = require('node:crypto');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
@@ -106,7 +107,8 @@ router.get('/status/:deviceId', (req, res) => {
   const isHashed = device.device_secret.startsWith('$2');
   const secretValid = isHashed
     ? bcrypt.compareSync(deviceSecret, device.device_secret)
-    : device.device_secret === deviceSecret;
+    : (device.device_secret.length === deviceSecret.length &&
+       crypto.timingSafeEqual(Buffer.from(device.device_secret), Buffer.from(deviceSecret)));
   if (!secretValid) {
     return res.status(401).json({ error: 'Invalid device secret' });
   }

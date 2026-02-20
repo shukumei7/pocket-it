@@ -230,6 +230,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'pocket-it' });
 });
 
+// SPA catch-all: serve dashboard index.html for any /dashboard/* sub-path
+app.get('/dashboard/*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard', 'index.html'));
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {

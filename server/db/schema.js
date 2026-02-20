@@ -193,13 +193,11 @@ function initDatabase(dbPath) {
       UNIQUE(user_id, client_id)
     );
 
-    CREATE INDEX IF NOT EXISTS idx_devices_client_id ON devices(client_id);
-    CREATE INDEX IF NOT EXISTS idx_enrollment_tokens_client_id ON enrollment_tokens(client_id);
     CREATE INDEX IF NOT EXISTS idx_user_client_user ON user_client_assignments(user_id);
     CREATE INDEX IF NOT EXISTS idx_user_client_client ON user_client_assignments(client_id);
   `);
 
-  // v0.10.0: Multi-tenancy columns
+  // v0.10.0: Multi-tenancy columns (must come before index creation)
   try {
     db.prepare('ALTER TABLE devices ADD COLUMN client_id INTEGER REFERENCES clients(id)').run();
   } catch (err) {
@@ -210,6 +208,12 @@ function initDatabase(dbPath) {
   } catch (err) {
     // Column already exists
   }
+
+  // v0.10.0: Indexes on multi-tenancy columns (after ALTER TABLE)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_devices_client_id ON devices(client_id);
+    CREATE INDEX IF NOT EXISTS idx_enrollment_tokens_client_id ON enrollment_tokens(client_id);
+  `);
 
   // v0.11.0: Client version tracking
   try {

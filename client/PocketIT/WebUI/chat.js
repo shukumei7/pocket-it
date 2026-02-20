@@ -414,6 +414,7 @@
     // ---- Typing indicator ----
 
     let typingEl = null;
+    let typingTimer = null;
 
     function showTyping() {
         if (typingEl) return;
@@ -424,7 +425,14 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    function showTypingDelayed() {
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(showTyping, 2000);
+    }
+
     function hideTyping() {
+        clearTimeout(typingTimer);
+        typingTimer = null;
         if (typingEl) {
             typingEl.remove();
             typingEl = null;
@@ -486,7 +494,7 @@
         } else if (!aiEnabled) {
             addMessage('Your message has been sent to IT support. A technician will respond shortly.', 'system');
         } else {
-            showTyping();
+            showTypingDelayed();
         }
 
         // Always send to bridge (C# will queue if offline)

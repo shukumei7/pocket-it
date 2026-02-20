@@ -3700,7 +3700,7 @@
             }
 
             // For non-admin with single client, auto-select and hide "All" option
-            if (currentUserRole !== 'admin' && currentClients.length === 1) {
+            if (currentUserRole !== 'admin' && currentUserRole !== 'superadmin' && currentClients.length === 1) {
                 sel.value = String(currentClients[0].id);
                 selectedClientId = currentClients[0].id;
                 sel.querySelector('option[value=""]').style.display = 'none';

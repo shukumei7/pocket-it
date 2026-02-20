@@ -96,7 +96,7 @@ function requireAdmin(req, res, next) {
     if (decoded.purpose) {
       return res.status(401).json({ error: 'Full authentication required' });
     }
-    if (decoded.role !== 'admin') {
+    if (decoded.role !== 'admin' && decoded.role !== 'superadmin') {
       return res.status(403).json({ error: 'Admin role required' });
     }
     req.user = decoded;

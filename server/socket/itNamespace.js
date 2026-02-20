@@ -108,7 +108,7 @@ function setup(io, app) {
 
     // Resolve client scope for this socket
     const db = app.locals.db;
-    if (isLocal || (decoded && decoded.role === 'admin')) {
+    if (isLocal || (decoded && (decoded.role === 'admin' || decoded.role === 'superadmin'))) {
       socket.userScope = { isAdmin: true, clientIds: null };
     } else if (decoded && decoded.id) {
       const assignments = db.prepare(

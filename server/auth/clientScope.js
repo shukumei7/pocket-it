@@ -11,7 +11,7 @@ function resolveClientScope(req, res, next) {
   const db = req.app.locals.db;
 
   // Localhost or admin sees everything
-  if (isLocalhost(req) || (req.user && req.user.role === 'admin')) {
+  if (isLocalhost(req) || (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin'))) {
     req.clientScope = { isAdmin: true, clientIds: null };
     return next();
   }

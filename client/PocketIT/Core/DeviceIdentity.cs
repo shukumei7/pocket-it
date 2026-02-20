@@ -440,11 +440,15 @@ public static class DeviceIdentity
                 {
                     profile["formFactor"] = chassisType switch
                     {
-                        3 or 4 or 5 or 6 or 7 => "Desktop",
-                        8 or 9 or 10 or 11 or 12 or 14 => "Laptop",
+                        3 or 4 or 5 or 6 or 7 or 15 or 24 or 34 => "Desktop",
+                        8 or 9 or 10 or 11 or 12 or 14 or 31 or 32 => "Laptop",
                         13 => "All-in-One",
-                        15 or 16 => "Tablet",
-                        >= 17 and <= 24 => "Server",
+                        16 or 30 => "Tablet",
+                        17 or 18 or 19 or 20 or 21 or 22 or 23 => "Server",
+                        25 or 26 or 27 or 28 or 29 => "Rack/Blade",
+                        33 => "IoT Gateway",
+                        35 => "Mini PC",
+                        36 => "Stick PC",
                         _ => "Unknown"
                     };
                 }
@@ -477,7 +481,7 @@ public static class DeviceIdentity
             {
                 var output = await process.StandardOutput.ReadToEndAsync();
                 await process.WaitForExitAsync();
-                var trimmed = output.Trim();
+                var trimmed = output.Trim().Trim('\0');
                 profile["tpmVersion"] = string.IsNullOrEmpty(trimmed) ? "Not Present" : trimmed;
             }
         }

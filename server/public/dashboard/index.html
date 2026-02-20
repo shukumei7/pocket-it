@@ -315,6 +315,14 @@
                     </div>
                   </div>
                 </details>
+                <details style="margin-top:10px;">
+                  <summary style="cursor:pointer; font-size:12px; color:#3d5a2e;">Auto-populate Custom Fields from scripts</summary>
+                  <div style="margin-top:6px; padding:8px 10px; background:#0e1621; border:1px solid #2a475e; border-left:3px solid #3d5a2e; border-radius:4px; font-size:12px; color:#8f98a0; line-height:1.6;">
+                    Scripts can auto-populate the Custom Fields section above by printing a special marker line:<br>
+                    <code style="display:block; margin:6px 0; padding:6px 8px; background:#0a0f14; border-radius:3px; color:#66c0f4; font-size:11px; word-break:break-all;">POCKET_IT_FIELDS:{"Department":"Engineering","Asset Tag":"A1234","Warranty":"2027-03"}</code>
+                    <span style="color:#616161;">The JSON after <code style="color:#8f98a0;">POCKET_IT_FIELDS:</code> is parsed and upserted as custom fields. Multiple marker lines are supported. Source shows as "script" in field cards.</span>
+                  </div>
+                </details>
                 <div id="script-output-area" style="margin-top:12px;"></div>
               </div>
 

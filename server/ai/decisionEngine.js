@@ -39,6 +39,16 @@ function parseResponse(responseText) {
     return result;
   }
 
+  const runScriptMatch = result.text.match(/\[ACTION:RUN_SCRIPT:(\d+)\]/);
+  if (runScriptMatch) {
+    result.action = {
+      type: 'run_script',
+      scriptId: parseInt(runScriptMatch[1], 10)
+    };
+    result.text = result.text.replace(runScriptMatch[0], '').trim();
+    return result;
+  }
+
   const screenshotMatch = result.text.match(/\[ACTION:SCREENSHOT\]/);
   if (screenshotMatch) {
     result.action = { type: 'screenshot' };

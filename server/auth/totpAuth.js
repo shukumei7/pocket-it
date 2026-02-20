@@ -100,6 +100,19 @@ function verifyBackupCode(code, encryptedHashedCodes) {
   return { valid: false };
 }
 
+/**
+ * Count remaining backup codes without exposing them.
+ */
+function getBackupCodeCount(encryptedCodes) {
+  if (!encryptedCodes) return 0;
+  try {
+    const hashed = JSON.parse(decrypt(encryptedCodes));
+    return hashed.length;
+  } catch {
+    return 0;
+  }
+}
+
 module.exports = {
   generateTOTPSecret,
   verifyTOTP,
@@ -107,5 +120,6 @@ module.exports = {
   verifyTempToken,
   generateBackupCodes,
   hashBackupCodes,
-  verifyBackupCode
+  verifyBackupCode,
+  getBackupCodeCount
 };

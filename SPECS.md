@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.17.0
+Version: 0.18.0
 
 ## System Architecture
 
@@ -50,13 +50,13 @@ Version: 0.17.0
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  SQLite Database (better-sqlite3)                            │   │
-│  │  19 tables: devices, enrollment_tokens, it_users,            │   │
+│  │  20 tables: devices, enrollment_tokens, it_users,            │   │
 │  │  chat_messages, tickets, ticket_comments,                    │   │
 │  │  diagnostic_results, audit_log, alert_thresholds, alerts,   │   │
 │  │  notification_channels, auto_remediation_policies,           │   │
 │  │  script_library, report_schedules, report_history,           │   │
 │  │  clients, user_client_assignments, update_packages,          │   │
-│  │  chat_read_cursors                                           │   │
+│  │  chat_read_cursors, user_preferences                         │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -138,6 +138,21 @@ Check for action tags:
       │     → Client emits screenshot_result to server    │
       │     → Server passes image to AI (multimodal)      │
       │     → Ollama/Claude CLI receive text fallback     │
+      │                                                    │
+      ├─ [ACTION:RUN_SCRIPT:<id>] ────────────────────────┤
+      │     → decisionEngine produces { type: 'run_script', scriptId }
+      │     → Server looks up script in script_library    │
+      │     → Server emits script_request to client       │
+      │       (aiInitiated: true)                         │
+      │     → Client shows "AI Script Request" consent    │
+      │       card (robot emoji, "AI assistant wants to   │
+      │       run" message)                               │
+      │     → User approves or denies                     │
+      │     → If approved: client executes script,        │
+      │       emits script_result with aiInitiated: true  │
+      │     → Server routes result to                     │
+      │       diagnosticAI.processScriptResult()          │
+      │     → AI receives output, sends follow-up         │
       │                                                    │
       └─ [ACTION:TICKET:priority:title] ─────────────────┤
             → Server creates ticket in DB                 │
@@ -329,6 +344,21 @@ Client sends a captured screenshot after user approval. Added in v0.12.8.
 
 Capture settings: quality=40 (JPEG compression), scale=0.5 (50% of native resolution). If the user denies the request, no event is emitted.
 
+#### `script_result`
+Client reports the outcome of a script execution. Sent for both IT-initiated and AI-initiated scripts. Added in v0.18.0.
+
+```json
+{
+  "requestId": "req_1707857234999",
+  "scriptId": 42,
+  "success": true,
+  "output": "Service restarted successfully.\n",
+  "aiInitiated": true
+}
+```
+
+When `aiInitiated` is `true`, `agentNamespace.js` routes the result to `diagnosticAI.processScriptResult()` so the AI can analyze the output and respond. When `false`, the result is relayed to the IT dashboard as a `script_result` event on the `/it` namespace.
+
 **Server → Client Events:**
 
 #### `agent_info`
@@ -382,6 +412,7 @@ AI response to user message.
 - `{ "type": "diagnose", "checkType": "cpu|memory|disk|network|all" }`
 - `{ "type": "remediate", "actionId": "flush_dns|clear_temp|restart_spooler|repair_network|clear_browser_cache" }`
 - `{ "type": "ticket", "priority": "low|medium|high|critical", "title": "..." }`
+- `{ "type": "run_script", "scriptId": "<id>" }` — AI-requested script execution (v0.18.0)
 
 #### `diagnostic_request`
 Request client to run a diagnostic check.
@@ -413,6 +444,20 @@ Request client to capture a screenshot after presenting user approval prompt. Ad
 ```
 
 Client presents a consent dialog before capturing. If approved, responds with `screenshot_result`. If denied, no event is sent.
+
+#### `script_request`
+Request client to run a script library script after presenting a user consent card. Added in v0.18.0.
+
+```json
+{
+  "requestId": "req_1707857235001",
+  "scriptId": 42,
+  "scriptName": "Clear Print Queue",
+  "aiInitiated": true
+}
+```
+
+When `aiInitiated` is `true`, the client chat UI displays an "AI Script Request" card with a robot emoji and the message "AI assistant wants to run: [scriptName]". When `false`, it displays a standard "Script Execution Request" card. User must approve before the script runs. Responds with `script_result`.
 
 #### `update_available`
 Notify client that a newer version is available on the server. Sent on connect when the connecting client version is outdated (v0.12.8). Previously only emitted via manual admin push or the 4-hour poll.
@@ -664,6 +709,17 @@ Broadcast to all IT dashboard clients when a device's AI mode is changed. Added 
 ```
 
 `aiDisabled` is `null` when AI is enabled, `"temporary"` or `"permanent"` when disabled per-device.
+
+#### `device_ai_reenabled`
+Broadcast to all IT dashboard clients watching a device when the AI re-enables after an IT-active auto-disable period expires. Added in v0.18.0.
+
+```json
+{
+  "deviceId": "abc123"
+}
+```
+
+The dashboard shows a toast notification: "AI re-enabled for [hostname]". Distinct from `device_ai_changed` which is emitted on explicit IT-controlled state changes.
 
 #### `device_watchers`
 Sent to an IT client immediately after `watch_device` with the current list of IT users viewing that device. Added in v0.17.0.
@@ -994,6 +1050,195 @@ CREATE INDEX idx_crc_device_id ON chat_read_cursors(device_id);
 - Cursor upserted when an IT user calls `watch_device`
 - `GET /api/devices/unread-counts` returns `COUNT(*)` of `chat_messages` with `id > last_read_id` per device
 - Devices with no cursor row are treated as having zero read messages (all messages unread)
+
+### Table: `user_preferences`
+
+Per-user key-value preference store. Each row represents one preference setting for one IT user. Added in the account self-service update.
+
+```sql
+CREATE TABLE user_preferences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES it_users(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,                           -- Preference key (whitelisted)
+  value TEXT NOT NULL,                         -- Preference value (stored as string)
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, key)
+);
+
+CREATE INDEX idx_user_prefs_user_id ON user_preferences(user_id);
+```
+
+**Indexes:**
+- Unique constraint on `(user_id, key)` — one value per key per user; upsert replaces on conflict
+- Index on `user_id` for fast per-user preference fetch
+
+**Whitelisted keys:**
+- `theme` — `"dark"` (default) | `"light"`
+- `defaultPage` — dashboard landing page after login
+- `itemsPerPage` — rows shown in paginated tables
+- `dateFormat` — `"relative"` | `"absolute"`
+
+**Behavior:**
+- `GET /api/admin/user/preferences` returns all rows for the authenticated user as a flat `{ key: value }` object
+- `PUT /api/admin/user/preferences` accepts a partial object; only whitelisted keys are written; uses `INSERT OR REPLACE` for each key
+- Preferences are cached in `sessionStorage` after fetch; cache is invalidated and re-fetched on save
+- `ON DELETE CASCADE` removes preferences when the owning IT user is deleted
+
+### Table: `script_library` (updated v0.18.0)
+
+The `script_library` table gains an `ai_tool` column in v0.18.0 to flag scripts that the AI assistant is permitted to suggest running.
+
+```sql
+-- New column added via migration in v0.18.0
+ALTER TABLE script_library ADD COLUMN ai_tool INTEGER DEFAULT 0;
+```
+
+**`ai_tool` behavior:**
+- `0` (default) — script is only available for manual IT-initiated execution
+- `1` — script is included in the AI system prompt as an available action; AI may emit `[ACTION:RUN_SCRIPT:<id>]` referencing this script
+
+## AI Script Toolbelt (v0.18.0)
+
+Allows the AI assistant to suggest running pre-approved scripts from the script library on the device user's machine, with mandatory user consent before execution.
+
+### System Prompt Injection
+
+`diagnosticAI.js` queries all `ai_tool = 1` scripts from `script_library` before building the system prompt. These are passed to `systemPrompt.js` as the `aiToolScripts` parameter. When at least one AI-tool script exists, a conditional section is appended:
+
+```
+### 6. Run Library Scripts
+You can run pre-approved scripts to resolve issues. Use: [ACTION:RUN_SCRIPT:<id>]
+Available scripts:
+- ID 42: "Clear Print Queue" — Stops and restarts the print spooler and clears stuck jobs (category: printing, elevated: true)
+- ID 7: "Flush DNS and Reset Winsock" — Full network stack reset (category: network, elevated: true)
+```
+
+### Decision Engine Parsing
+
+`server/ai/decisionEngine.js` parses `[ACTION:RUN_SCRIPT:<id>]` and produces:
+
+```javascript
+{ type: 'run_script', scriptId: 42 }
+```
+
+This action type is handled in `agentNamespace.js` after the LLM response is parsed.
+
+### Consent Flow (Client)
+
+`client/PocketIT/WebUI/chat.js` — `createScriptPrompt(scriptId, scriptName, aiInitiated)`:
+
+- When `aiInitiated` is `true`: renders an "AI Script Request" card with a robot emoji and the text "AI assistant wants to run: [scriptName]"
+- When `aiInitiated` is `false`: renders a standard "Script Execution Request" card (IT-initiated flow)
+- Both variants present Approve/Deny buttons; no script runs without user approval
+
+### Result Feedback Loop
+
+On approval, the client executes the script and emits `script_result` with `aiInitiated: true`. `agentNamespace.js` detects the flag, looks up the pending request in the `pendingAIScripts` Map, and calls `diagnosticAI.processScriptResult(deviceId, scriptId, output)`. This builds a follow-up message to the LLM containing the script output so the AI can analyze the result and respond to the user.
+
+The `pendingAIScripts` Map is keyed by `requestId` and cleaned up on `disconnect`.
+
+## Script Library Admin Page (v0.18.0)
+
+A new "Scripts" page under the Admin dropdown provides full CRUD management of the script library.
+
+### Navigation
+
+- Admin dropdown item: "Scripts" (renamed from "Script Library")
+- Alphabetical order in dropdown: Clients, Scripts, Settings, Updates, Users, Wishlist
+
+### UI Components
+
+- **Category filter bar** — buttons to filter the script table by category; "All" shows everything
+- **Script table** — columns: Name, Category, Elevated, Timeout, AI Tool, Actions (Edit / Delete)
+- **Create/Edit form** — fields: name (required), description, PowerShell content (required, textarea), category, elevation toggle (`requires_elevation`), timeout (seconds), AI tool toggle (`ai_tool`)
+- **Delete confirmation** — inline confirmation before removal
+
+### API Endpoints
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| `GET` | `/api/scripts` | IT | List all scripts; optional `?category=` filter |
+| `POST` | `/api/scripts` | IT | Create script (name, description, content, category, requires_elevation, timeout, ai_tool) |
+| `PATCH` | `/api/scripts/:id` | IT | Update allowed fields including `ai_tool` |
+| `DELETE` | `/api/scripts/:id` | IT | Delete script |
+
+## Move Device to Client (v0.18.0)
+
+Allows admin users to reassign an enrolled device from one client to another without re-enrollment.
+
+### Endpoint
+
+`PATCH /api/devices/:id/client` — requires admin auth.
+
+**Request body:**
+```json
+{ "clientId": 3 }
+```
+
+**Validation:**
+- `clientId` must be a valid integer referencing an existing row in `clients`
+- Returns 404 if device or target client does not exist
+- Returns 400 if `clientId` is missing or invalid
+
+**Behavior:**
+- Updates `devices.client_id` to the new value
+- Writes an audit log entry: `{ action: 'device_moved', actor: username, target: deviceId, details: { fromClientId, toClientId } }`
+- Returns the updated device object
+
+### Dashboard UI
+
+- "Move to Client" button appears in the device detail danger zone, next to "Remove Device"
+- Clicking opens a modal with a client picker dropdown (populated from `GET /api/clients`)
+- Confirming the selection calls `PATCH /api/devices/:id/client` and reloads the device detail
+
+## User Self-Service — "My Account" Page (v0.18.0)
+
+All authenticated users (any role) can access a personal account management page. The page is reached by clicking the avatar circle (showing user initials) in the nav bar.
+
+### Supported Operations
+
+| Operation | Requirement | Endpoint |
+|-----------|-------------|----------|
+| View profile (display name, username, role) | Authenticated | `GET /api/admin/user/profile` |
+| Update display name | Authenticated | `PUT /api/admin/user/profile` |
+| Change password | Current password verification | `PUT /api/admin/user/password` |
+| Regenerate own backup codes | Password verification | `POST /api/admin/user/2fa/backup-codes` |
+| Reset own 2FA | Password verification | `POST /api/admin/user/2fa/reset` — clears TOTP secret; forces re-setup on next login |
+
+All endpoints use `requireIT` middleware (any authenticated IT user). Password verification uses bcrypt compare against the stored hash before any sensitive operation is performed.
+
+### Nav Bar Avatar
+
+The avatar circle displays the user's initials derived from `display_name` (first letter of first and last word). Clicking navigates to the account page. The avatar and the existing "Connected" badge are ordered: badge left, avatar right.
+
+## Theme System (v0.18.0)
+
+The dashboard supports dark (default) and light themes via CSS custom properties.
+
+### CSS Custom Properties
+
+All structural dashboard CSS uses `var()` references. The following properties are defined on `:root` for dark (default) and overridden under `[data-theme="light"]`:
+
+| Property | Dark value | Light value |
+|----------|-----------|-------------|
+| `--bg-primary` | `#1b2838` | `#f0f2f5` |
+| `--bg-secondary` | `#2a3f5f` | `#ffffff` |
+| `--text-primary` | `#c6d4df` | `#1a1a1a` |
+| `--text-secondary` | `#8ba0b4` | `#555555` |
+| (additional surface, border, accent vars) | ... | ... |
+
+Theme is applied by setting `document.documentElement.setAttribute('data-theme', value)`.
+
+### Persistence
+
+- Theme preference stored in `user_preferences` table under key `theme` (`"dark"` | `"light"`)
+- Fetched from `GET /api/admin/user/preferences` after login and applied immediately
+- Cached in `sessionStorage` under `userPrefs` for instant re-apply without a round-trip on page navigation
+- Toggle available on the account page; saved via `PUT /api/admin/user/preferences`
+
+### Scope
+
+All pages within `server/public/dashboard/` use the CSS custom properties, including the account page. No hardcoded color values remain in structural CSS rules.
 
 ## Whitelisted Remediation Actions
 
@@ -1948,6 +2193,18 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut (manual alternative)
 
 ## Version History
+
+**0.18.0**
+- AI Script Toolbelt: `ai_tool INTEGER DEFAULT 0` column on `script_library`; AI-tool scripts injected into system prompt as available actions; `[ACTION:RUN_SCRIPT:<id>]` parsed by decision engine; `pendingAIScripts` Map in `agentNamespace.js` tracks in-flight AI script requests; `processScriptResult()` in `diagnosticAI.js` feeds script output back to the LLM; client consent card distinguishes AI-initiated (robot emoji) from IT-initiated scripts
+- Script Library Admin Page: "Scripts" page under Admin dropdown with full CRUD (create/edit form with `ai_tool` toggle, category filter bar, sortable table); admin dropdown alphabetized (Clients, Scripts, Settings, Updates, Users, Wishlist)
+- Move Device to Client: `PATCH /api/devices/:id/client` (admin auth) updates `devices.client_id` with audit log; "Move to Client" button and client picker modal on device detail danger zone
+- User Self-Service "My Account" Page: account page accessible from avatar circle in nav bar (all roles); supports display name update, password change, backup code regen, and 2FA reset (all sensitive ops require password verification)
+- User Preferences System: `user_preferences (id, user_id, key, value, updated_at)` table; whitelisted keys: `theme`, `defaultPage`, `itemsPerPage`, `dateFormat`; `GET /api/admin/user/preferences` and `PUT /api/admin/user/preferences`; cached in `sessionStorage`
+- Theme System: dark/light themes via CSS custom properties (`--bg-primary`, `--bg-secondary`, `--text-primary`, etc.); theme stored in `user_preferences`; applied via `data-theme` attribute on `:root`; account page fully themed
+- Dashboard AI Control Fixes: AI button visual states (blue glow = Enabled, red glow = Temporary/Permanent); toast notifications on AI re-enable; new `device_ai_reenabled` socket event for cross-user sync
+- MFA Management Enhancements: `backup_code_count` per user in admin users list; `POST /api/admin/users/:id/backup-codes` regenerates codes without resetting TOTP
+- Database Size in Settings: `_dbSizeBytes` via `PRAGMA page_count * page_size` in settings API response; displayed as KB/MB
+- OS Version Display: fleet cards and device detail prefer `os_name` (friendly) over raw `os_version`
 
 **0.17.0**
 - AI Disable System: `ai.enabled` key in `server_settings` for global toggle; `devices.ai_disabled` column (NULL | 'temporary' | 'permanent') and `devices.ai_disabled_by` for per-device control; `itActiveChatDevices` Map for transient IT-active auto-disable (5-minute pause); disable gate checked in order: global → per-device → IT-active; user messages saved and IT notified when AI is off

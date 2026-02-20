@@ -45,6 +45,9 @@ function setup(io, app) {
   // Only diagnostic results matching a pending AI request get fed back to the AI
   const pendingAIDiagnostics = new Set();
 
+  // Track AI-initiated script requests: deviceId → Set<requestId>
+  const pendingAIScripts = new Map();
+
   // Defense-in-depth: track PIDs seen in recent diagnostic results per device
   // Used to verify kill_process PIDs before emitting remediation requests
   const recentDiagnosticPIDs = new Map(); // deviceId -> Set of PIDs
@@ -450,6 +453,36 @@ function setup(io, app) {
           });
         }
 
+        // If action is run_script, look up script and send to device
+        if (response.action && response.action.type === 'run_script') {
+          const scriptId = response.action.scriptId;
+          const script = db.prepare('SELECT * FROM script_library WHERE id = ? AND ai_tool = 1').get(scriptId);
+          if (script) {
+            const requestId = `ai-sc-${Date.now()}`;
+            // Track as AI-initiated
+            if (!pendingAIScripts.has(deviceId)) pendingAIScripts.set(deviceId, new Set());
+            pendingAIScripts.get(deviceId).add(requestId);
+            // Audit log
+            try {
+              db.prepare('INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))')
+                .run('ai', 'script_requested', deviceId, JSON.stringify({ scriptId, scriptName: script.name, requestId }));
+            } catch (err) {
+              console.error('[Agent] Audit log error:', err.message);
+            }
+            // Emit to device
+            socket.emit('script_request', {
+              requestId,
+              scriptName: script.name,
+              scriptContent: script.script_content,
+              requiresElevation: !!script.requires_elevation,
+              timeoutSeconds: script.timeout_seconds || 60,
+              aiInitiated: true
+            });
+          } else {
+            console.warn(`[Agent] AI requested invalid/non-AI-tool script ID: ${scriptId}`);
+          }
+        }
+
         // If action is ticket, create ticket in DB
         if (response.action && response.action.type === 'ticket') {
           try {
@@ -753,6 +786,33 @@ function setup(io, app) {
             }
           }
 
+          // Handle run_script action from diagnostic follow-up
+          if (response.action && response.action.type === 'run_script') {
+            const scriptId = response.action.scriptId;
+            const script = db.prepare('SELECT * FROM script_library WHERE id = ? AND ai_tool = 1').get(scriptId);
+            if (script) {
+              const requestId = `ai-sc-${Date.now()}`;
+              if (!pendingAIScripts.has(deviceId)) pendingAIScripts.set(deviceId, new Set());
+              pendingAIScripts.get(deviceId).add(requestId);
+              try {
+                db.prepare('INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))')
+                  .run('ai', 'script_requested', deviceId, JSON.stringify({ scriptId, scriptName: script.name, requestId }));
+              } catch (err) {
+                console.error('[Agent] Audit log error:', err.message);
+              }
+              socket.emit('script_request', {
+                requestId,
+                scriptName: script.name,
+                scriptContent: script.script_content,
+                requiresElevation: !!script.requires_elevation,
+                timeoutSeconds: script.timeout_seconds || 60,
+                aiInitiated: true
+              });
+            } else {
+              console.warn(`[Agent] AI requested invalid/non-AI-tool script ID: ${scriptId}`);
+            }
+          }
+
           // Handle feature wish from diagnostic follow-up (no user message available)
           if (response.wish) {
             const VALID_CATEGORIES = ['software', 'network', 'security', 'hardware', 'account', 'automation', 'other'];
@@ -952,7 +1012,7 @@ function setup(io, app) {
     });
 
     // v0.5.0: Script execution results from client
-    socket.on('script_result', (data) => {
+    socket.on('script_result', async (data) => {
       console.log(`[Agent] Script result from ${deviceId}: ${data.requestId} (exit=${data.exitCode})`);
 
       // Audit log
@@ -965,6 +1025,61 @@ function setup(io, app) {
         }));
       } catch (err) {
         console.error('[Agent] Audit log error:', err.message);
+      }
+
+      // Check if this is an AI-initiated script result — feed back to AI
+      if (data.requestId && pendingAIScripts.has(deviceId)) {
+        const pendingSet = pendingAIScripts.get(deviceId);
+        if (pendingSet.has(data.requestId)) {
+          pendingSet.delete(data.requestId);
+          if (pendingSet.size === 0) pendingAIScripts.delete(deviceId);
+
+          const diagnosticAI = app.locals.diagnosticAI;
+          if (diagnosticAI) {
+            try {
+              const scriptOutput = data.success
+                ? (data.output || 'Script completed successfully with no output.')
+                : `Script failed (exit code ${data.exitCode}): ${data.errorOutput || data.output || 'No output'}`;
+              const aiResponse = await diagnosticAI.processScriptResult(deviceId, data.scriptName || 'Script', scriptOutput);
+
+              socket.emit('chat_response', {
+                text: aiResponse.text,
+                sender: 'ai',
+                agentName: aiResponse.agentName,
+                action: aiResponse.action
+              });
+
+              emitToScoped(itNs, db, deviceId, 'device_chat_update', {
+                deviceId,
+                message: { sender: 'ai', content: aiResponse.text, action: aiResponse.action }
+              });
+
+              // Handle follow-up actions from AI's script analysis
+              if (aiResponse.action && aiResponse.action.type === 'diagnose') {
+                const diagRequestId = Date.now().toString();
+                pendingAIDiagnostics.add(deviceId);
+                socket.emit('diagnostic_request', {
+                  checkType: aiResponse.action.checkType,
+                  requestId: diagRequestId,
+                  description: DIAGNOSTIC_DESCRIPTIONS[aiResponse.action.checkType] || aiResponse.action.checkType
+                });
+              }
+              if (aiResponse.action && aiResponse.action.type === 'remediate') {
+                if (VALID_ACTIONS.includes(aiResponse.action.actionId)) {
+                  const param = aiResponse.action.parameter || null;
+                  socket.emit('remediation_request', {
+                    actionId: aiResponse.action.actionId,
+                    parameter: param,
+                    requestId: `rem-${Date.now()}`,
+                    autoApprove: false
+                  });
+                }
+              }
+            } catch (err) {
+              console.error('[Agent] AI script result processing error:', err.message);
+            }
+          }
+        }
       }
 
       emitToScoped(itNs, db, deviceId, 'script_result', {
@@ -1297,6 +1412,7 @@ function setup(io, app) {
       chatRateLimiter.delete(deviceId);
       diagnosticBuffers.delete(deviceId);
       pendingAIDiagnostics.delete(deviceId);
+      pendingAIScripts.delete(deviceId);
 
       try {
         db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\') WHERE device_id = ?')

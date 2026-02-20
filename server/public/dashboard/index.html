@@ -6,6 +6,29 @@
     <title>Pocket IT — Dashboard</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>
+        :root {
+          --bg-deep: #0f1923;
+          --bg-panel: #1b2838;
+          --border: #2a475e;
+          --text-muted: #8f98a0;
+          --text-main: #c7d5e0;
+          --accent: #66c0f4;
+          --success: #66bb6a;
+          --warning: #ffa726;
+          --error: #ef5350;
+        }
+        [data-theme="light"] {
+          --bg-deep: #e8edf2;
+          --bg-panel: #ffffff;
+          --border: #d0d7de;
+          --text-muted: #656d76;
+          --text-main: #1f2328;
+          --accent: #0969da;
+          --success: #1a7f37;
+          --warning: #b35900;
+          --error: #cf222e;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         /* Normalize form controls for consistent vertical alignment */
@@ -16,9 +39,9 @@
             padding: 6px 10px !important;
             font-size: 13px !important;
             font-family: inherit;
-            background: #0f1923;
-            color: #c7d5e0;
-            border: 1px solid #2a475e;
+            background: var(--bg-deep);
+            color: var(--text-main);
+            border: 1px solid var(--border);
             border-radius: 6px;
             outline: none;
             vertical-align: middle;
@@ -28,28 +51,28 @@
             padding: 6px 10px !important;
             font-size: 13px !important;
             font-family: inherit;
-            background: #0f1923;
-            color: #c7d5e0;
-            border: 1px solid #2a475e;
+            background: var(--bg-deep);
+            color: var(--text-main);
+            border: 1px solid var(--border);
             border-radius: 6px;
             outline: none;
         }
         select:focus, input[type="text"]:focus, input[type="number"]:focus,
         input[type="password"]:focus, input[type="date"]:focus, input[type="time"]:focus,
         input[type="datetime-local"]:focus, textarea:focus {
-            border-color: #66c0f4;
+            border-color: var(--accent);
         }
         body {
             font-family: 'Segoe UI', system-ui, sans-serif;
-            background: #0f1923;
-            color: #c7d5e0;
+            background: var(--bg-deep);
+            color: var(--text-main);
             min-height: 100vh;
         }
 
         /* Nav */
         nav {
-            background: #1b2838;
-            border-bottom: 1px solid #2a475e;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
             padding: 0 24px;
             display: flex;
             align-items: center;
@@ -62,7 +85,7 @@
             margin-right: 32px;
         }
         nav a {
-            color: #8f98a0;
+            color: var(--text-muted);
             text-decoration: none;
             padding: 16px 16px;
             font-size: 14px;
@@ -70,8 +93,8 @@
             transition: all 0.2s;
         }
         nav a:hover, nav a.active {
-            color: #c7d5e0;
-            border-bottom-color: #66c0f4;
+            color: var(--accent);
+            border-bottom-color: var(--accent);
         }
         nav .spacer { flex: 1; }
         nav .status-badge {
@@ -98,17 +121,37 @@
         .nav-dropdown-menu a.nav-dropdown-item {
             display: block;
             padding: 8px 16px;
-            color: #8f98a0;
+            color: var(--text-muted);
             text-decoration: none;
             font-size: 13px;
             white-space: nowrap;
         }
         .nav-dropdown-menu a.nav-dropdown-item:hover {
-            background: #2a475e;
-            color: #fff;
+            background: var(--bg-deep);
+            color: var(--text-main);
         }
         .nav-dropdown-menu a.nav-dropdown-item.active {
-            color: #66c0f4;
+            color: var(--accent);
+        }
+
+        .user-avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: var(--border);
+          color: var(--accent);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          font-weight: 700;
+          text-decoration: none;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
+        .user-avatar:hover {
+          background: var(--accent);
+          color: var(--bg-panel);
         }
 
         /* Client management page */
@@ -138,8 +181,8 @@
             margin-bottom: 24px;
         }
         .stat-card {
-            background: #1b2838;
-            border: 1px solid #2a475e;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
             border-radius: 8px;
             padding: 20px;
             cursor: pointer;
@@ -165,7 +208,7 @@
             font-size: 18px;
             font-weight: 600;
             margin-bottom: 16px;
-            color: #c7d5e0;
+            color: var(--text-main);
         }
         .device-grid {
             display: grid;
@@ -173,8 +216,8 @@
             gap: 16px;
         }
         .device-card {
-            background: #1b2838;
-            border: 1px solid #2a475e;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
             border-radius: 8px;
             padding: 16px;
             cursor: pointer;
@@ -201,7 +244,7 @@
             border-radius: 50%;
             display: inline-block;
         }
-        .status-dot.online { background: #66bb6a; }
+        .status-dot.online { background: var(--success); }
         .unread-badge {
             display: inline-flex;
             align-items: center;
@@ -226,11 +269,44 @@
             border: 1px solid #2a475e;
         }
         .ai-mode-active {
-            background: #2a475e !important;
+            background: #1a3a5c !important;
             color: #66c0f4 !important;
             border-color: #66c0f4 !important;
+            box-shadow: 0 0 6px rgba(102, 192, 244, 0.3) !important;
         }
-        .status-dot.offline { background: #ef5350; }
+        .ai-mode-active[data-ai-mode="temporary"],
+        .ai-mode-active[data-ai-mode="permanent"] {
+            background: #3a1a1a !important;
+            color: #ef5350 !important;
+            border-color: #ef5350 !important;
+            box-shadow: 0 0 6px rgba(239, 83, 80, 0.3) !important;
+        }
+        #toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast-message {
+            background: #1b2838;
+            color: #c7d5e0;
+            border: 1px solid #66c0f4;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            opacity: 0;
+            transform: translateY(12px);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .toast-message.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .status-dot.offline { background: var(--error); }
         .device-card .last-seen {
             font-size: 12px;
             color: #8f98a0;
@@ -248,10 +324,10 @@
             border-radius: 2px;
             transition: width 0.3s;
         }
-        .health-bar .fill.good { background: #66bb6a; }
-        .health-bar .fill.warning { background: #ffa726; }
-        .health-bar .fill.critical { background: #ef5350; }
-        .health-bar .fill.unknown { background: #8f98a0; }
+        .health-bar .fill.good { background: var(--success); }
+        .health-bar .fill.warning { background: var(--warning); }
+        .health-bar .fill.critical { background: var(--error); }
+        .health-bar .fill.unknown { background: var(--text-muted); }
 
         /* Ticket list */
         .ticket-list { list-style: none; }
@@ -363,9 +439,9 @@
             margin-top: 12px;
         }
         .diag-btn {
-            background: #2a475e;
-            color: #c7d5e0;
-            border: none;
+            background: var(--bg-deep);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
             padding: 6px 14px;
             border-radius: 4px;
             cursor: pointer;
@@ -898,6 +974,7 @@
             <a href="#" class="nav-link" id="nav-admin-toggle">Admin &#9662;</a>
             <div class="nav-dropdown-menu" style="display:none; position:absolute; top:100%; left:0; z-index:100; min-width:160px; background:#1b2838; border:1px solid #2a475e; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.4); padding:4px 0;">
                 <a href="#" class="nav-dropdown-item" data-page="clients">Clients</a>
+                <a href="#" class="nav-dropdown-item" data-page="scripts">Scripts</a>
                 <a href="#" class="nav-dropdown-item" data-page="settings">Settings</a>
                 <a href="#" class="nav-dropdown-item" data-page="updates">Updates</a>
                 <a href="#" class="nav-dropdown-item" data-page="users">Users</a>
@@ -906,6 +983,7 @@
         </div>
         <span class="spacer"></span>
         <span class="status-badge" id="server-status">Connected</span>
+        <a href="#" class="user-avatar" data-page="account" id="nav-user-avatar" title="My Account" style="display:none; margin-left:8px;"></a>
     </nav>
 
     <div class="container">
@@ -1243,9 +1321,10 @@
           </div>
 
           <!-- Danger zone -->
-          <div style="padding-top:16px; border-top:1px solid #2a475e;">
+          <div style="padding-top:16px; border-top:1px solid #2a475e; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <button class="diag-btn" id="btn-move-device" style="font-size:12px; padding:4px 12px;">Move to Client</button>
             <button class="diag-btn" id="btn-remove-device" style="background:#4a1919; color:#ef5350;">Remove Device</button>
-            <span style="font-size:12px; color:#8f98a0; margin-left:8px;">Removes device and all its data. Device must re-enroll.</span>
+            <span style="font-size:12px; color:#8f98a0;">Removes device and all its data. Device must re-enroll.</span>
           </div>
         </div>
 
@@ -1830,6 +1909,100 @@
             </div>
         </div>
 
+        <!-- Script Library page -->
+        <div class="page" id="page-scripts">
+            <h2 class="section-title">Script Library</h2>
+            <p style="font-size:13px; color:#8f98a0; margin-bottom:20px;">Manage reusable PowerShell scripts for remote execution on devices.</p>
+
+            <!-- Create/Edit form -->
+            <div class="client-form" id="script-form" style="margin-bottom:24px;">
+                <h3 id="script-form-title" style="margin-bottom:12px; color:#c7d5e0;">New Script</h3>
+                <input type="hidden" id="script-edit-id" value="">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+                    <div>
+                        <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Name *</label>
+                        <input type="text" id="script-name" placeholder="e.g. Clear Print Queue" style="width:100%;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Category</label>
+                        <select id="script-category" style="width:100%;">
+                            <option value="general">General</option>
+                            <option value="diagnostics">Diagnostics</option>
+                            <option value="info">Info</option>
+                            <option value="network">Network</option>
+                            <option value="security">Security</option>
+                            <option value="maintenance">Maintenance</option>
+                            <option value="remediation">Remediation</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Description</label>
+                    <input type="text" id="script-description" placeholder="What does this script do?" style="width:100%;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Script Content (PowerShell) *</label>
+                    <textarea id="script-content" rows="10" style="width:100%; font-family:monospace; font-size:13px; background:#0f1923; color:#c7d5e0; border:1px solid #2a475e; border-radius:4px; padding:10px; resize:vertical;" placeholder="Write-Host 'Hello World'"></textarea>
+                </div>
+                <div style="display:flex; gap:16px; align-items:center; margin-bottom:12px;">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#c7d5e0; cursor:pointer;">
+                        <input type="checkbox" id="script-elevation"> Requires Admin Elevation
+                    </label>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <label style="font-size:12px; color:#8f98a0;">Timeout (sec):</label>
+                        <input type="number" id="script-timeout" value="60" min="5" max="300" style="width:70px;">
+                    </div>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:flex; align-items:center; gap:8px; color:#c7d5e0; font-size:13px; cursor:pointer;">
+                        <input type="checkbox" id="script-ai-tool" style="accent-color:#66c0f4;">
+                        AI Tool
+                        <span style="font-size:11px; color:#8f98a0; font-weight:normal;">— AI assistant can suggest this script during chat</span>
+                    </label>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="diag-btn" id="btn-save-script" style="background:#1a3a5c; color:#66c0f4; border-color:#66c0f4;">Save Script</button>
+                    <button class="diag-btn" id="btn-cancel-script" style="display:none;">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Filter bar -->
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+                <select id="script-filter-category" style="padding:6px 10px; background:#0f1923; border:1px solid #2a475e; border-radius:4px; color:#c7d5e0;">
+                    <option value="">All Categories</option>
+                    <option value="general">General</option>
+                    <option value="diagnostics">Diagnostics</option>
+                    <option value="info">Info</option>
+                    <option value="network">Network</option>
+                    <option value="security">Security</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="remediation">Remediation</option>
+                </select>
+                <button class="diag-btn" id="btn-refresh-scripts">Refresh</button>
+                <span id="script-count" style="font-size:12px; color:#8f98a0; margin-left:8px;"></span>
+            </div>
+
+            <!-- Scripts table -->
+            <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; overflow:hidden;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #2a475e; text-align:left;">
+                            <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Name</th>
+                            <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Category</th>
+                            <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Description</th>
+                            <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Elevation</th>
+                            <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Timeout</th>
+                            <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">AI Tool</th>
+                            <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scripts-table-body">
+                        <tr><td colspan="7" style="text-align:center; padding:32px; color:#8f98a0;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Settings page -->
         <div class="page" id="page-settings">
             <h2 class="section-title">Server Settings</h2>
@@ -1997,11 +2170,125 @@
                 <tbody id="users-table-body"></tbody>
             </table>
         </div>
+
+        <!-- My Account page -->
+        <div class="page" id="page-account">
+            <h2 style="margin-bottom:20px;">My Account</h2>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:900px;">
+                <!-- Profile Section -->
+                <div style="background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:20px;">
+                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:16px; text-transform:uppercase; letter-spacing:1px;">Profile</h3>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Username</label>
+                        <div id="account-username" style="font-weight:600; color:var(--text-main);"></div>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Display Name</label>
+                        <input type="text" id="account-display-name" style="width:100%;" />
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Role</label>
+                        <div id="account-role" style="display:inline-block; background:color-mix(in srgb, var(--accent) 20%, transparent); color:var(--accent); padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600;"></div>
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Last Login</label>
+                        <div id="account-last-login" style="font-size:13px; color:var(--text-muted);"></div>
+                    </div>
+                    <div id="account-profile-msg" style="display:none; padding:6px 10px; border-radius:6px; font-size:12px; margin-bottom:8px;"></div>
+                    <button class="diag-btn" id="btn-save-profile" style="width:100%;">Save Profile</button>
+                </div>
+
+                <!-- Password Section -->
+                <div style="background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:20px;">
+                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:16px; text-transform:uppercase; letter-spacing:1px;">Change Password</h3>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Current Password</label>
+                        <input type="password" id="account-current-pw" style="width:100%;" />
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">New Password</label>
+                        <input type="password" id="account-new-pw" style="width:100%;" />
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Confirm New Password</label>
+                        <input type="password" id="account-confirm-pw" style="width:100%;" />
+                    </div>
+                    <div id="account-pw-msg" style="display:none; padding:6px 10px; border-radius:6px; font-size:12px; margin-bottom:8px;"></div>
+                    <button class="diag-btn" id="btn-change-password" style="width:100%;">Change Password</button>
+                </div>
+
+                <!-- Two-Factor Authentication Section -->
+                <div style="background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:20px;">
+                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:16px; text-transform:uppercase; letter-spacing:1px;">Two-Factor Authentication</h3>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Status</label>
+                        <span id="account-2fa-status" style="font-weight:600;"></span>
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Backup Codes</label>
+                        <span id="account-backup-count" style="font-size:13px;"></span>
+                    </div>
+                    <div id="account-2fa-msg" style="display:none; padding:6px 10px; border-radius:6px; font-size:12px; margin-bottom:8px;"></div>
+                    <div id="account-backup-display" style="display:none; background:var(--bg-deep); border:1px solid var(--border); border-radius:6px; padding:12px; margin-bottom:12px;">
+                        <p style="font-size:12px; color:var(--warning); margin-bottom:8px;">Save these codes — each can only be used once:</p>
+                        <div id="account-backup-codes" style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-family:monospace; font-size:13px; color:var(--accent);"></div>
+                        <button class="diag-btn" id="btn-copy-account-backup" style="width:100%; margin-top:8px; font-size:11px;">Copy All</button>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="diag-btn" id="btn-regen-backup" style="flex:1;">Regenerate Backup Codes</button>
+                        <button class="diag-btn" id="btn-reset-own-2fa" style="flex:1; background:color-mix(in srgb, var(--error) 20%, transparent); border-color:var(--error); color:var(--error);">Reset 2FA</button>
+                    </div>
+                </div>
+
+                <!-- Preferences Section -->
+                <div style="background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; padding:20px;">
+                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:16px; text-transform:uppercase; letter-spacing:1px;">Preferences</h3>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Theme</label>
+                        <select id="pref-theme">
+                            <option value="dark">Dark</option>
+                            <option value="light">Light</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Default Page</label>
+                        <select id="pref-default-page">
+                            <option value="fleet">Fleet</option>
+                            <option value="tickets">Tickets</option>
+                            <option value="alerts">Alerts</option>
+                            <option value="reports">Reports</option>
+                            <option value="deploy">Deploy</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Items Per Page</label>
+                        <select id="pref-items-per-page">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:16px;">
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Date Format</label>
+                        <select id="pref-date-format">
+                            <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                            <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                            <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                        </select>
+                    </div>
+                    <div id="account-pref-msg" style="display:none; padding:6px 10px; border-radius:6px; font-size:12px; margin-bottom:8px;"></div>
+                    <button class="diag-btn" id="btn-save-prefs" style="width:100%;">Save Preferences</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="dashboard.js"></script>
+<div id="toast-container"></div>
 </body>
 </html>

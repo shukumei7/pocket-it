@@ -16,7 +16,7 @@ function getAgentName(deviceId) {
   return AGENT_NAMES[Math.abs(hash) % AGENT_NAMES.length];
 }
 
-function getSystemPrompt(deviceInfo, agentName) {
+function getSystemPrompt(deviceInfo, agentName, aiToolScripts) {
   // deviceInfo: { hostname, osVersion, deviceId }
   let deviceContext = '';
   if (deviceInfo) {
@@ -140,7 +140,18 @@ Guidelines:
 - Keep it concise (under 100 characters)
 - Still help the user as best you can in your response — the wish is logged silently in the background
 - You can combine a wish with any other action tag in the same response
+${aiToolScripts && aiToolScripts.length > 0 ? `
+### 6. Run Library Scripts
+Your IT team has pre-approved the following scripts you can run on the user's device. The user must approve each execution. You'll receive the script output to analyze.
 
+Available scripts:
+${aiToolScripts.map(s => `- Script #${s.id}: "${s.name}" — ${s.description || 'No description'} (${s.category || 'general'})`).join('\n')}
+
+To run a script, include exactly: [ACTION:RUN_SCRIPT:scriptId]
+Example: [ACTION:RUN_SCRIPT:${aiToolScripts[0].id}]
+
+Use these scripts when they can help diagnose the user's issue more deeply than the built-in diagnostics. Always explain what the script does and why you want to run it BEFORE suggesting it. Do not suggest scripts for issues that built-in diagnostics can handle.
+` : ''}
 ## Guidelines
 - **Help with ANYTHING** — tech, productivity, general knowledge, life questions. Never refuse to help just because it's not a computer problem.
 - **NEVER say "I can't help with that" or leave the user without a next step.** Always provide actionable advice, suggest a diagnostic, recommend a remediation, or offer to create a support ticket.

@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-02-20
+
+### Added
+- **MFA Management Enhancements** — Admin users list now includes `backup_code_count` per user; new `POST /api/admin/users/:id/backup-codes` (admin auth) regenerates backup codes for a user without resetting their TOTP secret; dashboard Users table shows backup code count and a "Regen Codes" button
+- **User Self-Service "My Account" Page** — All authenticated users (any role) can access a personal account page from the avatar circle in the nav bar; supports updating display name, changing password (requires current password verification), regenerating own backup codes (requires password), and resetting own 2FA (requires password, forces TOTP re-setup on next login)
+- **User Preferences System** — New `user_preferences` table persists per-user key-value settings; supported keys: `theme`, `defaultPage`, `itemsPerPage`, `dateFormat`; preferences fetched via `GET /api/admin/user/preferences` and saved via `PUT /api/admin/user/preferences`; active preference cached in `sessionStorage` for instant apply without a round-trip
+- **Theme System** — Dashboard supports dark (default) and light themes via CSS custom properties (`--bg-primary`, `--bg-secondary`, `--text-primary`, etc.); theme preference persisted to the database and restored on login; all structural CSS uses `var()` references; account page fully themed
+- **AI Script Toolbelt** — Script library scripts can be flagged as "AI Tool" via a toggle; AI-tool scripts are dynamically injected into the AI assistant's system prompt as available actions; AI can suggest running a script via `[ACTION:RUN_SCRIPT:<id>]`; device user sees a consent card and must approve before execution; script results are fed back to the AI for analysis; new `processScriptResult()` method in DiagnosticAI; `pendingAIScripts` tracking in agentNamespace; client shows "AI Script Request" with robot emoji for AI-initiated scripts vs "Script Execution Request" for IT-initiated
+- **Script Library Admin Page** — New "Scripts" page under the Admin tab with full CRUD: create/edit form (name, description, content, category, elevation, timeout, AI tool toggle), category filter bar, sortable table with edit/delete actions
+- **Move Device to Client** — Device detail page includes a "Move to Client" button (in danger zone next to Remove Device); modal dialog with client picker; `PATCH /api/devices/:id/client` endpoint with admin auth, validation, and audit logging
+- **Dashboard AI Control Fixes** — AI disable/enable buttons now show distinct visual states: blue glow for "Enabled", red glow for "Temporary"/"Permanent" disable; IT-active auto-disable highlights the "Temporary" button; toast notifications when AI re-enables on a device; `device_ai_reenabled` socket event for cross-user sync
+- **Database Size in Settings** — Settings page now displays the SQLite database size using `PRAGMA page_count * page_size`; `_dbSizeBytes` included in settings API response; displayed as KB or MB
+- **OS Version Display Fix** — Fleet device cards and device detail now prefer `os_name` (friendly format: "Windows 11 Pro 25H2 (Build 26100.xxx) X64") over raw `os_version`
+
+### Changed
+- **Admin dropdown alphabetized** — Nav items reordered: Clients, Scripts, Settings, Updates, Users, Wishlist
+- **Script Library renamed to "Scripts"** in nav dropdown
+- **User badge layout** — Connected badge and user avatar icon reordered for consistency (avatar to the right with spacing)
+
+### Technical
+- NEW: `server/db/schema.js` — `user_preferences` table migration; `ai_tool INTEGER DEFAULT 0` column on `script_library`
+- NEW: `server/ai/decisionEngine.js` — `[ACTION:RUN_SCRIPT:<id>]` parser produces `{ type: 'run_script', scriptId }`
+- NEW: `server/services/diagnosticAI.js` — `processScriptResult()` method; all prompt-building methods now query and pass AI-tool scripts to system prompt
+- EDIT: `server/ai/systemPrompt.js` — accepts `aiToolScripts` param; conditional "### 6. Run Library Scripts" section listing AI-tool scripts
+- EDIT: `server/socket/agentNamespace.js` — `pendingAIScripts` Map; `run_script` action handler emits `script_request` with `aiInitiated: true`; `script_result` handler routes AI-initiated results back to `processScriptResult()`; cleanup on disconnect
+- EDIT: `server/socket/itNamespace.js` — `device_ai_changed` emit on auto-disable; `device_ai_reenabled` emit on re-enable; cleanup on unwatch/disconnect
+- EDIT: `server/routes/scripts.js` — `ai_tool` field in POST insert and PATCH allowed fields
+- EDIT: `server/routes/devices.js` — `PATCH /:id/client` endpoint for moving device between clients
+- EDIT: `server/routes/admin.js` — `_dbSizeBytes` in settings response via SQLite PRAGMA; MFA backup code routes; self-service routes; user preferences routes
+- EDIT: `server/public/dashboard/index.html` — Scripts admin page; AI tool toggle in script form; AI control button CSS; toast container; move-to-client button; admin dropdown reorder; user badge layout
+- EDIT: `server/public/dashboard/dashboard.js` — Script library CRUD; AI control button state sync; toast system; move device dialog; DB size display; OS version preference; `device_ai_reenabled` listener
+- EDIT: `client/PocketIT/WebUI/chat.js` — `createScriptPrompt()` accepts `aiInitiated` flag; AI-initiated scripts show robot emoji and "AI assistant wants to run" message
+- EDIT: `server/auth/totpAuth.js` — `getBackupCodeCount(userId)` helper added
+
 ## [0.17.0] - 2026-02-20
 
 ### Added
@@ -419,7 +453,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/example/pocket-it/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/example/pocket-it/compare/v0.13.4...v0.17.0
 [0.13.4]: https://github.com/example/pocket-it/compare/v0.12.8...v0.13.4
 [0.12.8]: https://github.com/example/pocket-it/compare/v0.11.0...v0.12.8

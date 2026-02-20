@@ -1,4 +1,10 @@
         // Dashboard JS
+        // Apply cached theme immediately to prevent flash
+        try {
+            const cachedPrefs = JSON.parse(sessionStorage.getItem('pocket_it_prefs') || '{}');
+            if (cachedPrefs.theme) document.documentElement.dataset.theme = cachedPrefs.theme;
+        } catch(e) {}
+
         const API = '';
         let socket = null;
         let currentDeviceId = null;
@@ -17,6 +23,8 @@
         let currentClients = [];
         let selectedClientId = null; // null = "All Clients"
         let currentUserRole = null;
+        let currentUser = null;
+        let userPreferences = {};
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -97,14 +105,22 @@
             }
         }
 
-        function completeLogin(data) {
+        async function completeLogin(data) {
             authToken = data.token;
             sessionStorage.setItem('pocket_it_token', authToken);
             tempToken = null;
             setupClientData(data);
             hideLogin();
             initSocket();
-            loadFleet();
+            await loadUserPreferences();
+            const hash = location.hash.slice(1);
+            if (!hash || (!hash.startsWith('device/') && !['fleet','tickets','alerts','reports','updates','deploy','wishlist','settings','account','clients','users'].includes(hash))) {
+                showPage(userPreferences.defaultPage || 'fleet');
+                history.replaceState({ page: userPreferences.defaultPage || 'fleet' }, '', '#' + (userPreferences.defaultPage || 'fleet'));
+            } else if (!restoreFromHash()) {
+                showPage(userPreferences.defaultPage || 'fleet');
+                history.replaceState({ page: userPreferences.defaultPage || 'fleet' }, '', '#' + (userPreferences.defaultPage || 'fleet'));
+            }
         }
 
         async function verify2FA() {
@@ -261,16 +277,24 @@
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.nav-dropdown-item').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'users'];
+            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'users', 'scripts'];
             if (adminPages.includes(page)) {
                 // Highlight the Admin toggle and the specific dropdown item
                 const adminToggle = document.getElementById('nav-admin-toggle');
                 if (adminToggle) adminToggle.classList.add('active');
                 const dropItem = document.querySelector(`.nav-dropdown-item[data-page="${page}"]`);
                 if (dropItem) dropItem.classList.add('active');
-            } else {
+            } else if (page !== 'account') {
                 const navLink = document.querySelector(`.nav-link[data-page="${page}"]`);
                 if (navLink) navLink.classList.add('active');
+            }
+            // Avatar highlight for account page
+            if (page === 'account') {
+                const avatar = document.getElementById('nav-user-avatar');
+                if (avatar) avatar.style.background = '#66c0f4';
+            } else {
+                const avatar = document.getElementById('nav-user-avatar');
+                if (avatar) avatar.style.background = '';
             }
             document.getElementById('page-' + page).classList.add('active');
             // Superadmin-only pages
@@ -285,15 +309,18 @@
             if (page === 'clients') loadClients();
             if (page === 'settings') loadSettings();
             if (page === 'wishlist') loadWishes();
+            if (page === 'scripts') loadScripts();
             if (page === 'users') loadUsers();
             if (page === 'deploy') loadDeployPage();
+            if (page === 'account') loadAccountPage();
         }
 
         function navigateTo(page) {
-            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'users'];
+            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'users', 'scripts'];
             if (adminPages.includes(page) && currentUserRole !== 'superadmin' && currentUserRole !== 'admin') {
                 return; // Block non-admin navigation
             }
+            // 'account' is always accessible to any logged-in user
             showPage(page);
             history.pushState({ page }, '', '#' + page);
         }
@@ -305,6 +332,14 @@
                 navigateTo(link.dataset.page);
             });
         });
+
+        const userAvatar = document.getElementById('nav-user-avatar');
+        if (userAvatar) {
+            userAvatar.addEventListener('click', (e) => {
+                e.preventDefault();
+                navigateTo('account');
+            });
+        }
 
         // Admin dropdown toggle
         const adminToggle = document.getElementById('nav-admin-toggle');
@@ -365,7 +400,7 @@
                     return true;
                 }
             }
-            const validPages = ['fleet', 'tickets', 'alerts', 'reports', 'updates', 'deploy', 'wishlist', 'settings'];
+            const validPages = ['fleet', 'tickets', 'alerts', 'reports', 'updates', 'deploy', 'wishlist', 'settings', 'account', 'clients', 'users'];
             if (validPages.includes(hash)) {
                 showPage(hash);
                 history.replaceState({ page: hash }, '', '#' + hash);
@@ -438,6 +473,13 @@
             socket.on('device_ai_changed', (data) => {
                 if (data.deviceId === currentDeviceId) {
                     updateAIControlButtons(data.ai_disabled);
+                }
+            });
+
+            socket.on('device_ai_reenabled', (data) => {
+                showToast(`AI on "${data.hostname}" is re-enabled`);
+                if (data.deviceId === currentDeviceId) {
+                    updateAIControlButtons(null);
                 }
             });
 
@@ -866,12 +908,14 @@
                             </select>
                         </td>
                         <td style="padding:8px 12px; font-size:12px;">
-                            ${u.totp_enabled ? '<span style="color:#66bb6a;">Enabled</span>' : '<span style="color:#8f98a0;">Not set up</span>'}
+                            ${u.totp_enabled
+                                ? `<span style="color:#66bb6a;">Enabled</span> <span style="color:${u.backup_code_count === 0 ? '#ef5350' : '#8f98a0'}; font-size:11px;">(${u.backup_code_count} codes)</span>`
+                                : '<span style="color:#8f98a0;">Not set up</span>'}
                         </td>
                         <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
                         <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.created_at ? new Date(u.created_at).toLocaleString() : '-'}</td>
                         <td style="padding:8px 12px;">
-                            ${u.totp_enabled ? `<button class="diag-btn" data-action="user-reset-2fa" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; margin-right:4px;">Reset 2FA</button>` : ''}
+                            ${u.totp_enabled ? `<button class="diag-btn" data-action="user-regen-codes" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; margin-right:4px;">Regen Codes</button><button class="diag-btn" data-action="user-reset-2fa" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; margin-right:4px;">Reset 2FA</button>` : ''}
                             <button class="diag-btn" data-action="user-reset-pw" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; margin-right:4px;">Reset PW</button>
                             <button class="diag-btn" data-action="user-delete" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; background:#ef5350; border-color:#ef5350;">Delete</button>
                         </td>
@@ -1003,6 +1047,279 @@
             }
         }
 
+        // ========== MY ACCOUNT ==========
+
+        async function loadAccountPage() {
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/user/profile`);
+                const profile = await res.json();
+
+                document.getElementById('account-username').textContent = profile.username;
+                document.getElementById('account-display-name').value = profile.display_name || '';
+                document.getElementById('account-role').textContent = profile.role;
+                document.getElementById('account-last-login').textContent = profile.last_login
+                    ? new Date(profile.last_login).toLocaleString() : 'Never';
+
+                // 2FA status
+                const statusEl = document.getElementById('account-2fa-status');
+                if (profile.totp_enabled) {
+                    statusEl.innerHTML = '<span style="color:var(--success);">Enabled</span>';
+                } else {
+                    statusEl.innerHTML = '<span style="color:var(--warning);">Not set up</span>';
+                }
+
+                // Backup codes
+                const countEl = document.getElementById('account-backup-count');
+                if (profile.totp_enabled) {
+                    const count = profile.backup_code_count || 0;
+                    countEl.innerHTML = `<span style="color:${count === 0 ? 'var(--error)' : 'var(--text-main)'};">${count} of 10 remaining</span>`;
+                } else {
+                    countEl.textContent = 'N/A — 2FA not enabled';
+                }
+
+                // Load preferences into form
+                const prefsRes = await fetchWithAuth(`${API}/api/admin/user/preferences`);
+                if (prefsRes.ok) {
+                    const prefs = await prefsRes.json();
+                    if (prefs.theme) document.getElementById('pref-theme').value = prefs.theme;
+                    if (prefs.defaultPage) document.getElementById('pref-default-page').value = prefs.defaultPage;
+                    if (prefs.itemsPerPage) document.getElementById('pref-items-per-page').value = prefs.itemsPerPage;
+                    if (prefs.dateFormat) document.getElementById('pref-date-format').value = prefs.dateFormat;
+                }
+            } catch (err) {
+                console.error('Failed to load account page:', err);
+            }
+        }
+
+        async function saveProfile() {
+            const displayName = document.getElementById('account-display-name').value.trim();
+            const msgEl = document.getElementById('account-profile-msg');
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/user/profile`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ display_name: displayName })
+                });
+                if (res.ok) {
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'color-mix(in srgb, var(--success) 20%, transparent)';
+                    msgEl.style.color = 'var(--success)';
+                    msgEl.textContent = 'Profile updated';
+                    setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+                    // Update avatar
+                    if (currentUser) {
+                        currentUser.display_name = displayName;
+                        const avatarEl = document.getElementById('nav-user-avatar');
+                        if (avatarEl) {
+                            const name = displayName || currentUser.username || '';
+                            const parts = name.trim().split(/\s+/);
+                            const initials = parts.length >= 2
+                                ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+                                : name.substring(0, 2).toUpperCase();
+                            avatarEl.textContent = initials;
+                            avatarEl.title = name;
+                        }
+                    }
+                } else {
+                    const data = await res.json();
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                    msgEl.style.color = 'var(--error)';
+                    msgEl.textContent = data.error || 'Failed to update profile';
+                }
+            } catch (err) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                msgEl.style.color = 'var(--error)';
+                msgEl.textContent = 'Network error: ' + err.message;
+            }
+        }
+
+        async function changePassword() {
+            const currentPw = document.getElementById('account-current-pw').value;
+            const newPw = document.getElementById('account-new-pw').value;
+            const confirmPw = document.getElementById('account-confirm-pw').value;
+            const msgEl = document.getElementById('account-pw-msg');
+
+            if (!currentPw || !newPw) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                msgEl.style.color = 'var(--error)';
+                msgEl.textContent = 'All fields are required';
+                return;
+            }
+            if (newPw !== confirmPw) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                msgEl.style.color = 'var(--error)';
+                msgEl.textContent = 'New passwords do not match';
+                return;
+            }
+            if (newPw.length < 6) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                msgEl.style.color = 'var(--error)';
+                msgEl.textContent = 'Password must be at least 6 characters';
+                return;
+            }
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/user/password`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw })
+                });
+                if (res.ok) {
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'color-mix(in srgb, var(--success) 20%, transparent)';
+                    msgEl.style.color = 'var(--success)';
+                    msgEl.textContent = 'Password changed successfully';
+                    document.getElementById('account-current-pw').value = '';
+                    document.getElementById('account-new-pw').value = '';
+                    document.getElementById('account-confirm-pw').value = '';
+                    setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+                } else {
+                    const data = await res.json();
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                    msgEl.style.color = 'var(--error)';
+                    msgEl.textContent = data.error || 'Failed to change password';
+                }
+            } catch (err) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                msgEl.style.color = 'var(--error)';
+                msgEl.textContent = 'Network error: ' + err.message;
+            }
+        }
+
+        async function regenOwnBackupCodes() {
+            const password = prompt('Enter your password to regenerate backup codes:');
+            if (!password) return;
+            const msgEl = document.getElementById('account-2fa-msg');
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/user/2fa/backup-codes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    // Show backup codes
+                    const display = document.getElementById('account-backup-display');
+                    const grid = document.getElementById('account-backup-codes');
+                    grid.innerHTML = data.codes.map(c => `<div style="background:var(--bg-panel); padding:4px 8px; border-radius:4px;">${c}</div>`).join('');
+                    display.style.display = 'block';
+                    // Update count
+                    document.getElementById('account-backup-count').innerHTML = '<span style="color:var(--text-main);">10 of 10 remaining</span>';
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'color-mix(in srgb, var(--success) 20%, transparent)';
+                    msgEl.style.color = 'var(--success)';
+                    msgEl.textContent = 'Backup codes regenerated';
+                    setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+                } else {
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                    msgEl.style.color = 'var(--error)';
+                    msgEl.textContent = data.error || 'Failed to regenerate codes';
+                    setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+                }
+            } catch (err) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                msgEl.style.color = 'var(--error)';
+                msgEl.textContent = 'Network error: ' + err.message;
+            }
+        }
+
+        async function resetOwnMFA() {
+            if (!confirm('Reset your 2FA? You will be logged out and must set up 2FA again on next login.')) return;
+            const password = prompt('Enter your password to confirm:');
+            if (!password) return;
+            const msgEl = document.getElementById('account-2fa-msg');
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/user/2fa/reset`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                if (res.ok) {
+                    alert('2FA has been reset. You will now be logged out.');
+                    sessionStorage.removeItem('pocket_it_token');
+                    authToken = '';
+                    location.reload();
+                } else {
+                    const data = await res.json();
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                    msgEl.style.color = 'var(--error)';
+                    msgEl.textContent = data.error || 'Failed to reset 2FA';
+                    setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+                }
+            } catch (err) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                msgEl.style.color = 'var(--error)';
+                msgEl.textContent = 'Network error: ' + err.message;
+            }
+        }
+
+        async function savePreferences() {
+            const prefs = {
+                theme: document.getElementById('pref-theme').value,
+                defaultPage: document.getElementById('pref-default-page').value,
+                itemsPerPage: document.getElementById('pref-items-per-page').value,
+                dateFormat: document.getElementById('pref-date-format').value
+            };
+            const msgEl = document.getElementById('account-pref-msg');
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/user/preferences`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(prefs)
+                });
+                if (res.ok) {
+                    userPreferences = prefs;
+                    sessionStorage.setItem('pocket_it_prefs', JSON.stringify(prefs));
+                    applyPreferences();
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'color-mix(in srgb, var(--success) 20%, transparent)';
+                    msgEl.style.color = 'var(--success)';
+                    msgEl.textContent = 'Preferences saved';
+                    setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+                } else {
+                    const data = await res.json();
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                    msgEl.style.color = 'var(--error)';
+                    msgEl.textContent = data.error || 'Failed to save preferences';
+                }
+            } catch (err) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'color-mix(in srgb, var(--error) 20%, transparent)';
+                msgEl.style.color = 'var(--error)';
+                msgEl.textContent = 'Network error: ' + err.message;
+            }
+        }
+
+        async function regenBackupCodes(userId, username) {
+            if (!confirm(`Regenerate backup codes for "${username}"? Their old codes will be invalidated.`)) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/users/${userId}/backup-codes`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(`New backup codes for "${username}":\n\n${data.codes.join('\n')}\n\nMake sure to share these securely.`);
+                    loadUsers();
+                } else {
+                    alert(data.error || 'Failed to regenerate backup codes');
+                }
+            } catch (err) {
+                alert('Network error: ' + err.message);
+            }
+        }
+
         // ---- Fleet ----
         function renderDeviceCard(d) {
             const hs = d.health_score;
@@ -1109,8 +1426,80 @@
                 btn.classList.remove('ai-mode-active');
             });
             const activeMode = aiDisabled || 'enabled';
-            const activeBtn = document.querySelector(`#device-ai-controls .diag-btn[data-ai-mode="${activeMode}"]`);
-            if (activeBtn) activeBtn.classList.add('ai-mode-active');
+            if (activeMode === 'it_active') {
+                // IT is actively chatting — highlight "Disable Temporarily" as active
+                const tempBtn = document.querySelector('#device-ai-controls .diag-btn[data-ai-mode="temporary"]');
+                if (tempBtn) tempBtn.classList.add('ai-mode-active');
+            } else {
+                const activeBtn = document.querySelector(`#device-ai-controls .diag-btn[data-ai-mode="${activeMode}"]`);
+                if (activeBtn) activeBtn.classList.add('ai-mode-active');
+            }
+        }
+
+        function showToast(message, duration = 4000) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            toast.className = 'toast-message';
+            toast.textContent = message;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        async function showMoveDeviceDialog(deviceId) {
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients`);
+                const clients = await res.json();
+
+                const dialog = document.createElement('div');
+                dialog.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+                const box = document.createElement('div');
+                box.style.cssText = 'background:#1b2838;border:1px solid #2a475e;border-radius:8px;padding:24px;min-width:300px;max-width:400px;';
+                box.innerHTML = `
+                    <h3 style="margin:0 0 16px;color:#c7d5e0;">Move Device to Client</h3>
+                    <select id="move-client-select" style="width:100%;padding:8px;background:#0f1923;color:#c7d5e0;border:1px solid #2a475e;border-radius:4px;margin-bottom:16px;">
+                        <option value="">Unassigned</option>
+                        ${clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+                    </select>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                        <button class="diag-btn" id="move-cancel">Cancel</button>
+                        <button class="diag-btn" id="move-confirm" style="background:#1a3a5c;color:#66c0f4;border-color:#66c0f4;">Move</button>
+                    </div>
+                `;
+                dialog.appendChild(box);
+                document.body.appendChild(dialog);
+
+                dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.remove(); });
+                box.querySelector('#move-cancel').addEventListener('click', () => dialog.remove());
+                box.querySelector('#move-confirm').addEventListener('click', async () => {
+                    const select = box.querySelector('#move-client-select');
+                    const clientId = select.value === '' ? null : parseInt(select.value);
+                    try {
+                        const res = await fetchWithAuth(`${API}/api/devices/${deviceId}/client`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ client_id: clientId })
+                        });
+                        if (!res.ok) {
+                            const data = await res.json();
+                            showToast(data.error || 'Failed to move device');
+                            return;
+                        }
+                        showToast('Device moved successfully');
+                        dialog.remove();
+                        // Refresh device page
+                        openDevice(deviceId);
+                    } catch (err) {
+                        showToast('Failed to move device');
+                    }
+                });
+            } catch (err) {
+                showToast('Failed to load clients');
+            }
         }
 
         let ticketDevicesCache = [];
@@ -1331,7 +1720,7 @@
 
                 // Render info as stat cards
                 const infoHtml = [];
-                if (d.os_version) infoHtml.push(`<div class="stat-card" data-page="reports"><div class="value" style="font-size:16px;">${escapeHtml(d.os_version)}</div><div class="label">OS</div></div>`);
+                if (d.os_name || d.os_version) infoHtml.push(`<div class="stat-card" data-page="reports"><div class="value" style="font-size:16px;">${escapeHtml(d.os_name || d.os_version)}</div><div class="label">OS</div></div>`);
                 if (d.cpu_model) infoHtml.push(`<div class="stat-card" data-page="reports"><div class="value" style="font-size:16px;">${escapeHtml(d.cpu_model)}${d.processor_count ? ' (' + d.processor_count + ' cores)' : ''}</div><div class="label">CPU</div></div>`);
                 if (d.total_ram_gb) infoHtml.push(`<div class="stat-card" data-page="reports"><div class="value">${d.total_ram_gb} GB</div><div class="label">RAM</div></div>`);
                 if (d.total_disk_gb) infoHtml.push(`<div class="stat-card" data-page="reports"><div class="value">${d.total_disk_gb} GB</div><div class="label">Disk</div></div>`);
@@ -2545,7 +2934,11 @@
                         hideLogin();
                         initSocket();
                         setupDesktopInput();
-                        if (!restoreFromHash()) loadFleet();
+                        await loadUserPreferences();
+                        if (!restoreFromHash()) {
+                            showPage(userPreferences.defaultPage || 'fleet');
+                            history.replaceState({ page: userPreferences.defaultPage || 'fleet' }, '', '#' + (userPreferences.defaultPage || 'fleet'));
+                        }
                         return;
                     }
                 }
@@ -2555,7 +2948,11 @@
                     hideLogin();
                     initSocket();
                     setupDesktopInput();
-                    if (!restoreFromHash()) loadFleet();
+                    await loadUserPreferences();
+                    if (!restoreFromHash()) {
+                        showPage(userPreferences.defaultPage || 'fleet');
+                        history.replaceState({ page: userPreferences.defaultPage || 'fleet' }, '', '#' + (userPreferences.defaultPage || 'fleet'));
+                    }
                 } else {
                     showLogin();
                 }
@@ -3115,6 +3512,19 @@
         function setupClientData(data) {
             currentClients = data.clients || [];
             currentUserRole = data.user?.role || null;
+            currentUser = data.user || null;
+            // Update user avatar
+            const avatarEl = document.getElementById('nav-user-avatar');
+            if (avatarEl && currentUser) {
+                const name = currentUser.display_name || currentUser.username || '';
+                const parts = name.trim().split(/\s+/);
+                const initials = parts.length >= 2
+                    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+                    : name.substring(0, 2).toUpperCase();
+                avatarEl.textContent = initials;
+                avatarEl.title = name;
+                avatarEl.style.display = '';
+            }
 
             // Populate client selector in nav
             const sel = document.getElementById('client-selector');
@@ -3161,6 +3571,28 @@
             } else {
                 btn.style.display = 'none';
             }
+        }
+
+        async function loadUserPreferences() {
+            try {
+                const res = await fetchWithAuth(`${API}/api/admin/user/preferences`);
+                if (res.ok) {
+                    userPreferences = await res.json();
+                    sessionStorage.setItem('pocket_it_prefs', JSON.stringify(userPreferences));
+                }
+            } catch (e) {
+                // Fall back to cached
+                try { userPreferences = JSON.parse(sessionStorage.getItem('pocket_it_prefs') || '{}'); } catch(e2) {}
+            }
+            applyPreferences();
+        }
+
+        function applyPreferences() {
+            // Theme
+            document.documentElement.dataset.theme = userPreferences.theme || 'dark';
+            // Items per page & date format stored as globals for table rendering
+            window.pocketItemsPerPage = parseInt(userPreferences.itemsPerPage) || 25;
+            window.pocketDateFormat = userPreferences.dateFormat || 'MM/DD/YYYY';
         }
 
         function onClientChange() {
@@ -3977,6 +4409,12 @@
         function updateSystemInfo(settings) {
             document.getElementById('sys-info-port').textContent = location.port || '9100';
             document.getElementById('sys-info-provider').textContent = settings['llm.provider'] || 'ollama';
+            // Database size
+            if (settings['_dbSizeBytes']) {
+                const bytes = settings['_dbSizeBytes'];
+                const mb = (bytes / (1024 * 1024)).toFixed(1);
+                document.getElementById('sys-info-db-size').textContent = mb >= 1 ? `${mb} MB` : `${(bytes / 1024).toFixed(0)} KB`;
+            }
             // Fetch online device count from stats
             fetchWithAuth(`${API}/api/admin/stats`)
                 .then(r => r.json())
@@ -4438,6 +4876,124 @@
             socket.emit('clear_it_guidance_context', { deviceId: currentDeviceId });
         }
 
+        // ---- Script Library ----
+        async function loadScripts() {
+            const category = document.getElementById('script-filter-category')?.value || '';
+            const url = category ? `${API}/api/scripts?category=${category}` : `${API}/api/scripts`;
+            try {
+                const res = await fetchWithAuth(url);
+                const scripts = await res.json();
+                const tbody = document.getElementById('scripts-table-body');
+                document.getElementById('script-count').textContent = `${scripts.length} script${scripts.length !== 1 ? 's' : ''}`;
+                if (scripts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#8f98a0;">No scripts found. Create one above.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = scripts.map(s => `
+                    <tr style="border-bottom:1px solid #1a2a3a;">
+                        <td style="padding:8px 12px; color:#c7d5e0; font-weight:600;">${escapeHtml(s.name)}</td>
+                        <td style="padding:8px 12px;"><span style="background:#1a3a5c; color:#66c0f4; padding:2px 8px; border-radius:10px; font-size:11px;">${escapeHtml(s.category || 'general')}</span></td>
+                        <td style="padding:8px 12px; color:#8f98a0; font-size:12px; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.description || '—')}</td>
+                        <td style="padding:8px 12px; text-align:center;">${s.requires_elevation ? '<span style="color:#ffa726;" title="Runs as Administrator">&#x1F6E1;</span>' : '—'}</td>
+                        <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${s.timeout_seconds}s</td>
+                        <td style="padding:8px 12px;">${s.ai_tool ? '<span style="color:#66c0f4; font-size:12px;">Active</span>' : '<span style="color:#8f98a0; font-size:12px;">—</span>'}</td>
+                        <td style="padding:8px 12px;">
+                            <button class="diag-btn" data-action="script-edit" data-id="${s.id}" style="font-size:11px; padding:3px 10px;">Edit</button>
+                            <button class="diag-btn" data-action="script-delete" data-id="${s.id}" style="font-size:11px; padding:3px 10px; color:#ef5350;">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load scripts:', err);
+            }
+        }
+
+        function resetScriptForm() {
+            document.getElementById('script-edit-id').value = '';
+            document.getElementById('script-name').value = '';
+            document.getElementById('script-description').value = '';
+            document.getElementById('script-content').value = '';
+            document.getElementById('script-category').value = 'general';
+            document.getElementById('script-elevation').checked = false;
+            document.getElementById('script-timeout').value = '60';
+            document.getElementById('script-ai-tool').checked = false;
+            document.getElementById('script-form-title').textContent = 'New Script';
+            document.getElementById('btn-cancel-script').style.display = 'none';
+            document.getElementById('btn-save-script').textContent = 'Save Script';
+        }
+
+        async function editScript(id) {
+            try {
+                const res = await fetchWithAuth(`${API}/api/scripts/${id}`);
+                const s = await res.json();
+                document.getElementById('script-edit-id').value = s.id;
+                document.getElementById('script-name').value = s.name;
+                document.getElementById('script-description').value = s.description || '';
+                document.getElementById('script-content').value = s.script_content;
+                document.getElementById('script-category').value = s.category || 'general';
+                document.getElementById('script-elevation').checked = !!s.requires_elevation;
+                document.getElementById('script-timeout').value = s.timeout_seconds || 60;
+                document.getElementById('script-ai-tool').checked = !!s.ai_tool;
+                document.getElementById('script-form-title').textContent = 'Edit Script';
+                document.getElementById('btn-cancel-script').style.display = '';
+                document.getElementById('btn-save-script').textContent = 'Update Script';
+                document.getElementById('script-form').scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                showToast('Failed to load script');
+            }
+        }
+
+        async function saveScript() {
+            const editId = document.getElementById('script-edit-id').value;
+            const name = document.getElementById('script-name').value.trim();
+            const content = document.getElementById('script-content').value.trim();
+            if (!name || !content) {
+                showToast('Name and script content are required');
+                return;
+            }
+            const payload = {
+                name,
+                description: document.getElementById('script-description').value.trim(),
+                script_content: content,
+                category: document.getElementById('script-category').value,
+                requires_elevation: document.getElementById('script-elevation').checked ? 1 : 0,
+                timeout_seconds: parseInt(document.getElementById('script-timeout').value) || 60,
+                ai_tool: document.getElementById('script-ai-tool').checked ? 1 : 0
+            };
+            try {
+                const res = await fetchWithAuth(`${API}/api/scripts${editId ? '/' + editId : ''}`, {
+                    method: editId ? 'PATCH' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const data = await res.json();
+                    showToast(data.error || 'Failed to save script');
+                    return;
+                }
+                showToast(editId ? 'Script updated' : 'Script created');
+                resetScriptForm();
+                loadScripts();
+            } catch (err) {
+                showToast('Failed to save script');
+            }
+        }
+
+        async function deleteScript(id) {
+            if (!confirm('Delete this script? This cannot be undone.')) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/scripts/${id}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    showToast('Failed to delete script');
+                    return;
+                }
+                showToast('Script deleted');
+                loadScripts();
+            } catch (err) {
+                showToast('Failed to delete script');
+            }
+        }
+
         // ---- Event handler bindings (migrated from inline HTML) ----
         document.addEventListener('DOMContentLoaded', () => {
             // Login
@@ -4626,6 +5182,19 @@
             document.getElementById('wish-filter-category').addEventListener('change', loadWishes);
             document.getElementById('btn-refresh-wishes').addEventListener('click', loadWishes);
 
+            // Script Library
+            document.getElementById('btn-save-script')?.addEventListener('click', saveScript);
+            document.getElementById('btn-cancel-script')?.addEventListener('click', resetScriptForm);
+            document.getElementById('btn-refresh-scripts')?.addEventListener('click', loadScripts);
+            document.getElementById('script-filter-category')?.addEventListener('change', loadScripts);
+            document.getElementById('scripts-table-body')?.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-action]');
+                if (!btn) return;
+                const id = parseInt(btn.dataset.id, 10);
+                if (btn.dataset.action === 'script-edit') editScript(id);
+                else if (btn.dataset.action === 'script-delete') deleteScript(id);
+            });
+
             // Settings
             document.getElementById('test-llm-btn-inline').addEventListener('click', testLLMConnection);
             document.getElementById('btn-check-update').addEventListener('click', checkServerUpdate);
@@ -4635,6 +5204,25 @@
 
             // Users
             document.getElementById('btn-create-user').addEventListener('click', createUser);
+
+            // Account page
+            document.getElementById('btn-save-profile')?.addEventListener('click', saveProfile);
+            document.getElementById('btn-change-password')?.addEventListener('click', changePassword);
+            document.getElementById('btn-regen-backup')?.addEventListener('click', regenOwnBackupCodes);
+            document.getElementById('btn-reset-own-2fa')?.addEventListener('click', resetOwnMFA);
+            document.getElementById('btn-save-prefs')?.addEventListener('click', savePreferences);
+            document.getElementById('btn-copy-account-backup')?.addEventListener('click', () => {
+                const codes = document.getElementById('account-backup-codes').textContent;
+                navigator.clipboard.writeText(codes).then(() => {
+                    document.getElementById('btn-copy-account-backup').textContent = 'Copied!';
+                    setTimeout(() => { document.getElementById('btn-copy-account-backup').textContent = 'Copy All'; }, 2000);
+                });
+            });
+
+            // Theme live preview
+            document.getElementById('pref-theme')?.addEventListener('change', (e) => {
+                document.documentElement.dataset.theme = e.target.value;
+            });
         });
 
         // ---- Event delegation for dynamically generated content ----
@@ -4660,6 +5248,7 @@
             if (btn.dataset.action === 'user-reset-pw') resetUserPassword(id, btn.dataset.username);
             else if (btn.dataset.action === 'user-delete') deleteUser(id, btn.dataset.username);
             else if (btn.dataset.action === 'user-reset-2fa') reset2FA(id, btn.dataset.username);
+            else if (btn.dataset.action === 'user-regen-codes') regenBackupCodes(id, btn.dataset.username);
         });
 
         // Device grid — open device
@@ -4674,6 +5263,12 @@
             if (!btn || !currentDeviceId || !socket) return;
             const mode = btn.dataset.aiMode;
             socket.emit('set_device_ai', { deviceId: currentDeviceId, mode });
+        });
+
+        // Move device to client
+        document.getElementById('btn-move-device')?.addEventListener('click', () => {
+            if (!currentDeviceId) return;
+            showMoveDeviceDialog(currentDeviceId);
         });
 
         // Device detail info — stat card navigation

@@ -3,7 +3,7 @@ const { requireAdmin, requireIT, isLocalhost } = require('../auth/middleware');
 const { generateToken, hashPassword, comparePassword } = require('../auth/userAuth');
 const { resolveClientScope } = require('../auth/clientScope');
 const { encrypt, decrypt } = require('../config/encryption');
-const { generateTOTPSecret, verifyTOTP, generateTempToken, verifyTempToken, generateBackupCodes, hashBackupCodes, verifyBackupCode } = require('../auth/totpAuth');
+const { generateTOTPSecret, verifyTOTP, generateTempToken, verifyTempToken, generateBackupCodes, hashBackupCodes, verifyBackupCode, getBackupCodeCount } = require('../auth/totpAuth');
 
 const router = express.Router();
 
@@ -283,8 +283,12 @@ router.post('/2fa/disable', requireAdmin, (req, res) => {
 
 router.get('/users', requireAdmin, (req, res) => {
   const db = req.app.locals.db;
-  const users = db.prepare('SELECT id, username, display_name, role, totp_enabled, created_at, last_login FROM it_users').all();
-  res.json(users);
+  const users = db.prepare('SELECT id, username, display_name, role, totp_enabled, backup_codes, created_at, last_login FROM it_users').all();
+  const result = users.map(({ backup_codes, ...user }) => ({
+    ...user,
+    backup_code_count: getBackupCodeCount(backup_codes)
+  }));
+  res.json(result);
 });
 
 router.post('/users', requireAdmin, async (req, res) => {
@@ -462,6 +466,15 @@ router.get('/settings', requireAdmin, (req, res) => {
     }
   }
 
+  // Include DB size
+  try {
+    const { page_count } = db.pragma('page_count', { simple: true }) ? { page_count: db.pragma('page_count', { simple: true }) } : { page_count: 0 };
+    const { page_size } = db.pragma('page_size', { simple: true }) ? { page_size: db.pragma('page_size', { simple: true }) } : { page_size: 4096 };
+    masked['_dbSizeBytes'] = page_count * page_size;
+  } catch (e) {
+    masked['_dbSizeBytes'] = 0;
+  }
+
   res.json(masked);
 });
 
@@ -584,6 +597,159 @@ router.post('/settings/test-llm', requireAdmin, async (req, res) => {
       error: 'LLM service error — check server logs for details'
     });
   }
+});
+
+// Regenerate backup codes for a user (admin)
+router.post('/users/:id/backup-codes', requireAdmin, (req, res) => {
+  const db = req.app.locals.db;
+  const { id } = req.params;
+
+  const target = db.prepare('SELECT id, username, totp_enabled FROM it_users WHERE id = ?').get(id);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (!target.totp_enabled) return res.status(400).json({ error: 'User does not have 2FA enabled' });
+
+  const codes = generateBackupCodes();
+  const encryptedCodes = hashBackupCodes(codes);
+  db.prepare('UPDATE it_users SET backup_codes = ? WHERE id = ?').run(encryptedCodes, id);
+
+  try {
+    db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+      req.user.username, 'backup_codes_regenerated', target.username, JSON.stringify({ targetUserId: id, by: 'admin' })
+    );
+  } catch (e) { console.error('[Audit] Log write failed:', e.message); }
+
+  res.json({ success: true, codes });
+});
+
+// --- Self-service routes ---
+
+router.get('/user/profile', requireIT, (req, res) => {
+  const db = req.app.locals.db;
+  const user = db.prepare('SELECT id, username, display_name, role, totp_enabled, backup_codes, last_login, created_at FROM it_users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const { backup_codes, ...profile } = user;
+  res.json({ ...profile, backup_code_count: getBackupCodeCount(backup_codes) });
+});
+
+router.put('/user/profile', requireIT, (req, res) => {
+  const db = req.app.locals.db;
+  const { display_name } = req.body;
+
+  db.prepare('UPDATE it_users SET display_name = ? WHERE id = ?').run(display_name, req.user.id);
+
+  const user = db.prepare('SELECT id, username, display_name, role, totp_enabled, backup_codes, last_login, created_at FROM it_users WHERE id = ?').get(req.user.id);
+  const { backup_codes, ...profile } = user;
+  res.json({ ...profile, backup_code_count: getBackupCodeCount(backup_codes) });
+});
+
+router.put('/user/password', requireIT, async (req, res) => {
+  const db = req.app.locals.db;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'currentPassword and newPassword required' });
+  }
+
+  const user = db.prepare('SELECT id, username, password_hash FROM it_users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const valid = await comparePassword(currentPassword, user.password_hash);
+  if (!valid) return res.status(403).json({ error: 'Current password is incorrect' });
+
+  const newHash = await hashPassword(newPassword);
+  db.prepare('UPDATE it_users SET password_hash = ? WHERE id = ?').run(newHash, req.user.id);
+
+  try {
+    db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+      req.user.username, 'password_changed', req.user.username, JSON.stringify({ ip: req.socket?.remoteAddress })
+    );
+  } catch (e) { console.error('[Audit] Log write failed:', e.message); }
+
+  res.json({ success: true });
+});
+
+router.post('/user/2fa/backup-codes', requireIT, async (req, res) => {
+  const db = req.app.locals.db;
+  const { password } = req.body;
+
+  if (!password) return res.status(400).json({ error: 'Password required' });
+
+  const user = db.prepare('SELECT id, username, password_hash FROM it_users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const valid = await comparePassword(password, user.password_hash);
+  if (!valid) return res.status(403).json({ error: 'Current password is incorrect' });
+
+  const codes = generateBackupCodes();
+  const encryptedCodes = hashBackupCodes(codes);
+  db.prepare('UPDATE it_users SET backup_codes = ? WHERE id = ?').run(encryptedCodes, req.user.id);
+
+  try {
+    db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+      req.user.username, 'backup_codes_regenerated', req.user.username, JSON.stringify({ by: 'self' })
+    );
+  } catch (e) { console.error('[Audit] Log write failed:', e.message); }
+
+  res.json({ success: true, codes });
+});
+
+router.post('/user/2fa/reset', requireIT, async (req, res) => {
+  const db = req.app.locals.db;
+  const { password } = req.body;
+
+  if (!password) return res.status(400).json({ error: 'Password required' });
+
+  const user = db.prepare('SELECT id, username, password_hash FROM it_users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const valid = await comparePassword(password, user.password_hash);
+  if (!valid) return res.status(403).json({ error: 'Current password is incorrect' });
+
+  db.prepare('UPDATE it_users SET totp_enabled = 0, totp_secret = NULL, backup_codes = NULL WHERE id = ?').run(req.user.id);
+
+  try {
+    db.prepare('INSERT INTO audit_log (actor, action, target, details) VALUES (?, ?, ?, ?)').run(
+      req.user.username, '2fa_self_reset', req.user.username, JSON.stringify({ ip: req.socket?.remoteAddress })
+    );
+  } catch (e) { console.error('[Audit] Log write failed:', e.message); }
+
+  res.json({ success: true });
+});
+
+router.get('/user/preferences', requireIT, (req, res) => {
+  const db = req.app.locals.db;
+  const rows = db.prepare('SELECT key, value FROM user_preferences WHERE user_id = ?').all(req.user.id);
+  const prefs = {};
+  for (const row of rows) {
+    prefs[row.key] = row.value;
+  }
+  res.json(prefs);
+});
+
+router.put('/user/preferences', requireIT, (req, res) => {
+  const db = req.app.locals.db;
+  const updates = req.body;
+
+  if (!updates || typeof updates !== 'object') {
+    return res.status(400).json({ error: 'Preferences object required' });
+  }
+
+  const allowedKeys = ['theme', 'defaultPage', 'itemsPerPage', 'dateFormat'];
+  const upsert = db.prepare(
+    "INSERT OR REPLACE INTO user_preferences (user_id, key, value, updated_at) VALUES (?, ?, ?, datetime('now'))"
+  );
+
+  const updateMany = db.transaction((entries) => {
+    for (const [key, value] of entries) {
+      if (!allowedKeys.includes(key)) continue;
+      upsert.run(req.user.id, key, value);
+    }
+  });
+
+  updateMany(Object.entries(updates));
+
+  res.json({ success: true });
 });
 
 module.exports = router;

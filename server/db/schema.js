@@ -464,6 +464,25 @@ function initDatabase(dbPath) {
     );
   `);
 
+  // v0.18.0: User preferences (key-value store per user)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_preferences (
+      user_id INTEGER NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT,
+      updated_at TEXT,
+      PRIMARY KEY (user_id, key),
+      FOREIGN KEY (user_id) REFERENCES it_users(id) ON DELETE CASCADE
+    );
+  `);
+
+  // v0.18.0: AI Tool flag for script library
+  try {
+    db.prepare('ALTER TABLE script_library ADD COLUMN ai_tool INTEGER DEFAULT 0').run();
+  } catch (err) {
+    // Column already exists
+  }
+
   // v0.13.0: Feature wishlist — AI logs capability gaps
   db.exec(`
     CREATE TABLE IF NOT EXISTS feature_wishes (

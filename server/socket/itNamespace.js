@@ -229,6 +229,14 @@ function setup(io, app) {
             }
           }
         }
+        const hostname = db.prepare('SELECT hostname FROM devices WHERE device_id = ?').get(data.deviceId)?.hostname || data.deviceId;
+        emitToScoped(itNs, db, data.deviceId, 'device_ai_reenabled', { deviceId: data.deviceId, hostname });
+        const device = db.prepare('SELECT ai_disabled FROM devices WHERE device_id = ?').get(data.deviceId);
+        emitToScoped(itNs, db, data.deviceId, 'device_ai_changed', {
+          deviceId: data.deviceId,
+          ai_disabled: device?.ai_disabled || null,
+          ai_disabled_by: null
+        });
       }
     });
 
@@ -340,10 +348,27 @@ function setup(io, app) {
               }
             }
           }
+          // Notify IT watchers
+          const hostname = db.prepare('SELECT hostname FROM devices WHERE device_id = ?').get(deviceId)?.hostname || deviceId;
+          emitToScoped(itNs, db, deviceId, 'device_ai_reenabled', { deviceId, hostname });
+          // Also update button state
+          const device = db.prepare('SELECT ai_disabled FROM devices WHERE device_id = ?').get(deviceId);
+          emitToScoped(itNs, db, deviceId, 'device_ai_changed', {
+            deviceId,
+            ai_disabled: device?.ai_disabled || null,
+            ai_disabled_by: null
+          });
         }
       }, 5 * 60 * 1000); // 5 minutes
 
       app.locals.itActiveChatDevices.set(deviceId, { socketId: socket.id, timer });
+
+      // Notify IT watchers of AI auto-disable
+      emitToScoped(itNs, db, deviceId, 'device_ai_changed', {
+        deviceId,
+        ai_disabled: 'it_active',
+        ai_disabled_by: decoded?.username || 'admin'
+      });
 
       // Notify device that AI is paused
       const connectedDevices2 = app.locals.connectedDevices;
@@ -1619,10 +1644,17 @@ function setup(io, app) {
             const deviceSocket = connectedDevices.get(deviceId);
             if (deviceSocket) {
               const db = app.locals.db;
-              const device = db.prepare('SELECT ai_disabled FROM devices WHERE device_id = ?').get(deviceId);
+              const device = db.prepare('SELECT ai_disabled, hostname FROM devices WHERE device_id = ?').get(deviceId);
               if (!device || !device.ai_disabled) {
                 deviceSocket.emit('ai_status', { enabled: true, reason: null });
               }
+              const hostname = device?.hostname || deviceId;
+              emitToScoped(itNs, db, deviceId, 'device_ai_reenabled', { deviceId, hostname });
+              emitToScoped(itNs, db, deviceId, 'device_ai_changed', {
+                deviceId,
+                ai_disabled: device?.ai_disabled || null,
+                ai_disabled_by: null
+              });
             }
           }
         }

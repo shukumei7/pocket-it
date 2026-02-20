@@ -128,6 +128,35 @@ router.get('/:id/activity', requireIT, resolveClientScope, (req, res) => {
   res.json({ activities, total, page, limit });
 });
 
+router.patch('/:id/client', requireAdmin, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const deviceId = req.params.id;
+  const { client_id } = req.body;
+
+  if (client_id !== null && client_id !== undefined) {
+    const clientId = parseInt(client_id);
+    if (isNaN(clientId)) return res.status(400).json({ error: 'Invalid client_id' });
+    const client = db.prepare('SELECT id, name FROM clients WHERE id = ?').get(clientId);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+  }
+
+  const device = db.prepare('SELECT device_id, hostname FROM devices WHERE device_id = ?').get(deviceId);
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+
+  db.prepare('UPDATE devices SET client_id = ? WHERE device_id = ?').run(client_id === null ? null : parseInt(client_id), deviceId);
+
+  // Audit log
+  db.prepare(
+    "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+  ).run(req.user?.username || 'admin', 'device_moved', deviceId, JSON.stringify({ client_id }));
+
+  // Invalidate scoped emit cache
+  const { invalidateDeviceCache } = require('../socket/scopedEmit');
+  invalidateDeviceCache(deviceId);
+
+  res.json({ success: true });
+});
+
 router.delete('/:id', requireAdmin, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   const deviceId = req.params.id;

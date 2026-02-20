@@ -58,8 +58,11 @@ class DiagnosticAI {
       ctx.messages = ctx.messages.slice(-this.maxContextMessages);
     }
 
+    // Fetch AI-enabled scripts for system prompt
+    const aiToolScripts = this.db.prepare('SELECT id, name, description, category FROM script_library WHERE ai_tool = 1').all();
+
     // Build messages array for LLM
-    const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName);
+    const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName, aiToolScripts);
     const llmMessages = [
       { role: 'system', content: systemPrompt },
       ...ctx.messages
@@ -108,7 +111,8 @@ class DiagnosticAI {
     const resultText = `[DIAGNOSTIC RESULTS - ${sanitizeForLLM(checkType)}]\n${JSON.stringify(sanitizedResults, null, 2)}`;
     ctx.messages.push({ role: 'user', content: resultText });
 
-    const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName);
+    const aiToolScripts = this.db.prepare('SELECT id, name, description, category FROM script_library WHERE ai_tool = 1').all();
+    const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName, aiToolScripts);
     const llmMessages = [
       { role: 'system', content: systemPrompt },
       ...ctx.messages
@@ -159,7 +163,8 @@ class DiagnosticAI {
       ctx.messages = ctx.messages.slice(-this.maxContextMessages);
     }
 
-    const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName);
+    const aiToolScripts = this.db.prepare('SELECT id, name, description, category FROM script_library WHERE ai_tool = 1').all();
+    const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName, aiToolScripts);
     const llmMessages = [
       { role: 'system', content: systemPrompt },
       ...ctx.messages
@@ -180,6 +185,45 @@ class DiagnosticAI {
       console.error('DiagnosticAI processScreenshotResult error:', err.message);
       return {
         text: 'I received the screenshot but had trouble analyzing it. Could you describe what you see on your screen?',
+        action: null,
+        agentName: ctx.agentName
+      };
+    }
+  }
+
+  async processScriptResult(deviceId, scriptName, scriptOutput) {
+    const ctx = this.getOrCreateContext(deviceId, {});
+
+    const sanitizedOutput = sanitizeDiagnosticData(scriptOutput);
+    const resultText = `[SCRIPT RESULT - ${sanitizeForLLM(scriptName)}]\n${typeof sanitizedOutput === 'string' ? sanitizedOutput : JSON.stringify(sanitizedOutput, null, 2)}`;
+    ctx.messages.push({ role: 'user', content: resultText });
+
+    if (ctx.messages.length > this.maxContextMessages) {
+      ctx.messages = ctx.messages.slice(-this.maxContextMessages);
+    }
+
+    const aiToolScripts = this.db.prepare('SELECT id, name, description, category FROM script_library WHERE ai_tool = 1').all();
+    const systemPrompt = getSystemPrompt(ctx.deviceInfo, ctx.agentName, aiToolScripts);
+    const llmMessages = [
+      { role: 'system', content: systemPrompt },
+      ...ctx.messages
+    ];
+
+    try {
+      const rawResponse = await this.llm.chat(llmMessages);
+      const parsed = parseResponse(rawResponse);
+      ctx.messages.push({ role: 'assistant', content: rawResponse });
+      this._saveMessage(deviceId, 'ai', parsed.text, parsed.action);
+
+      return {
+        text: parsed.text,
+        action: parsed.action,
+        agentName: ctx.agentName
+      };
+    } catch (err) {
+      console.error('DiagnosticAI processScriptResult error:', err.message);
+      return {
+        text: 'I received the script results but had trouble analyzing them. Could you describe what you\'re experiencing?',
         action: null,
         agentName: ctx.agentName
       };

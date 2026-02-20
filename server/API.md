@@ -595,7 +595,7 @@ curl -X POST http://localhost:9100/api/admin/login \
 
 ### GET /api/admin/users
 
-List all IT staff users.
+List all IT staff users with MFA backup code count.
 
 **Auth:** Admin (localhost bypass in MVP)
 
@@ -608,10 +608,14 @@ List all IT staff users.
     "display_name": "Administrator",
     "role": "admin",
     "created_at": "2024-01-01T00:00:00.000Z",
-    "last_login": "2024-01-15T14:00:00.000Z"
+    "last_login": "2024-01-15T14:00:00.000Z",
+    "backup_code_count": 8
   }
 ]
 ```
+
+**Notes:**
+- `backup_code_count` — number of unused TOTP backup codes remaining for the user
 
 **Example:**
 ```bash
@@ -738,6 +742,266 @@ Delete an IT staff user. A user cannot delete their own account.
 **Example:**
 ```bash
 curl -X DELETE http://localhost:9100/api/admin/users/2
+```
+
+---
+
+### POST /api/admin/users/:id/backup-codes
+
+Regenerate TOTP backup codes for a user. Does not reset or change the user's TOTP secret — only replaces the backup code set.
+
+**Auth:** Admin (localhost bypass in MVP)
+
+**Response:**
+```json
+{
+  "success": true,
+  "backup_codes": [
+    "ABCD-1234",
+    "EFGH-5678"
+  ]
+}
+```
+
+**Errors:**
+- `403` — Admin role required
+- `404` — User not found
+
+**Example:**
+```bash
+curl -X POST http://localhost:9100/api/admin/users/2/backup-codes
+```
+
+---
+
+## User Self-Service (My Account)
+
+All endpoints in this section require any authenticated IT user (`requireIT` — any role). Users operate on their own account only.
+
+### GET /api/admin/user/profile
+
+Get the authenticated user's own profile including backup code count.
+
+**Auth:** Any authenticated IT user
+
+**Response:**
+```json
+{
+  "id": 1,
+  "username": "admin",
+  "display_name": "Administrator",
+  "role": "admin",
+  "created_at": "2024-01-01T00:00:00.000Z",
+  "last_login": "2024-01-15T14:00:00.000Z",
+  "backup_code_count": 8
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:9100/api/admin/user/profile
+```
+
+---
+
+### PUT /api/admin/user/profile
+
+Update the authenticated user's display name.
+
+**Auth:** Any authenticated IT user
+
+**Request Body:**
+```json
+{
+  "display_name": "Jane Doe"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — `display_name` is required
+
+**Example:**
+```bash
+curl -X PUT http://localhost:9100/api/admin/user/profile \
+  -H "Content-Type: application/json" \
+  -d '{"display_name": "Jane Doe"}'
+```
+
+---
+
+### PUT /api/admin/user/password
+
+Change the authenticated user's password. Requires verification of the current password before accepting the new one.
+
+**Auth:** Any authenticated IT user
+
+**Request Body:**
+```json
+{
+  "currentPassword": "old-password",
+  "newPassword": "new-secure-password"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — `currentPassword` and `newPassword` are required
+- `401` — Current password is incorrect
+
+**Example:**
+```bash
+curl -X PUT http://localhost:9100/api/admin/user/password \
+  -H "Content-Type: application/json" \
+  -d '{"currentPassword": "old-password", "newPassword": "new-secure-password"}'
+```
+
+---
+
+### POST /api/admin/user/2fa/backup-codes
+
+Regenerate the authenticated user's own TOTP backup codes. Requires password confirmation. Does not affect the TOTP secret.
+
+**Auth:** Any authenticated IT user
+
+**Request Body:**
+```json
+{
+  "password": "current-password"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "backup_codes": [
+    "ABCD-1234",
+    "EFGH-5678"
+  ]
+}
+```
+
+**Errors:**
+- `400` — `password` is required
+- `401` — Password is incorrect
+
+**Example:**
+```bash
+curl -X POST http://localhost:9100/api/admin/user/2fa/backup-codes \
+  -H "Content-Type: application/json" \
+  -d '{"password": "current-password"}'
+```
+
+---
+
+### POST /api/admin/user/2fa/reset
+
+Reset the authenticated user's own TOTP 2FA enrollment. Requires password confirmation. Forces TOTP re-setup on the next login.
+
+**Auth:** Any authenticated IT user
+
+**Request Body:**
+```json
+{
+  "password": "current-password"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — `password` is required
+- `401` — Password is incorrect
+
+**Example:**
+```bash
+curl -X POST http://localhost:9100/api/admin/user/2fa/reset \
+  -H "Content-Type: application/json" \
+  -d '{"password": "current-password"}'
+```
+
+---
+
+### GET /api/admin/user/preferences
+
+Get the authenticated user's preferences as a flat key-value object.
+
+**Auth:** Any authenticated IT user
+
+**Response:**
+```json
+{
+  "theme": "dark",
+  "defaultPage": "fleet",
+  "itemsPerPage": "25",
+  "dateFormat": "relative"
+}
+```
+
+**Notes:**
+- Keys not yet set by the user are omitted from the response
+- All values are strings
+
+**Example:**
+```bash
+curl http://localhost:9100/api/admin/user/preferences
+```
+
+---
+
+### PUT /api/admin/user/preferences
+
+Save one or more preferences for the authenticated user. Only whitelisted keys are accepted; unknown keys are silently ignored.
+
+**Auth:** Any authenticated IT user
+
+**Whitelisted keys:**
+- `theme` — `"dark"` | `"light"`
+- `defaultPage` — dashboard page to land on after login
+- `itemsPerPage` — number of rows to show in paginated tables
+- `dateFormat` — `"relative"` | `"absolute"`
+
+**Request Body:**
+```json
+{
+  "theme": "light",
+  "itemsPerPage": "50"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — No valid preference keys provided
+
+**Example:**
+```bash
+curl -X PUT http://localhost:9100/api/admin/user/preferences \
+  -H "Content-Type: application/json" \
+  -d '{"theme": "light"}'
 ```
 
 ---

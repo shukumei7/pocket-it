@@ -292,20 +292,20 @@
         return card;
     }
 
-    function createScriptPrompt(scriptName, scriptContent, requiresElevation, timeoutSeconds, requestId) {
+    function createScriptPrompt(scriptName, scriptContent, requiresElevation, timeoutSeconds, requestId, aiInitiated) {
         const card = document.createElement('div');
         card.className = 'action-card';
 
         card.innerHTML = `
             <div class="action-header">
-                <strong>\uD83D\uDCDC Script Execution Request</strong>
+                <strong>${aiInitiated ? '\uD83E\uDD16 AI Script Request' : '\uD83D\uDCDC Script Execution Request'}</strong>
                 ${requiresElevation ? '<span style="background:#4a1919; color:#ef5350; font-size:10px; padding:2px 6px; border-radius:4px; margin-left:8px;">ADMIN</span>' : ''}
             </div>
             <div class="action-body" style="margin: 8px 0;">
                 <div style="font-size: 13px; color: #8f98a0;">Script: <strong style="color: #c7d5e0;">${escapeHtml(scriptName)}</strong></div>
                 <div style="font-size: 11px; color: #8f98a0; margin-top: 2px;">Timeout: ${timeoutSeconds}s</div>
                 <pre style="background: #0a0f14; border: 1px solid #2a475e; border-radius: 4px; padding: 8px; margin-top: 8px; font-size: 11px; max-height: 200px; overflow: auto; white-space: pre-wrap; color: #a8b4c0;">${escapeHtml(scriptContent)}</pre>
-                <div style="font-size: 11px; color: #ffa726; margin-top: 4px;">IT staff wants to run this script on your computer. Review the content before approving.</div>
+                <div style="font-size: 11px; color: #ffa726; margin-top: 4px;">${aiInitiated ? 'Your IT assistant wants to run this script to help diagnose your issue. Review the content before approving.' : 'IT staff wants to run this script on your computer. Review the content before approving.'}</div>
             </div>
         `;
 
@@ -596,7 +596,7 @@
                     break;
 
                 case 'script_request':
-                    const scriptCard = createScriptPrompt(data.scriptName, data.scriptContent, data.requiresElevation, data.timeoutSeconds, data.requestId);
+                    const scriptCard = createScriptPrompt(data.scriptName, data.scriptContent, data.requiresElevation, data.timeoutSeconds, data.requestId, data.aiInitiated);
                     appendToChat(scriptCard);
                     break;
 

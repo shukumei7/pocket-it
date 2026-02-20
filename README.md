@@ -69,7 +69,7 @@ Server emits "chat_response" back to client
 | Client Database | Microsoft.Data.Sqlite | Local message queue and settings |
 | Server Runtime | Node.js (Express 4.21) | HTTP and WebSocket server |
 | Server WebSockets | Socket.IO 4.7 | Two namespaces: /agent and /it |
-| Server Database | SQLite (better-sqlite3) | 19 tables for devices, tickets, chat, diagnostics, clients, and more |
+| Server Database | SQLite (better-sqlite3) | 20 tables for devices, tickets, chat, diagnostics, clients, and more |
 | LLM Providers | Ollama, OpenAI, Anthropic, Claude CLI | Flexible AI backend (4 provider options) |
 | Authentication | JWT (jsonwebtoken 9.0) | IT staff authentication (MVP: localhost bypass) |
 
@@ -565,10 +565,21 @@ All endpoints accept `localhost` without authentication for MVP development.
 
 ### Admin
 - `GET /api/admin/stats` — System statistics including average health and critical devices; scope-aware (admin auth)
-- `GET /api/admin/users` — List all IT staff users (admin auth)
+- `GET /api/admin/users` — List all IT staff users with backup code count (admin auth)
 - `POST /api/admin/users` — Create IT staff user (admin auth)
 - `PUT /api/admin/users/:id` — Update user display_name, role, or password (admin auth)
 - `DELETE /api/admin/users/:id` — Delete user with self-deletion guard (admin auth)
+- `POST /api/admin/users/:id/backup-codes` — Regenerate backup codes without resetting TOTP (admin auth)
+
+### User Self-Service (My Account)
+All routes below require any authenticated IT user (`requireIT`).
+- `GET /api/admin/user/profile` — Own profile with backup code count
+- `PUT /api/admin/user/profile` — Update own display_name
+- `PUT /api/admin/user/password` — Change own password (requires `currentPassword` + `newPassword`)
+- `POST /api/admin/user/2fa/backup-codes` — Regenerate own backup codes (requires password)
+- `POST /api/admin/user/2fa/reset` — Reset own TOTP 2FA (requires password, forces re-setup)
+- `GET /api/admin/user/preferences` — Get own preferences as key-value object
+- `PUT /api/admin/user/preferences` — Save own preferences (whitelisted keys: `theme`, `defaultPage`, `itemsPerPage`, `dateFormat`)
 
 ### Clients
 - `GET /api/clients` — List clients (admin: all, tech: assigned only)
@@ -674,7 +685,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 
 ## Database Schema
 
-The server uses SQLite with 19 tables:
+The server uses SQLite with 20 tables:
 
 | Table | Purpose |
 |-------|---------|
@@ -697,6 +708,7 @@ The server uses SQLite with 19 tables:
 | `user_client_assignments` | Many-to-many mapping of IT technicians to clients |
 | `update_packages` | Self-update installer packages (version, filename, file_size, sha256, release_notes, uploaded_by) |
 | `chat_read_cursors` | Per-IT-user read position per device for fleet unread badge tracking (it_user_id, device_id, last_read_id, updated_at) |
+| `user_preferences` | Per-user key-value settings (user_id, key, value, updated_at); supported keys: theme, defaultPage, itemsPerPage, dateFormat |
 
 ## AI Personality System
 
@@ -950,7 +962,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.17.0)
+## Current Status (v0.18.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -1007,6 +1019,9 @@ pocket-it/
 - **Client RDP In/Out Alerts**: system messages in client chat when an IT tech connects or disconnects from remote desktop, including the tech's username
 - **Client Resizable Window + Dark Chrome**: sizable window with minimum dimensions, DWM dark titlebar, and Mica backdrop on Windows 11 22H2+
 - **Dashboard AI Controls**: AI toggle on Settings page; per-device AI control buttons (Enabled / Disable Temporarily / Disable Permanently) with real-time state sync
+- **MFA Management Enhancements**: admin Users table shows backup code count per user; admin can regenerate backup codes without resetting TOTP via `POST /api/admin/users/:id/backup-codes`
+- **User Self-Service Account Page**: avatar circle in nav bar for all roles; users can update display name, change password, regenerate backup codes, and reset 2FA from a personal "My Account" page
+- **User Preferences & Theme System**: per-user preferences persisted to `user_preferences` table; dark (default) and light themes via CSS custom properties; theme and other settings restored on login
 
 ### Setup
 
@@ -1066,6 +1081,7 @@ dotnet run
 | v0.12.8 | User Tracking, AI Screenshots & UX Polish | Current/previous user tracking, AI screenshot diagnostic with multimodal LLM support, Users management page, Admin dropdown nav, superadmin role, auto-push updates on connect, form controls normalization |
 | v0.13.4 | Security Audit Remediation | Prompt injection hardening, bcrypt device secrets, DPAPI client credential protection, AES-256-GCM API key encryption, centralized action whitelist, scoped integrity events, enrollment rate limiting, CSP unsafe-inline removed, PowerShell Base64 encoding |
 | v0.17.0 | AI Control, Fleet Presence & Client UX | Global and per-device AI disable system, IT-active auto-pause, fleet unread chat badges, IT user presence on device pages, RDP in/out alerts in client chat, resizable dark-chrome client window |
+| v0.18.0 | User Self-Service & Preferences | MFA backup code management for admins, user self-service account page (profile, password, 2FA), user preferences system, dark/light theme support |
 
 ### Planned
 | Version | Theme | Key Capabilities |

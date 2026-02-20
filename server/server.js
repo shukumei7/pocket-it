@@ -208,6 +208,7 @@ const createReportsRouter = require('./routes/reports');
 app.use('/api/reports', createReportsRouter(reportService, exportService));
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', (req, res) => res.redirect('/dashboard/'));
 app.get('/favicon.ico', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'favicon.svg'), {
     headers: { 'Content-Type': 'image/svg+xml' }

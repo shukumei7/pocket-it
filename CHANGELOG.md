@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 ### Added
 - **Google Gemini LLM Provider** — Gemini added as a 5th AI provider alongside Ollama, OpenAI, Anthropic, and Claude CLI; supports chat and vision (screenshot analysis); configurable via dashboard Settings page or `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` environment variables; default model: `gemini-2.0-flash`
 
+### Changed
+- **Dashboard toggle switches** — All checkbox inputs in settings and script library forms converted to toggle switch UI (`.toggle-switch` / `.toggle-track` CSS pattern)
+- **Dashboard CSS extraction** — Inline `<style>` block (~900 lines) extracted to external `dashboard.css` file
+
+### Fixed
+- **Client terminal notifications** — IT-initiated remote terminal sessions no longer show "Terminal session ended" / "Terminal session active" messages in the end-user's chat window; only user-approved terminal sessions display chat notifications
+
 ### Technical
 - EDIT: `server/services/llmService.js` — `_geminiChat()` method using Gemini REST API with `systemInstruction`, multimodal `inlineData` for images, abort controller timeout; `geminiKey` and `geminiModel` properties; `getModels()` updated
 - EDIT: `server/server.js` — Gemini env vars in LLMService constructor and startup reconfigure
@@ -16,6 +23,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - EDIT: `server/services/diagnosticAI.js` — `'gemini'` added to `supportsVision` provider list (both processScreenshotResult methods)
 - EDIT: `server/public/dashboard/index.html` — "Google Gemini" option in provider dropdown; Gemini settings div with API key and model inputs
 - EDIT: `server/public/dashboard/dashboard.js` — Gemini fields in loadSettings, toggleLLMProvider, saveSettings
+- NEW: `server/public/dashboard/dashboard.css` — All dashboard CSS extracted from inline `<style>` block in `index.html`
+- EDIT: `server/public/dashboard/index.html` — Inline `<style>` replaced with `<link>` to `dashboard.css`; checkbox inputs replaced with toggle switch markup
+- EDIT: `client/PocketIT/TrayApplication.cs` — Removed `terminal_session_ended` and `terminal_session_active` WebView sends from IT-initiated terminal session path
 
 ### Security
 - **[C1]** IT Guidance auto-remediate now validates PID range and service whitelist before auto-executing

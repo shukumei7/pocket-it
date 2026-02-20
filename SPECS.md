@@ -1241,6 +1241,10 @@ Theme is applied by setting `document.documentElement.setAttribute('data-theme',
 
 All pages within `server/public/dashboard/` use the CSS custom properties, including the account page. No hardcoded color values remain in structural CSS rules.
 
+### Dashboard CSS File
+
+All dashboard CSS (~900 lines) is extracted into `server/public/dashboard/dashboard.css`. The `index.html` references it via a `<link>` tag. Checkbox inputs in settings and script library forms use the toggle switch pattern (`.toggle-switch` wrapping a checkbox with a `.toggle-track` span) rather than raw `<input type="checkbox">` elements.
+
 ## Whitelisted Remediation Actions
 
 The client uses a hardcoded whitelist to prevent execution of unapproved actions.
@@ -2237,6 +2241,8 @@ dotnet publish -c Release -r win-x64 --self-contained
 
 **Unreleased**
 - Google Gemini LLM Provider: `_geminiChat()` in `llmService.js` using Gemini REST API with `systemInstruction`, multimodal `inlineData` for vision; env vars `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` (default: `gemini-2.0-flash`); settings keys `llm.gemini.apiKey` and `llm.gemini.model`; `'gemini'` added to `supportsVision` list in `diagnosticAI.js`; "Google Gemini" option in dashboard provider dropdown with API key and model inputs
+- Dashboard CSS extraction: inline `<style>` block (~900 lines) moved to `server/public/dashboard/dashboard.css`; `index.html` references it via `<link>`; checkbox inputs in settings and script library forms replaced with toggle switch markup (`.toggle-switch` / `.toggle-track` pattern)
+- Client terminal notification fix: IT-initiated remote terminal sessions no longer send `terminal_session_ended` or `terminal_session_active` WebView messages to the end-user's chat window; only user-approved (consent-flow) terminal sessions produce chat notifications (`TrayApplication.cs`)
 
 **0.18.0**
 - AI Script Toolbelt: `ai_tool INTEGER DEFAULT 0` column on `script_library`; AI-tool scripts injected into system prompt as available actions; `[ACTION:RUN_SCRIPT:<id>]` parsed by decision engine; `pendingAIScripts` Map in `agentNamespace.js` tracks in-flight AI script requests; `processScriptResult()` in `diagnosticAI.js` feeds script output back to the LLM; client consent card distinguishes AI-initiated (robot emoji) from IT-initiated scripts

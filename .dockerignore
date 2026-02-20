@@ -13,4 +13,5 @@ server/test-*.db
 *.md
 *.zip
 .env
+server/db/.jwt-secret
 test-results/

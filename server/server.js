@@ -1,11 +1,26 @@
 const path = require('path');
+const crypto = require('crypto');
+const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-// Security: require JWT secret in non-test environments
+// Security: resolve JWT secret — env var > persisted file > auto-generate (Docker only)
 if (!process.env.POCKET_IT_JWT_SECRET && process.env.NODE_ENV !== 'test') {
-  console.error('[SECURITY] POCKET_IT_JWT_SECRET is not set. Server will not start without it.');
-  console.error('[SECURITY] Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-  process.exit(1);
+  const secretFile = path.join(__dirname, 'db', '.jwt-secret');
+  if (fs.existsSync(secretFile)) {
+    process.env.POCKET_IT_JWT_SECRET = fs.readFileSync(secretFile, 'utf8').trim();
+    console.log('[Security] JWT secret loaded from db/.jwt-secret');
+  } else if (process.env.POCKET_IT_DOCKER === 'true') {
+    const dbDir = path.join(__dirname, 'db');
+    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+    const secret = crypto.randomBytes(32).toString('hex');
+    fs.writeFileSync(secretFile, secret, { mode: 0o600 });
+    process.env.POCKET_IT_JWT_SECRET = secret;
+    console.log('[Security] JWT secret auto-generated and saved to db/.jwt-secret');
+  } else {
+    console.error('[SECURITY] POCKET_IT_JWT_SECRET is not set. Server will not start without it.');
+    console.error('[SECURITY] Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+    process.exit(1);
+  }
 }
 
 const express = require('express');
@@ -13,7 +28,6 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 const helmet = require('helmet');
-const fs = require('fs');
 const { initDatabase } = require('./db/schema');
 
 const app = express();

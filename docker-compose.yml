@@ -9,9 +9,11 @@ services:
       - ./data/db:/app/server/db
       - ./data/updates:/app/server/updates
     environment:
-      - POCKET_IT_JWT_SECRET=${POCKET_IT_JWT_SECRET}
       - POCKET_IT_PORT=9100
       - POCKET_IT_DOCKER=true
+      # JWT secret auto-generated on first run and persisted to db/.jwt-secret
+      # Override with explicit value if needed:
+      # - POCKET_IT_JWT_SECRET=${POCKET_IT_JWT_SECRET}
       # LLM provider config — uncomment the provider you use:
       # - POCKET_IT_LLM_PROVIDER=ollama
       # - POCKET_IT_OLLAMA_URL=http://host.docker.internal:11434

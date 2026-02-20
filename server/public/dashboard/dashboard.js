@@ -3652,15 +3652,15 @@
                     tbody.innerHTML = '<tr><td colspan="5" style="color:#8f98a0; text-align:center; padding:24px;">No update packages uploaded yet.</td></tr>';
                     return;
                 }
-                tbody.innerHTML = packages.map(p => `
+                tbody.innerHTML = packages.map((p, i) => `
                     <tr>
                         <td><strong>v${escapeHtml(p.version)}</strong>${p.release_notes ? '<br><span style="font-size:11px;color:#8f98a0;">' + escapeHtml(p.release_notes).substring(0, 100) + '</span>' : ''}</td>
                         <td>${formatFileSize(p.file_size)}</td>
                         <td style="font-size:11px; font-family:monospace; color:#8f98a0;">${p.sha256.substring(0, 16)}...</td>
                         <td style="font-size:12px;color:#8f98a0;">${p.uploaded_by || ''}<br>${p.created_at ? new Date(p.created_at).toLocaleString() : ''}</td>
                         <td>
-                            <button class="diag-btn" data-action="update-push" data-version="${escapeHtml(p.version)}" style="font-size:11px;padding:4px 8px;">Push to Fleet</button>
-                            <button class="diag-btn" data-action="update-delete" data-version="${escapeHtml(p.version)}" style="font-size:11px;padding:4px 8px;margin-left:4px;background:#5c2020;">Delete</button>
+                            ${i === 0 ? `<button class="diag-btn" data-action="update-push" data-version="${escapeHtml(p.version)}" style="font-size:11px;padding:4px 8px;">Push to Fleet</button>` : ''}
+                            <button class="diag-btn" data-action="update-delete" data-version="${escapeHtml(p.version)}" style="font-size:11px;padding:4px 8px;${i === 0 ? 'margin-left:4px;' : ''}background:#5c2020;">Delete</button>
                         </td>
                     </tr>
                 `).join('');

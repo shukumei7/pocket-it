@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { requireIT, requireDevice, isLocalhost } = require('../auth/middleware');
-const { checkForUpdates, applyUpdate, getServerVersion, getCurrentCommit } = require('../services/serverUpdate');
+const { checkForUpdates, applyUpdate, checkClientRelease, getServerVersion, getCurrentCommit } = require('../services/serverUpdate');
 
 const router = express.Router();
 
@@ -371,6 +371,26 @@ router.post('/publish-local', async (req, res) => {
   } catch (err) {
     console.error('[Updates] Publish-local error:', err.message);
     res.status(500).json({ error: 'Publish failed: ' + err.message });
+  }
+});
+
+// GET /api/updates/client-check — check git for new client release (IT auth)
+router.get('/client-check', requireIT, async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    const result = await checkClientRelease(db);
+
+    if (result.updated) {
+      const pushFn = req.app.locals.pushUpdateToOutdatedDevices;
+      if (pushFn) {
+        result.notified = pushFn(result.version);
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('[Updates] Client check error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

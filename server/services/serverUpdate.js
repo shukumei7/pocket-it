@@ -214,4 +214,40 @@ function getCurrentCommit() {
   }
 }
 
-module.exports = { checkForUpdates, applyUpdate, registerReleaseZip, getServerVersion, getCurrentCommit };
+/**
+ * checkClientRelease(db) — git fetch + check if releases/version.json changed
+ * If remote has a newer client build, sparse-checkout just the release files and register.
+ * Returns: { updated: boolean, version?, reason? }
+ */
+async function checkClientRelease(db) {
+  try {
+    execSync('git fetch origin main', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 30000 });
+
+    const diffOutput = execSync(
+      'git diff HEAD..origin/main -- releases/version.json',
+      { cwd: PROJECT_ROOT, stdio: 'pipe' }
+    ).toString().trim();
+
+    if (!diffOutput) {
+      return { updated: false, reason: 'No client release changes in remote' };
+    }
+
+    execSync('git checkout origin/main -- releases/version.json releases/PocketIT-latest.zip',
+      { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 60000 });
+
+    const result = await registerReleaseZip(db);
+    if (result.registered) {
+      console.log(`[AutoUpdate] New client build from git: v${result.version}`);
+      return { updated: true, version: result.version };
+    }
+
+    return { updated: false, reason: result.reason || 'Release already registered' };
+  } catch (err) {
+    if (err.message && !err.message.includes('not a git repository')) {
+      console.error('[AutoUpdate] Client release check failed:', err.message);
+    }
+    return { updated: false, reason: err.message };
+  }
+}
+
+module.exports = { checkForUpdates, applyUpdate, registerReleaseZip, checkClientRelease, isNewerVersion, getServerVersion, getCurrentCommit };

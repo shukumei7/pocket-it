@@ -244,6 +244,33 @@ registerReleaseZip(db).then(result => {
 }).catch(err => {
   console.error('[Updates] Release registration error:', err.message);
 });
+// Auto-check git for new client builds every 24 hours
+const { checkClientRelease, isNewerVersion } = require('./services/serverUpdate');
+
+function pushUpdateToOutdatedDevices(version) {
+  const connectedDevices = app.locals.connectedDevices;
+  if (!connectedDevices) return 0;
+  let notified = 0;
+  for (const [deviceId, socket] of connectedDevices) {
+    const device = db.prepare('SELECT client_version FROM devices WHERE device_id = ?').get(deviceId);
+    if (!device || !device.client_version || isNewerVersion(version, device.client_version)) {
+      socket.emit('update_available', { version });
+      notified++;
+    }
+  }
+  return notified;
+}
+app.locals.pushUpdateToOutdatedDevices = pushUpdateToOutdatedDevices;
+
+setInterval(async () => {
+  try {
+    const result = await checkClientRelease(db);
+    if (result.updated) {
+      pushUpdateToOutdatedDevices(result.version);
+    }
+  } catch (err) { /* silent */ }
+}, 24 * 60 * 60 * 1000);
+
 // Scheduler needs access to connected devices map
 io._connectedDevices = app.locals.connectedDevices;
 

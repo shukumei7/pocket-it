@@ -3549,6 +3549,36 @@
                     </div>
                 `).join('') || '<div style="color:#8f98a0; padding:16px;">No version data yet.</div>';
 
+                // Expected client version
+                try {
+                    const latestRes = await fetchWithAuth(`${API}/api/updates/latest`);
+                    const latestData = await latestRes.json();
+                    const expectedEl = document.getElementById('expected-version');
+                    const statusEl = document.getElementById('fleet-update-status');
+
+                    if (latestData.available && latestData.version) {
+                        expectedEl.textContent = 'v' + latestData.version;
+                        const latest = latestData.version;
+                        let upToDate = 0, outdated = 0;
+                        fleetVersions.forEach(v => {
+                            if (v.version === latest) upToDate += v.count;
+                            else outdated += v.count;
+                        });
+                        if (outdated === 0 && upToDate > 0) {
+                            statusEl.innerHTML = `<span style="color:#66bb6a;">All ${upToDate} device(s) up to date</span>`;
+                        } else if (outdated > 0) {
+                            statusEl.innerHTML = `<span style="color:#66bb6a;">${upToDate} up to date</span> &middot; <span style="color:#ffa726;">${outdated} outdated</span>`;
+                        } else {
+                            statusEl.textContent = 'No devices reporting';
+                        }
+                    } else {
+                        expectedEl.textContent = '\u2014';
+                        statusEl.textContent = 'No update packages registered';
+                    }
+                } catch (latestErr) {
+                    console.error('Failed to load latest version:', latestErr);
+                }
+
                 // Packages table
                 const tbody = document.getElementById('updates-table-body');
                 if (packages.length === 0) {
@@ -3609,6 +3639,28 @@
                 alert('Push error: ' + err.message);
             }
         }
+
+        // ---- Client Release Check (git) ----
+        document.getElementById('btn-client-check').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-client-check');
+            btn.disabled = true;
+            btn.textContent = 'Checking...';
+            try {
+                const res = await fetchWithAuth(`${API}/api/updates/client-check`);
+                const data = await res.json();
+                if (data.updated) {
+                    alert(`New client v${data.version} found! ${data.notified || 0} device(s) notified.`);
+                    loadUpdates();
+                } else {
+                    alert(data.reason || 'No new client release found');
+                }
+            } catch (err) {
+                alert('Check failed: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Check for Client Update';
+            }
+        });
 
         // ========== SETTINGS ==========
 

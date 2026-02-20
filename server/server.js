@@ -43,9 +43,13 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
       connectSrc: ["'self'", "ws:", "wss:", "https://cdn.jsdelivr.net"],
       imgSrc: ["'self'", "data:"],
-      fontSrc: ["'self'", "data:"]
+      fontSrc: ["'self'", "data:"],
+      // Disable upgrade-insecure-requests — server is HTTP-only on non-localhost origins
+      upgradeInsecureRequests: []
     }
-  }
+  },
+  // Disable COOP on non-HTTPS origins (ignored by browsers anyway)
+  crossOriginOpenerPolicy: false
 }));
 
 // Trust proxy only if explicitly configured

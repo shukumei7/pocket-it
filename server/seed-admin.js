@@ -21,7 +21,7 @@ async function main() {
     process.exit(1);
   }
 
-  const dbPath = path.join(__dirname, 'db', 'pocket-it.db');
+  const dbPath = path.join(process.env.POCKET_IT_DATA_DIR || path.join(__dirname, 'db'), 'pocket-it.db');
   const db = initDatabase(dbPath);
 
   // Check if user exists

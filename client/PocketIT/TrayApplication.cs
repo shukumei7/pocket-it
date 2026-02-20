@@ -694,15 +694,11 @@ public class TrayApplication : ApplicationContext
                 _ = _serverConnection.SendTerminalStopped(requestId, exitCode, exitCode == -1 ? "idle_timeout" : "process_exited");
                 _remoteTerminal?.Dispose();
                 _remoteTerminal = null;
-                var endMsg = JsonSerializer.Serialize(new { type = "terminal_session_ended", exitCode });
-                _uiContext.Post(_ => { _chatWindow?.SendToWebView(endMsg); TryAutoApplyPendingUpdate(); }, null);
+                _uiContext.Post(_ => TryAutoApplyPendingUpdate(), null);
             };
 
             _remoteTerminal.StartSession();
             _ = _serverConnection.SendTerminalStarted(requestId);
-
-            var activeMsg = JsonSerializer.Serialize(new { type = "terminal_session_active" });
-            _uiContext.Post(_ => _chatWindow?.SendToWebView(activeMsg), null);
             return;
         }
 

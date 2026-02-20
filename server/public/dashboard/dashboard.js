@@ -400,8 +400,8 @@
                     if (data.response) {
                         appendChatMessage(data.response.sender, data.response.text);
                     }
-                } else if (data.message && data.message.sender === 'user' && !data.response) {
-                    // Only show unread badge for unanswered user messages (no AI/IT response)
+                } else if (data.message && data.message.sender === 'user') {
+                    // Increment unread count for non-active device
                     if (!window._unreadCounts) window._unreadCounts = {};
                     window._unreadCounts[data.deviceId] = (window._unreadCounts[data.deviceId] || 0) + 1;
                     // Update badge on device card
@@ -418,16 +418,6 @@
                                 badge.textContent = window._unreadCounts[data.deviceId];
                                 hostname.insertAdjacentElement('afterend', badge);
                             }
-                        }
-                    }
-                } else if (data.deviceId !== currentDeviceId && data.response) {
-                    // AI or IT responded — clear unread badge for this device
-                    if (window._unreadCounts && window._unreadCounts[data.deviceId]) {
-                        delete window._unreadCounts[data.deviceId];
-                        const card = document.querySelector(`.device-card[data-device-id="${data.deviceId}"]`);
-                        if (card) {
-                            const badge = card.querySelector('.unread-badge');
-                            if (badge) badge.remove();
                         }
                     }
                 }

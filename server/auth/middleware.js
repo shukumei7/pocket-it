@@ -45,7 +45,17 @@ function requireDevice(req, res, next) {
 }
 
 function requireIT(req, res, next) {
-  if (isLocalhost(req)) return next();
+  if (isLocalhost(req)) {
+    // Still populate req.user from JWT if present (for consistent user identity)
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.slice(7), getJwtSecret());
+        if (!decoded.purpose) req.user = decoded;
+      } catch (err) { /* ignore — localhost doesn't require valid token */ }
+    }
+    return next();
+  }
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -64,7 +74,16 @@ function requireIT(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (isLocalhost(req)) return next();
+  if (isLocalhost(req)) {
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.slice(7), getJwtSecret());
+        if (!decoded.purpose) req.user = decoded;
+      } catch (err) { /* ignore */ }
+    }
+    return next();
+  }
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Admin authentication required' });

@@ -36,9 +36,6 @@ router.get('/unread-counts', requireIT, resolveClientScope, (req, res) => {
   const userId = req.user?.id ? String(req.user.id) : 'admin';
 
   try {
-    // Count user messages that are:
-    // 1. Above the IT user's read cursor (not yet seen by this IT user)
-    // 2. Not followed by an AI or IT response (unanswered)
     const rows = db.prepare(`
       SELECT cm.device_id, COUNT(*) as unread_count
       FROM chat_messages cm
@@ -48,13 +45,6 @@ router.get('/unread-counts', requireIT, resolveClientScope, (req, res) => {
            WHERE crc.device_id = cm.device_id AND crc.it_user_id = ?), 0)
         AND (cm.channel = 'user' OR cm.channel IS NULL)
         AND cm.device_id IN (SELECT device_id FROM devices WHERE ${clause})
-        AND NOT EXISTS (
-          SELECT 1 FROM chat_messages reply
-          WHERE reply.device_id = cm.device_id
-            AND reply.id > cm.id
-            AND reply.sender IN ('ai', 'it_tech')
-            AND (reply.channel = 'user' OR reply.channel IS NULL)
-        )
       GROUP BY cm.device_id
     `).all(userId, ...params);
 

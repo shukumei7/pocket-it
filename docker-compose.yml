@@ -28,3 +28,5 @@ services:
       # Optional security:
       # - POCKET_IT_ENCRYPTION_SALT=${POCKET_IT_ENCRYPTION_SALT}
       # - POCKET_IT_CORS_ORIGINS=https://your-domain.com
+      # Public URL for installer downloads (clients connect to this):
+      # - POCKET_IT_PUBLIC_URL=http://your-server-ip:9100

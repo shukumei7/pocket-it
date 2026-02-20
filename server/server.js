@@ -235,6 +235,14 @@ app.get('/dashboard/*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard', 'index.html'));
 });
 
+// Catch-all: redirect unknown paths to dashboard
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.redirect('/dashboard/');
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {

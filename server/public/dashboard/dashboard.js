@@ -400,6 +400,44 @@
                     if (data.response) {
                         appendChatMessage(data.response.sender, data.response.text);
                     }
+                } else if (data.message && data.message.sender === 'user') {
+                    // Increment unread count for non-active device
+                    if (!window._unreadCounts) window._unreadCounts = {};
+                    window._unreadCounts[data.deviceId] = (window._unreadCounts[data.deviceId] || 0) + 1;
+                    // Update badge on device card
+                    const card = document.querySelector(`.device-card[data-device-id="${data.deviceId}"]`);
+                    if (card) {
+                        let badge = card.querySelector('.unread-badge');
+                        if (badge) {
+                            badge.textContent = window._unreadCounts[data.deviceId];
+                        } else {
+                            const hostname = card.querySelector('.hostname');
+                            if (hostname) {
+                                badge = document.createElement('span');
+                                badge.className = 'unread-badge';
+                                badge.textContent = window._unreadCounts[data.deviceId];
+                                hostname.insertAdjacentElement('afterend', badge);
+                            }
+                        }
+                    }
+                }
+            });
+
+            socket.on('device_watchers', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    renderDeviceWatchers(data.watchers);
+                }
+            });
+
+            socket.on('device_watchers_changed', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    renderDeviceWatchers(data.watchers);
+                }
+            });
+
+            socket.on('device_ai_changed', (data) => {
+                if (data.deviceId === currentDeviceId) {
+                    updateAIControlButtons(data.ai_disabled);
                 }
             });
 
@@ -973,7 +1011,7 @@
             return `
             <div class="device-card" data-device-id="${d.device_id}">
                 <div class="device-header">
-                    <span class="hostname">${escapeHtml(d.hostname || 'Unknown')}</span>
+                    <span class="hostname">${escapeHtml(d.hostname || 'Unknown')}</span>${window._unreadCounts && window._unreadCounts[d.device_id] ? '<span class="unread-badge">' + window._unreadCounts[d.device_id] + '</span>' : ''}
                     <span class="status-dot ${d.status || 'offline'}"></span>
                 </div>
                 <div class="device-id">${escapeHtml(d.device_id.substring(0, 8))}...</div>
@@ -987,12 +1025,14 @@
 
         async function loadFleet() {
             try {
-                const [statsRes, devicesRes] = await Promise.all([
+                const [statsRes, devicesRes, unreadRes] = await Promise.all([
                     fetchWithAuth(`${API}/api/admin/stats`),
-                    fetchWithAuth(`${API}/api/devices${selectedClientId ? '?client_id=' + selectedClientId : ''}`)
+                    fetchWithAuth(`${API}/api/devices${selectedClientId ? '?client_id=' + selectedClientId : ''}`),
+                    fetchWithAuth(`${API}/api/devices/unread-counts`).catch(() => ({ json: () => ({}) }))
                 ]);
                 const stats = await statsRes.json();
                 const devices = await devicesRes.json();
+                try { window._unreadCounts = await unreadRes.json(); } catch(e) { window._unreadCounts = {}; }
 
                 document.getElementById('stat-online').textContent = stats.onlineDevices || 0;
                 document.getElementById('stat-total').textContent = stats.totalDevices || 0;
@@ -1051,6 +1091,26 @@
             } catch (err) {
                 console.error('Failed to load fleet:', err);
             }
+        }
+
+        function renderDeviceWatchers(watcherNames) {
+            const container = document.getElementById('device-watchers');
+            if (!container) return;
+            if (!watcherNames || watcherNames.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            container.innerHTML = '<span style="font-size:11px; color:#8f98a0;">Viewing:</span> ' +
+                watcherNames.map(name => `<span class="watcher-pill">${escapeHtml(name)}</span>`).join('');
+        }
+
+        function updateAIControlButtons(aiDisabled) {
+            document.querySelectorAll('#device-ai-controls .diag-btn').forEach(btn => {
+                btn.classList.remove('ai-mode-active');
+            });
+            const activeMode = aiDisabled || 'enabled';
+            const activeBtn = document.querySelector(`#device-ai-controls .diag-btn[data-ai-mode="${activeMode}"]`);
+            if (activeBtn) activeBtn.classList.add('ai-mode-active');
         }
 
         let ticketDevicesCache = [];
@@ -1315,6 +1375,13 @@
                     }
                 }
                 document.getElementById('detail-info').innerHTML = infoHtml.join('');
+
+                // Set initial AI control state
+                updateAIControlButtons(d.ai_disabled);
+
+                // Clear watchers container
+                const watchersEl = document.getElementById('device-watchers');
+                if (watchersEl) watchersEl.innerHTML = '';
 
                 // Network adapters
                 document.querySelectorAll('.net-adapters').forEach(el => el.remove());
@@ -3812,6 +3879,10 @@
                     document.getElementById('setting-claude-cli-model').value = settings['llm.claudeCli.model'] || '';
                     document.getElementById('setting-llm-timeout').value = settings['llm.timeout'] ? Math.round(parseInt(settings['llm.timeout'], 10) / 1000) : 120;
 
+                    const aiEnabled = settings['ai.enabled'] !== 'false';
+                    const aiToggle = document.getElementById('setting-ai-enabled');
+                    if (aiToggle) aiToggle.checked = aiEnabled;
+
                     toggleLLMProvider();
                     updateSystemInfo(settings);
                 })
@@ -3844,7 +3915,8 @@
                 'llm.anthropic.apiKey': document.getElementById('setting-anthropic-key').value.trim(),
                 'llm.anthropic.model': document.getElementById('setting-anthropic-model').value.trim(),
                 'llm.claudeCli.model': document.getElementById('setting-claude-cli-model').value.trim(),
-                'llm.timeout': String(Math.max(15, Math.min(600, parseInt(document.getElementById('setting-llm-timeout').value, 10) || 120)) * 1000)
+                'llm.timeout': String(Math.max(15, Math.min(600, parseInt(document.getElementById('setting-llm-timeout').value, 10) || 120)) * 1000),
+                'ai.enabled': document.getElementById('setting-ai-enabled').checked ? 'true' : 'false'
             };
 
             try {
@@ -4594,6 +4666,14 @@
         document.getElementById('device-grid').addEventListener('click', (e) => {
             const card = e.target.closest('[data-device-id]');
             if (card) openDevice(card.dataset.deviceId);
+        });
+
+        // Device AI controls
+        document.getElementById('device-ai-controls')?.addEventListener('click', (e) => {
+            const btn = e.target.closest('.diag-btn[data-ai-mode]');
+            if (!btn || !currentDeviceId || !socket) return;
+            const mode = btn.dataset.aiMode;
+            socket.emit('set_device_ai', { deviceId: currentDeviceId, mode });
         });
 
         // Device detail info — stat card navigation

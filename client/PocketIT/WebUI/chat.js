@@ -6,6 +6,7 @@
     const statusEl = document.getElementById('status');
 
     let agentName = 'Pocket IT';
+    let aiEnabled = true;
 
     // ---- Message rendering ----
 
@@ -482,6 +483,8 @@
             setTimeout(() => {
                 addMessage(getOfflineResponse(), 'ai');
             }, 500);
+        } else if (!aiEnabled) {
+            addMessage('Your message has been sent to IT support. A technician will respond shortly.', 'system');
         } else {
             showTyping();
         }
@@ -519,7 +522,7 @@
                 case 'chat_response':
                     hideTyping();
                     if (data.agentName) agentName = data.agentName;
-                    addMessage(data.text || data.content, data.sender || 'ai', {
+                    addMessage(data.text || data.content, data.ai_disabled ? 'system' : (data.sender || 'ai'), {
                         action: data.action,
                         diagnosticResults: data.diagnosticResults
                     });
@@ -608,6 +611,24 @@
                         addMessage(`Action completed successfully: ${data.message}`, 'system');
                     } else {
                         addMessage(`Action failed: ${data.message}`, 'system');
+                    }
+                    break;
+
+                case 'ai_status':
+                    aiEnabled = data.enabled;
+                    if (!data.enabled) {
+                        const reason = data.reason === 'it_active'
+                            ? 'An IT technician is actively helping you.'
+                            : 'AI assistant is currently offline. Your messages will be sent to IT support.';
+                        addMessage(reason, 'system');
+                    }
+                    break;
+
+                case 'desktop_session_notify':
+                    if (data.active) {
+                        addMessage((data.username || 'IT Support') + ' is connecting to your device.', 'system');
+                    } else {
+                        addMessage((data.username || 'IT Support') + ' has left your device.', 'system');
                     }
                     break;
 

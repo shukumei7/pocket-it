@@ -480,7 +480,8 @@ router.put('/settings', requireAdmin, (req, res) => {
     'llm.openai.apiKey', 'llm.openai.model',
     'llm.anthropic.apiKey', 'llm.anthropic.model',
     'llm.claudeCli.model',
-    'llm.timeout'
+    'llm.timeout',
+    'ai.enabled'
   ];
 
   const upsert = db.prepare(

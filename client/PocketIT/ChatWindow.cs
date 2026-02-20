@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -25,9 +26,10 @@ public class ChatWindow : Form
         Text = "Pocket IT";
         Width = 420;
         Height = 600;
-        MaximizeBox = false;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
+        MaximizeBox = true;
+        FormBorderStyle = FormBorderStyle.Sizable;
         ShowInTaskbar = false;
+        MinimumSize = new System.Drawing.Size(360, 500);
 
         _webView = new WebView2
         {
@@ -35,7 +37,11 @@ public class ChatWindow : Form
         };
         Controls.Add(_webView);
 
-        Load += async (_, _) => await InitializeWebView();
+        Load += async (_, _) =>
+        {
+            ApplyDarkTitlebar();
+            await InitializeWebView();
+        };
     }
 
     private async Task InitializeWebView()
@@ -114,6 +120,25 @@ public class ChatWindow : Form
         {
             _webView.CoreWebView2.Navigate($"file:///{uiPath.Replace('\\', '/')}");
         }
+    }
+
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    private void ApplyDarkTitlebar()
+    {
+        try
+        {
+            int darkMode = 1;
+            DwmSetWindowAttribute(Handle, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, ref darkMode, sizeof(int));
+            try
+            {
+                int mica = 2;
+                DwmSetWindowAttribute(Handle, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, ref mica, sizeof(int));
+            }
+            catch { /* Win11 22H2+ only */ }
+        }
+        catch { /* DWM not available */ }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)

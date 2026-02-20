@@ -20,6 +20,7 @@ public class ServerConnection : IDisposable
     private bool _isConnected;
     public bool IsConnected => _isConnected;
     public string LastSeenChat { get; set; } = "";
+    public string? LastDesktopItUsername { get; private set; }
 
     public event Action<string>? OnChatResponse;
     public event Action<string, string, bool>? OnDiagnosticRequest; // checkType, requestId, itInitiated
@@ -34,6 +35,7 @@ public class ServerConnection : IDisposable
     public event Action<string>? OnTerminalInput;          // input text
     public event Action<string>? OnTerminalStopRequest;    // requestId
     public event Action<string, bool>? OnDesktopStartRequest;  // requestId, itInitiated
+    public event Action<bool, string?>? OnAIStatusChanged;     // enabled, reason
     public event Action<double, double, string, string>? OnDesktopMouseInput; // x, y, button, action
     public event Action<ushort, string>? OnDesktopKeyboardInput; // vkCode, action
     public event Action<string>? OnDesktopStopRequest;    // requestId
@@ -214,6 +216,8 @@ public class ServerConnection : IDisposable
             var json = response.GetValue<JsonElement>();
             var requestId = json.GetProperty("requestId").GetString() ?? "";
             bool itInitiated = json.TryGetProperty("itInitiated", out var itProp) && itProp.ValueKind == JsonValueKind.True;
+            LastDesktopItUsername = json.TryGetProperty("it_username", out var usernameProp) && usernameProp.ValueKind == JsonValueKind.String
+                ? usernameProp.GetString() : null;
             Logger.Info($"Desktop start request (requestId: {requestId})");
             OnDesktopStartRequest?.Invoke(requestId, itInitiated);
         });
@@ -240,6 +244,8 @@ public class ServerConnection : IDisposable
         {
             var json = response.GetValue<JsonElement>();
             var requestId = json.GetProperty("requestId").GetString() ?? "";
+            LastDesktopItUsername = json.TryGetProperty("it_username", out var usernameProp) && usernameProp.ValueKind == JsonValueKind.String
+                ? usernameProp.GetString() : null;
             Logger.Info($"Desktop stop request (requestId: {requestId})");
             OnDesktopStopRequest?.Invoke(requestId);
         });
@@ -393,6 +399,16 @@ public class ServerConnection : IDisposable
                 Logger.Info($"Server URL changed to: {url}");
                 OnServerUrlChanged?.Invoke(url);
             }
+        });
+
+        _socket.On("ai_status", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            bool enabled = json.TryGetProperty("enabled", out var enabledProp) && enabledProp.ValueKind == JsonValueKind.True;
+            string? reason = json.TryGetProperty("reason", out var reasonProp) && reasonProp.ValueKind == JsonValueKind.String
+                ? reasonProp.GetString() : null;
+            Logger.Info($"AI status: enabled={enabled}, reason={reason}");
+            OnAIStatusChanged?.Invoke(enabled, reason);
         });
 
         try

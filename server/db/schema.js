@@ -440,6 +440,30 @@ function initDatabase(dbPath) {
     }
   }
 
+  // v0.17.0: AI disable columns on devices table
+  const aiDisableColumns = [
+    { name: 'ai_disabled', type: 'TEXT' },      // NULL | 'temporary' | 'permanent'
+    { name: 'ai_disabled_by', type: 'TEXT' },    // username or 'auto'
+  ];
+  for (const col of aiDisableColumns) {
+    try {
+      db.prepare(`ALTER TABLE devices ADD COLUMN ${col.name} ${col.type}`).run();
+    } catch (err) {
+      // Column already exists
+    }
+  }
+
+  // v0.17.0: Chat read cursors for fleet unread badges
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_read_cursors (
+      it_user_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      last_read_id INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY(it_user_id, device_id)
+    );
+  `);
+
   // v0.13.0: Feature wishlist — AI logs capability gaps
   db.exec(`
     CREATE TABLE IF NOT EXISTS feature_wishes (

@@ -30,6 +30,35 @@ router.get('/health/summary', requireIT, resolveClientScope, (req, res) => {
   res.json(fleet.getHealthSummary(req.clientScope));
 });
 
+router.get('/unread-counts', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const { clause, params } = scopeSQL(req.clientScope);
+  const userId = req.user?.id ? String(req.user.id) : 'admin';
+
+  try {
+    const rows = db.prepare(`
+      SELECT cm.device_id, COUNT(*) as unread_count
+      FROM chat_messages cm
+      WHERE cm.sender = 'user'
+        AND cm.id > COALESCE(
+          (SELECT crc.last_read_id FROM chat_read_cursors crc
+           WHERE crc.device_id = cm.device_id AND crc.it_user_id = ?), 0)
+        AND (cm.channel = 'user' OR cm.channel IS NULL)
+        AND cm.device_id IN (SELECT device_id FROM devices WHERE ${clause})
+      GROUP BY cm.device_id
+    `).all(userId, ...params);
+
+    const result = {};
+    for (const row of rows) {
+      result[row.device_id] = row.unread_count;
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('[Devices] Unread counts error:', err.message);
+    res.status(500).json({ error: 'Failed to get unread counts' });
+  }
+});
+
 router.get('/:id', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
   if (!isDeviceInScope(db, req.params.id, req.clientScope)) {

@@ -58,6 +58,7 @@ function setup(io, app) {
 
   // Store which devices each IT user is watching
   const watchers = new Map(); // socketId → Set of deviceIds
+  const deviceWatchers = new Map(); // deviceId → Map<socketId, { username }>
 
   itNs.on('connection', (socket) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
@@ -139,6 +140,19 @@ function setup(io, app) {
         watched.add(deviceId);
         console.log(`[IT] ${socket.id} watching device ${deviceId}`);
 
+        // Track IT presence for this device
+        const username = decoded?.username || decoded?.display_name || 'Admin';
+        if (!deviceWatchers.has(deviceId)) deviceWatchers.set(deviceId, new Map());
+        deviceWatchers.get(deviceId).set(socket.id, { username });
+
+        // Broadcast updated watcher list to all watchers of this device
+        const watcherList = Array.from(deviceWatchers.get(deviceId).values()).map(w => w.username);
+        for (const [sid, watched2] of watchers) {
+          if (watched2.has(deviceId)) {
+            itNs.to(sid).emit('device_watchers_changed', { deviceId, watchers: watcherList });
+          }
+        }
+
         // Send current device status
         const db = app.locals.db;
         try {
@@ -151,6 +165,28 @@ function setup(io, app) {
             "SELECT * FROM chat_messages WHERE device_id = ? AND (channel = 'user' OR channel IS NULL) ORDER BY id DESC LIMIT 50"
           ).all(deviceId).reverse();
           socket.emit('device_chat_history', { deviceId, messages });
+
+          // Update read cursor
+          const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+          if (lastMsg && lastMsg.id) {
+            const cursorUserId = decoded?.id ? String(decoded.id) : 'admin';
+            try {
+              db.prepare(`
+                INSERT INTO chat_read_cursors (it_user_id, device_id, last_read_id, updated_at)
+                VALUES (?, ?, ?, datetime('now'))
+                ON CONFLICT(it_user_id, device_id) DO UPDATE
+                SET last_read_id = MAX(chat_read_cursors.last_read_id, excluded.last_read_id), updated_at = excluded.updated_at
+              `).run(cursorUserId, deviceId, lastMsg.id);
+            } catch (err) {
+              console.error('[IT] Read cursor update error:', err.message);
+            }
+          }
+
+          // Send current watcher list
+          if (deviceWatchers.has(deviceId)) {
+            const watcherList2 = Array.from(deviceWatchers.get(deviceId).values()).map(w => w.username);
+            socket.emit('device_watchers', { deviceId, watchers: watcherList2 });
+          }
         } catch (err) {
           console.error('[IT] Watch device error:', err.message);
         }
@@ -161,6 +197,87 @@ function setup(io, app) {
     socket.on('unwatch_device', (data) => {
       const watched = watchers.get(socket.id);
       if (watched) watched.delete(data.deviceId);
+
+      // Remove from device watchers
+      const dwMap = deviceWatchers.get(data.deviceId);
+      if (dwMap) {
+        dwMap.delete(socket.id);
+        if (dwMap.size === 0) deviceWatchers.delete(data.deviceId);
+        // Broadcast updated watcher list
+        const watcherList = dwMap.size > 0 ? Array.from(dwMap.values()).map(w => w.username) : [];
+        for (const [sid, watched2] of watchers) {
+          if (watched2.has(data.deviceId)) {
+            itNs.to(sid).emit('device_watchers_changed', { deviceId: data.deviceId, watchers: watcherList });
+          }
+        }
+      }
+
+      // Clean up IT active chat if this socket set it
+      const activeEntry = app.locals.itActiveChatDevices?.get(data.deviceId);
+      if (activeEntry && activeEntry.socketId === socket.id) {
+        clearTimeout(activeEntry.timer);
+        app.locals.itActiveChatDevices.delete(data.deviceId);
+        // Re-check AI status for device
+        const connectedDevices = app.locals.connectedDevices;
+        if (connectedDevices) {
+          const deviceSocket = connectedDevices.get(data.deviceId);
+          if (deviceSocket) {
+            const db = app.locals.db;
+            const device = db.prepare('SELECT ai_disabled FROM devices WHERE device_id = ?').get(data.deviceId);
+            if (!device || !device.ai_disabled) {
+              deviceSocket.emit('ai_status', { enabled: true, reason: null });
+            }
+          }
+        }
+      }
+    });
+
+    // Set per-device AI mode
+    socket.on('set_device_ai', (data) => {
+      const { deviceId, mode } = data;
+      if (!deviceId || !['enabled', 'temporary', 'permanent'].includes(mode)) return;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      const db = app.locals.db;
+      const username = decoded?.username || 'admin';
+
+      try {
+        if (mode === 'enabled') {
+          db.prepare('UPDATE devices SET ai_disabled = NULL, ai_disabled_by = NULL WHERE device_id = ?').run(deviceId);
+        } else {
+          db.prepare('UPDATE devices SET ai_disabled = ?, ai_disabled_by = ? WHERE device_id = ?').run(mode, username, deviceId);
+        }
+
+        // Notify IT watchers
+        emitToScoped(itNs, db, deviceId, 'device_ai_changed', {
+          deviceId,
+          ai_disabled: mode === 'enabled' ? null : mode,
+          ai_disabled_by: mode === 'enabled' ? null : username
+        });
+
+        // Notify device client
+        const connectedDevices = app.locals.connectedDevices;
+        if (connectedDevices) {
+          const deviceSocket = connectedDevices.get(deviceId);
+          if (deviceSocket) {
+            const isEnabled = mode === 'enabled' && !app.locals.itActiveChatDevices?.has(deviceId);
+            deviceSocket.emit('ai_status', { enabled: isEnabled, reason: mode === 'enabled' ? null : 'per_device' });
+          }
+        }
+
+        // Audit log
+        try {
+          db.prepare("INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+            .run(username, 'ai_mode_changed', deviceId, JSON.stringify({ mode }));
+        } catch (err) {}
+      } catch (err) {
+        console.error('[IT] set_device_ai error:', err.message);
+        socket.emit('error_message', { message: 'Failed to update AI mode' });
+      }
     });
 
     // IT tech sends chat message to device user
@@ -203,6 +320,39 @@ function setup(io, app) {
         deviceId,
         message: { sender: 'it_tech', content }
       });
+
+      // Set transient auto-disable: AI pauses while IT is actively chatting
+      const existingEntry = app.locals.itActiveChatDevices?.get(deviceId);
+      if (existingEntry) clearTimeout(existingEntry.timer);
+
+      const timer = setTimeout(() => {
+        const entry = app.locals.itActiveChatDevices?.get(deviceId);
+        if (entry && entry.socketId === socket.id) {
+          app.locals.itActiveChatDevices.delete(deviceId);
+          // Notify device that AI is re-enabled (if not permanently disabled)
+          const connectedDevices = app.locals.connectedDevices;
+          if (connectedDevices) {
+            const deviceSocket = connectedDevices.get(deviceId);
+            if (deviceSocket) {
+              const device = db.prepare('SELECT ai_disabled FROM devices WHERE device_id = ?').get(deviceId);
+              if (!device || !device.ai_disabled) {
+                deviceSocket.emit('ai_status', { enabled: true, reason: null });
+              }
+            }
+          }
+        }
+      }, 5 * 60 * 1000); // 5 minutes
+
+      app.locals.itActiveChatDevices.set(deviceId, { socketId: socket.id, timer });
+
+      // Notify device that AI is paused
+      const connectedDevices2 = app.locals.connectedDevices;
+      if (connectedDevices2) {
+        const deviceSocket = connectedDevices2.get(deviceId);
+        if (deviceSocket) {
+          deviceSocket.emit('ai_status', { enabled: false, reason: 'it_active' });
+        }
+      }
     });
 
     // Request diagnostic from device
@@ -548,7 +698,7 @@ function setup(io, app) {
         const deviceSocket = connectedDevices.get(deviceId);
         if (deviceSocket) {
           const requestId = `desk-${Date.now()}`;
-          deviceSocket.emit('desktop_start_request', { requestId, itInitiated: true });
+          deviceSocket.emit('desktop_start_request', { requestId, itInitiated: true, it_username: decoded?.username || decoded?.display_name || 'IT Support' });
           socket.emit('desktop_requested', { deviceId, requestId });
         } else {
           socket.emit('error_message', { message: 'Device is not connected' });
@@ -631,7 +781,7 @@ function setup(io, app) {
         const deviceSocket = connectedDevices.get(deviceId);
         if (deviceSocket) {
           const requestId = `desk-${Date.now()}`;
-          deviceSocket.emit('desktop_stop_request', { requestId });
+          deviceSocket.emit('desktop_stop_request', { requestId, it_username: decoded?.username || decoded?.display_name || 'IT Support' });
           socket.emit('desktop_stop_requested', { deviceId, requestId });
         } else {
           socket.emit('error_message', { message: 'Device is not connected' });
@@ -1439,6 +1589,43 @@ function setup(io, app) {
       // Clean up rate limit entries for this socket
       for (const key of opRateLimits.keys()) {
         if (key.startsWith(`${socket.id}:`)) opRateLimits.delete(key);
+      }
+
+      // Clean up device watcher entries
+      for (const [deviceId, dwMap] of deviceWatchers) {
+        if (dwMap.has(socket.id)) {
+          dwMap.delete(socket.id);
+          if (dwMap.size === 0) {
+            deviceWatchers.delete(deviceId);
+          }
+          // Broadcast updated watcher list
+          const watcherList = dwMap.size > 0 ? Array.from(dwMap.values()).map(w => w.username) : [];
+          for (const [sid, watched2] of watchers) {
+            if (watched2.has(deviceId)) {
+              itNs.to(sid).emit('device_watchers_changed', { deviceId, watchers: watcherList });
+            }
+          }
+        }
+      }
+
+      // Clean up IT active chat entries
+      for (const [deviceId, entry] of app.locals.itActiveChatDevices || new Map()) {
+        if (entry.socketId === socket.id) {
+          clearTimeout(entry.timer);
+          app.locals.itActiveChatDevices.delete(deviceId);
+          // Notify device that AI may be re-enabled
+          const connectedDevices = app.locals.connectedDevices;
+          if (connectedDevices) {
+            const deviceSocket = connectedDevices.get(deviceId);
+            if (deviceSocket) {
+              const db = app.locals.db;
+              const device = db.prepare('SELECT ai_disabled FROM devices WHERE device_id = ?').get(deviceId);
+              if (!device || !device.ai_disabled) {
+                deviceSocket.emit('ai_status', { enabled: true, reason: null });
+              }
+            }
+          }
+        }
       }
     });
   });

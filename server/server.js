@@ -98,6 +98,7 @@ if (!fs.existsSync(dbDir)) {
 
 const db = initDatabase(path.join(dbDir, 'pocket-it.db'));
 app.locals.db = db;
+app.locals.itActiveChatDevices = new Map(); // deviceId → { socketId, timer }
 
 const LLMService = require('./services/llmService');
 const DiagnosticAI = require('./services/diagnosticAI');

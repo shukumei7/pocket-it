@@ -3,6 +3,31 @@ const deploymentScheduler = require('../services/deploymentScheduler');
 const { VALID_ACTIONS, ALLOWED_SERVICES } = require('../config/actionWhitelist');
 const bcrypt = require('bcryptjs');
 
+function checkAIDisabled(db, app, deviceId) {
+  // 1. Global AI disabled
+  try {
+    const globalSetting = db.prepare("SELECT value FROM server_settings WHERE key = 'ai.enabled'").get();
+    if (globalSetting && globalSetting.value === 'false') {
+      return { disabled: true, reason: 'global' };
+    }
+  } catch (err) { /* ignore */ }
+
+  // 2. Per-device AI disabled
+  try {
+    const device = db.prepare('SELECT ai_disabled FROM devices WHERE device_id = ?').get(deviceId);
+    if (device && device.ai_disabled) {
+      return { disabled: true, reason: 'per_device' };
+    }
+  } catch (err) { /* ignore */ }
+
+  // 3. IT actively chatting with this device
+  if (app.locals.itActiveChatDevices && app.locals.itActiveChatDevices.has(deviceId)) {
+    return { disabled: true, reason: 'it_active' };
+  }
+
+  return { disabled: false, reason: null };
+}
+
 function setup(io, app) {
   const agentNs = io.of('/agent');
   const itNs = io.of('/it');
@@ -143,6 +168,10 @@ function setup(io, app) {
       socket.emit('agent_info', { agentName });
     }
 
+    // Send AI status to device
+    const aiCheck = checkAIDisabled(db, app, deviceId);
+    socket.emit('ai_status', { enabled: !aiCheck.disabled, reason: aiCheck.reason });
+
     // Send recent chat history on reconnect (only unseen messages)
     try {
       let recentMessages;
@@ -277,6 +306,39 @@ function setup(io, app) {
           text: 'Sorry, AI service is not available right now.',
           sender: 'ai',
           action: null
+        });
+        return;
+      }
+
+      // Check if AI is disabled for this device
+      const aiDisableCheck = checkAIDisabled(db, app, deviceId);
+      if (aiDisableCheck.disabled) {
+        // Still save user message
+        try {
+          db.prepare(
+            "INSERT INTO chat_messages (device_id, sender, content, message_type) VALUES (?, ?, ?, ?)"
+          ).run(deviceId, 'user', content, 'text');
+        } catch (err) {
+          console.error('[Agent] Chat save error:', err.message);
+        }
+
+        // Send system response to device
+        const disabledMsg = aiDisableCheck.reason === 'it_active'
+          ? 'An IT technician is currently assisting you. Please hold while they review your message.'
+          : "We're connecting you with a live IT technician. Please hold tight — someone will be with you shortly.";
+
+        socket.emit('chat_response', {
+          text: disabledMsg,
+          sender: 'system',
+          ai_disabled: true,
+          action: null
+        });
+
+        // Broadcast to IT watchers so they see the user's message
+        const itNs = io.of('/it');
+        emitToScoped(itNs, db, deviceId, 'device_chat_update', {
+          deviceId,
+          message: { sender: 'user', content }
         });
         return;
       }

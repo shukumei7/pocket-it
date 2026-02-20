@@ -1,0 +1,26 @@
+services:
+  pocket-it:
+    build: .
+    container_name: pocket-it
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - ./data/db:/app/server/db
+      - ./data/updates:/app/server/updates
+    environment:
+      - POCKET_IT_JWT_SECRET=${POCKET_IT_JWT_SECRET}
+      - POCKET_IT_PORT=9100
+      - POCKET_IT_DOCKER=true
+      # LLM provider config — uncomment the provider you use:
+      # - POCKET_IT_LLM_PROVIDER=ollama
+      # - POCKET_IT_OLLAMA_URL=http://host.docker.internal:11434
+      # - POCKET_IT_LLM_PROVIDER=openai
+      # - POCKET_IT_OPENAI_API_KEY=${POCKET_IT_OPENAI_API_KEY}
+      # - POCKET_IT_LLM_PROVIDER=anthropic
+      # - POCKET_IT_ANTHROPIC_API_KEY=${POCKET_IT_ANTHROPIC_API_KEY}
+      # - POCKET_IT_LLM_PROVIDER=gemini
+      # - POCKET_IT_GEMINI_API_KEY=${POCKET_IT_GEMINI_API_KEY}
+      # Optional security:
+      # - POCKET_IT_ENCRYPTION_SALT=${POCKET_IT_ENCRYPTION_SALT}
+      # - POCKET_IT_CORS_ORIGINS=https://your-domain.com

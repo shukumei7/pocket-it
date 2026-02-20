@@ -1,0 +1,16 @@
+.git
+client/
+installer/
+releases/
+node_modules/
+server/node_modules/
+server/db/*.db
+server/db/*.db-shm
+server/db/*.db-wal
+server/updates/*.zip
+server/__tests__/
+server/test-*.db
+*.md
+*.zip
+.env
+test-results/

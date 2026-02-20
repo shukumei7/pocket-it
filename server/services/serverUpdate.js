@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
+const IS_DOCKER = process.env.POCKET_IT_DOCKER === 'true';
+
 // Project root is 2 levels up from services/
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 const RELEASES_DIR = path.join(PROJECT_ROOT, 'releases');
@@ -13,6 +15,9 @@ const UPDATES_DIR = path.join(__dirname, '..', 'updates');
  * Returns: { available, currentCommit, remoteCommit, commitsBehind, summary[] }
  */
 async function checkForUpdates() {
+  if (IS_DOCKER) {
+    throw new Error('Server update check is not available in Docker mode');
+  }
   try {
     // git fetch origin main
     execSync('git fetch origin main', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 30000 });
@@ -45,6 +50,9 @@ async function checkForUpdates() {
  * Exits with code 75 to signal wrapper.js to restart
  */
 async function applyUpdate(db, io) {
+  if (IS_DOCKER) {
+    throw new Error('Server self-update is not available in Docker mode');
+  }
   const itNs = io ? io.of('/it') : null;
   const emit = (step, status, detail) => {
     if (itNs) itNs.emit('server_update_progress', { step, status, detail });
@@ -207,6 +215,9 @@ function getServerVersion() {
  * getCurrentCommit() — get current git HEAD short hash
  */
 function getCurrentCommit() {
+  if (IS_DOCKER) {
+    return process.env.POCKET_IT_VERSION || 'docker';
+  }
   try {
     return execSync('git rev-parse --short HEAD', { cwd: PROJECT_ROOT, stdio: 'pipe' }).toString().trim();
   } catch {
@@ -220,6 +231,9 @@ function getCurrentCommit() {
  * Returns: { updated: boolean, version?, reason? }
  */
 async function checkClientRelease(db) {
+  if (IS_DOCKER) {
+    return { updated: false, reason: 'Git-based client release check disabled in Docker mode' };
+  }
   try {
     execSync('git fetch origin main', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 30000 });
 

@@ -8,6 +8,8 @@ const { checkForUpdates, applyUpdate, checkClientRelease, getServerVersion, getC
 
 const router = express.Router();
 
+const IS_DOCKER = process.env.POCKET_IT_DOCKER === 'true';
+
 // Store uploads in server/updates/
 const uploadsDir = path.join(__dirname, '..', 'updates');
 if (!fs.existsSync(uploadsDir)) {
@@ -273,6 +275,9 @@ router.get('/fleet-versions', requireIT, (req, res) => {
 
 // POST /api/updates/publish-local — auto-register from build output (localhost only)
 router.post('/publish-local', async (req, res) => {
+  if (IS_DOCKER) {
+    return res.status(501).json({ error: 'Local publishing is not available in Docker mode. Upload client builds via the upload endpoint.' });
+  }
   // Localhost only
   const ip = req.ip || req.connection.remoteAddress || '';
   const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
@@ -376,6 +381,9 @@ router.post('/publish-local', async (req, res) => {
 
 // GET /api/updates/client-check — check git for new client release (IT auth)
 router.get('/client-check', requireIT, async (req, res) => {
+  if (IS_DOCKER) {
+    return res.status(501).json({ error: 'Git-based client release check is not available in Docker mode. Upload client builds via the upload endpoint.' });
+  }
   try {
     const db = req.app.locals.db;
     const result = await checkClientRelease(db);
@@ -396,6 +404,9 @@ router.get('/client-check', requireIT, async (req, res) => {
 
 // GET /api/updates/server-check — check if server updates available via git (IT auth)
 router.get('/server-check', requireIT, async (req, res) => {
+  if (IS_DOCKER) {
+    return res.status(501).json({ error: 'Server update check is not available in Docker mode. Update by pulling a new container image.' });
+  }
   try {
     const result = await checkForUpdates();
     result.serverVersion = getServerVersion();
@@ -408,6 +419,9 @@ router.get('/server-check', requireIT, async (req, res) => {
 
 // POST /api/updates/server-apply — pull server update from git (IT auth)
 router.post('/server-apply', requireIT, async (req, res) => {
+  if (IS_DOCKER) {
+    return res.status(501).json({ error: 'Server self-update is not available in Docker mode. Update by pulling a new container image.' });
+  }
   try {
     const db = req.app.locals.db;
     const io = req.app.locals.io;

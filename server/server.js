@@ -240,17 +240,7 @@ schedulerService.start();
 const deploymentScheduler = require('./services/deploymentScheduler');
 deploymentScheduler.start(db, io);
 
-// Auto-register release ZIP from git (if present)
-const { registerReleaseZip } = require('./services/serverUpdate');
-registerReleaseZip(db).then(result => {
-  if (result.registered) {
-    console.log(`[Updates] Registered release v${result.version} from git`);
-  }
-}).catch(err => {
-  console.error('[Updates] Release registration error:', err.message);
-});
-// Auto-check git for new client builds every 24 hours
-const { checkClientRelease, isNewerVersion } = require('./services/serverUpdate');
+const { isNewerVersion } = require('./services/serverUpdate');
 
 function pushUpdateToOutdatedDevices(version) {
   const connectedDevices = app.locals.connectedDevices;
@@ -267,14 +257,28 @@ function pushUpdateToOutdatedDevices(version) {
 }
 app.locals.pushUpdateToOutdatedDevices = pushUpdateToOutdatedDevices;
 
-setInterval(async () => {
-  try {
-    const result = await checkClientRelease(db);
-    if (result.updated) {
-      pushUpdateToOutdatedDevices(result.version);
+if (process.env.POCKET_IT_DOCKER !== 'true') {
+  // Auto-register release ZIP from git (if present)
+  const { registerReleaseZip, checkClientRelease } = require('./services/serverUpdate');
+  registerReleaseZip(db).then(result => {
+    if (result.registered) {
+      console.log(`[Updates] Registered release v${result.version} from git`);
     }
-  } catch (err) { /* silent */ }
-}, 24 * 60 * 60 * 1000);
+  }).catch(err => {
+    console.error('[Updates] Release registration error:', err.message);
+  });
+  // Auto-check git for new client builds every 24 hours
+  setInterval(async () => {
+    try {
+      const result = await checkClientRelease(db);
+      if (result.updated) {
+        pushUpdateToOutdatedDevices(result.version);
+      }
+    } catch (err) { /* silent */ }
+  }, 24 * 60 * 60 * 1000);
+} else {
+  console.log('[Docker] Git-based update features disabled');
+}
 
 // Scheduler needs access to connected devices map
 io._connectedDevices = app.locals.connectedDevices;

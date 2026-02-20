@@ -160,9 +160,20 @@ class AlertService {
   }
 
   resolveAlert(alertId) {
+    // Look up alert before resolving to get the consecutive hits key
+    const alert = this.db.prepare('SELECT * FROM alerts WHERE id = ?').get(alertId);
+
     this.db.prepare(
       "UPDATE alerts SET status = 'resolved', resolved_at = datetime('now') WHERE id = ? AND status IN ('active', 'acknowledged')"
     ).run(alertId);
+
+    // Clear in-memory consecutive counter so the next diagnostic check
+    // starts fresh and requires consecutive_required hits before re-alerting
+    if (alert && alert.threshold_id) {
+      const key = `${alert.device_id}:${alert.threshold_id}`;
+      this.consecutiveHits.delete(key);
+    }
+
     return this.db.prepare('SELECT * FROM alerts WHERE id = ?').get(alertId);
   }
 

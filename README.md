@@ -15,6 +15,7 @@ Additional capabilities:
 - Remote device management: script execution, file browser, remote desktop
 - Alert policies, scheduled reports, and deployment management
 - Multi-tenant client scoping with role-based access control (superadmin, admin, technician, viewer)
+- Per-client logbook notes and custom key-value fields; scripts can auto-populate client fields via the `POCKET_IT_CLIENT_FIELDS:` output marker
 
 ## Architecture
 

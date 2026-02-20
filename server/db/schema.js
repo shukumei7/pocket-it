@@ -528,6 +528,38 @@ function initDatabase(dbPath) {
     CREATE INDEX IF NOT EXISTS idx_dcf_device ON device_custom_fields(device_id);
   `);
 
+  // v0.20.0 — Client notes + custom fields
+  const hasClientNotes = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='client_notes'").get();
+  if (!hasClientNotes) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS client_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL,
+        author TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_client_notes_client ON client_notes(client_id);
+    `);
+    console.log('[Schema] v0.20.0: Created client_notes table');
+  }
+
+  const hasClientCustomFields = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='client_custom_fields'").get();
+  if (!hasClientCustomFields) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS client_custom_fields (
+        client_id INTEGER NOT NULL,
+        field_name TEXT NOT NULL,
+        field_value TEXT,
+        updated_at TEXT DEFAULT (datetime('now')),
+        updated_by TEXT NOT NULL,
+        PRIMARY KEY (client_id, field_name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_ccf_client ON client_custom_fields(client_id);
+    `);
+    console.log('[Schema] v0.20.0: Created client_custom_fields table');
+  }
+
   // v0.15.0: superadmin role — Note: SQLite does not support ALTER TABLE to modify CHECK
   // constraints on existing columns. The CREATE TABLE above now includes 'superadmin' so
   // new databases get the full constraint. Existing databases keep the old constraint but

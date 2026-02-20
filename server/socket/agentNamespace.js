@@ -1092,6 +1092,26 @@ function setup(io, app) {
         }
       }
 
+      // Parse POCKET_IT_CLIENT_FIELDS markers from script output
+      const clientFieldLines = (data.output || '').split('\n').filter(l => l.trim().startsWith('POCKET_IT_CLIENT_FIELDS:'));
+      if (clientFieldLines.length > 0 && socket.deviceId) {
+        const device = db.prepare('SELECT client_id FROM devices WHERE device_id = ?').get(socket.deviceId);
+        if (device && device.client_id) {
+          const upsert = db.prepare("INSERT INTO client_custom_fields (client_id, field_name, field_value, updated_at, updated_by) VALUES (?, ?, ?, datetime('now'), 'script') ON CONFLICT(client_id, field_name) DO UPDATE SET field_value = excluded.field_value, updated_at = excluded.updated_at, updated_by = 'script'");
+          for (const line of clientFieldLines) {
+            try {
+              const jsonStr = line.trim().substring('POCKET_IT_CLIENT_FIELDS:'.length);
+              const fields = JSON.parse(jsonStr);
+              for (const [name, value] of Object.entries(fields)) {
+                if (!name || name.length > 100) continue;
+                const val = value !== null && value !== undefined ? String(value).slice(0, 2000) : '';
+                upsert.run(device.client_id, name, val);
+              }
+            } catch (e) { /* ignore malformed JSON */ }
+          }
+        }
+      }
+
       // Check if this is an AI-initiated script result — feed back to AI
       if (data.requestId && pendingAIScripts.has(deviceId)) {
         const pendingSet = pendingAIScripts.get(deviceId);

@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.18.0
+Version: 0.20.0
 
 ## System Architecture
 
@@ -50,13 +50,14 @@ Version: 0.18.0
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  SQLite Database (better-sqlite3)                            │   │
-│  │  20 tables: devices, enrollment_tokens, it_users,            │   │
+│  │  22 tables: devices, enrollment_tokens, it_users,            │   │
 │  │  chat_messages, tickets, ticket_comments,                    │   │
 │  │  diagnostic_results, audit_log, alert_thresholds, alerts,   │   │
 │  │  notification_channels, auto_remediation_policies,           │   │
 │  │  script_library, report_schedules, report_history,           │   │
 │  │  clients, user_client_assignments, update_packages,          │   │
-│  │  chat_read_cursors, user_preferences                         │   │
+│  │  chat_read_cursors, user_preferences,                        │   │
+│  │  client_notes, client_custom_fields                          │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -1098,6 +1099,60 @@ ALTER TABLE script_library ADD COLUMN ai_tool INTEGER DEFAULT 0;
 - `0` (default) — script is only available for manual IT-initiated execution
 - `1` — script is included in the AI system prompt as an available action; AI may emit `[ACTION:RUN_SCRIPT:<id>]` referencing this script
 
+### Table: `client_notes` (v0.20.0)
+
+Logbook-style notes attached to a client record. Each note is an immutable timestamped entry; notes can be deleted but not edited.
+
+```sql
+CREATE TABLE client_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,                       -- Note body, max 5,000 characters
+  created_by TEXT,                             -- Username of the IT user who added the note
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX idx_client_notes_client_id ON client_notes(client_id);
+```
+
+**Indexes:**
+- Index on `client_id` for efficient per-client note listing
+
+**Behavior:**
+- `GET /api/clients/:id/notes` returns notes ordered by `created_at DESC`, max 50 rows
+- `POST /api/clients/:id/notes` inserts a row; `created_by` is the authenticated IT user's username
+- `DELETE /api/clients/:id/notes/:noteId` removes a single note; returns 404 if the note does not belong to the client
+- Content length is validated server-side (max 5,000 characters); empty content returns 400
+- Rows cascade-delete when the owning client is deleted (`ON DELETE CASCADE`)
+
+### Table: `client_custom_fields` (v0.20.0)
+
+Per-client key-value metadata store. Allows IT staff to record arbitrary structured data for a client (e.g. VPN provider, Active Directory domain, contract tier).
+
+```sql
+CREATE TABLE client_custom_fields (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,                           -- Field name, e.g. "VPN Provider"
+  value TEXT NOT NULL,                         -- Field value, e.g. "Tailscale"
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(client_id, key)
+);
+
+CREATE INDEX idx_client_custom_fields_client_id ON client_custom_fields(client_id);
+```
+
+**Indexes:**
+- Unique constraint on `(client_id, key)` — one value per key per client; `PUT` uses `INSERT OR REPLACE`
+- Index on `client_id` for per-client field listing
+
+**Behavior:**
+- `GET /api/clients/:id/custom-fields` returns all fields for the client as a flat `{ key: value }` object
+- `PUT /api/clients/:id/custom-fields` accepts `{ fields: { key: value, ... } }`; each key is upserted via `INSERT OR REPLACE`; empty `fields` object returns 400
+- `DELETE /api/clients/:id/custom-fields/:fieldName` removes a single field by name; returns 404 if not found
+- Rows cascade-delete when the owning client is deleted (`ON DELETE CASCADE`)
+- The `POCKET_IT_CLIENT_FIELDS:` script output marker writes to this table automatically (see Scripting Integration below)
+
 ## AI Script Toolbelt (v0.18.0)
 
 Allows the AI assistant to suggest running pre-approved scripts from the script library on the device user's machine, with mandatory user consent before execution.
@@ -1162,6 +1217,114 @@ A new "Scripts" page under the Admin dropdown provides full CRUD management of t
 | `POST` | `/api/scripts` | IT | Create script (name, description, content, category, requires_elevation, timeout, ai_tool) |
 | `PATCH` | `/api/scripts/:id` | IT | Update allowed fields including `ai_tool` |
 | `DELETE` | `/api/scripts/:id` | IT | Delete script |
+
+## Client Notes & Custom Fields (v0.20.0)
+
+Per-client logbook notes and arbitrary key-value metadata, accessible from the Client Management page and writable by scripts via the `POCKET_IT_CLIENT_FIELDS:` output marker.
+
+### Client Notes API
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| `GET` | `/api/clients/:id/notes` | IT | List notes for a client, newest first (max 50) |
+| `POST` | `/api/clients/:id/notes` | IT | Add a note; body: `{ content }` (max 5,000 chars) |
+| `DELETE` | `/api/clients/:id/notes/:noteId` | IT | Delete a specific note |
+
+**POST body:**
+```json
+{ "content": "Moved domain controller to new hardware on 2026-02-20." }
+```
+
+**GET response:**
+```json
+[
+  {
+    "id": 7,
+    "client_id": 2,
+    "content": "Moved domain controller to new hardware on 2026-02-20.",
+    "created_by": "admin",
+    "created_at": "2026-02-20T09:15:00.000Z"
+  }
+]
+```
+
+**Errors:**
+- `400` — Missing or empty `content`, or content exceeds 5,000 characters
+- `403` — Admin role required for write operations
+- `404` — Client or note not found
+
+### Client Custom Fields API
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| `GET` | `/api/clients/:id/custom-fields` | IT | List all custom fields as `{ key: value }` |
+| `PUT` | `/api/clients/:id/custom-fields` | IT/admin | Upsert fields; body: `{ fields: { key: value } }` |
+| `DELETE` | `/api/clients/:id/custom-fields/:fieldName` | IT/admin | Delete a single field by name |
+
+**PUT body:**
+```json
+{
+  "fields": {
+    "VPN Provider": "Tailscale",
+    "AD Domain": "corp.acme.local",
+    "Contract Tier": "Enterprise"
+  }
+}
+```
+
+**GET response:**
+```json
+{
+  "VPN Provider": "Tailscale",
+  "AD Domain": "corp.acme.local",
+  "Contract Tier": "Enterprise"
+}
+```
+
+**Errors:**
+- `400` — `fields` is missing or empty
+- `403` — Admin role required for write operations
+- `404` — Client or field not found
+
+### `POCKET_IT_CLIENT_FIELDS:` Script Output Marker
+
+Scripts in the library can automatically upsert client-level custom fields by printing a structured marker line to stdout. `agentNamespace.js` parses each line of `script_result` output after execution and looks for lines matching:
+
+```
+POCKET_IT_CLIENT_FIELDS: <JSON object>
+```
+
+**Example PowerShell:**
+```powershell
+$vpn = (Get-ItemProperty "HKLM:\SOFTWARE\MyVPN" -ErrorAction SilentlyContinue).Provider
+$adDomain = $env:USERDNSDOMAIN
+
+Write-Output "POCKET_IT_CLIENT_FIELDS: $('{""VPN Provider"":""' + $vpn + '"",""AD Domain"":""' + $adDomain + '""}')"
+```
+
+**Parsing rules:**
+- The marker must appear at the start of a line (trimmed)
+- The JSON value after the colon must be a flat object (string values only); nested objects are ignored
+- Invalid JSON on a marker line is silently skipped with a server-side warning log
+- Fields are upserted to the `client_custom_fields` table for the device's owning client using `INSERT OR REPLACE`
+- Only runs when the device has a non-null `client_id`
+
+### Scripting Integration Guide (Script Library Page)
+
+The Script Library dashboard page includes an inline collapsible guide explaining all available output markers:
+
+- `POCKET_IT_CLIENT_FIELDS: {...}` — upsert client custom fields (described above)
+- Copy-ready PowerShell examples for each marker
+- Notes on which markers require the device to be assigned to a client
+
+### Client Detail Panel (Client Management Page)
+
+The Clients Management admin page gains an expandable detail panel for each client row:
+
+- **Notes tab** — chronological list of logbook notes with "Add Note" textarea and per-note delete button
+- **Custom Fields tab** — key-value editor: add new field (key + value inputs), delete existing fields by name, inline display of current fields
+- Panel opens by clicking a row expand toggle; only one panel is open at a time
+- All reads and writes use the REST endpoints above; no page reload required
 
 ## Move Device to Client (v0.18.0)
 
@@ -2262,6 +2425,13 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut (manual alternative)
 
 ## Version History
+
+**0.20.0**
+- Client Notes: new `client_notes (id, client_id, content, created_by, created_at)` table; `GET/POST/DELETE /api/clients/:id/notes` endpoints; notes displayed newest-first (max 50); content capped at 5,000 characters; cascade-delete on client removal
+- Client Custom Fields: new `client_custom_fields (id, client_id, key, value, updated_at, UNIQUE(client_id, key))` table; `GET/PUT/DELETE /api/clients/:id/custom-fields` endpoints; upsert semantics via `INSERT OR REPLACE`; cascade-delete on client removal
+- `POCKET_IT_CLIENT_FIELDS:` script output marker: `agentNamespace.js` parses marker lines from `script_result` output and upserts fields to the device's owning client's `client_custom_fields`; invalid JSON silently skipped with server-side warning
+- Scripting Integration Guide on Script Library page: inline collapsible guide with copy-ready PowerShell examples for all output markers
+- Client detail panel on Client Management page: expandable per-client panel with Notes tab and Custom Fields tab; add/delete notes inline; key-value field editor
 
 **Unreleased**
 - Google Gemini LLM Provider: `_geminiChat()` in `llmService.js` using Gemini REST API with `systemInstruction`, multimodal `inlineData` for vision; env vars `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` (default: `gemini-2.0-flash`); settings keys `llm.gemini.apiKey` and `llm.gemini.model`; `'gemini'` added to `supportsVision` list in `diagnosticAI.js`; "Google Gemini" option in dashboard provider dropdown with API key and model inputs

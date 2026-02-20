@@ -3787,6 +3787,7 @@
                         <td>${escapeHtml(c.contact_name || '')}${c.contact_email ? '<br><span style="font-size:11px;color:#8f98a0;">' + escapeHtml(c.contact_email) + '</span>' : ''}</td>
                         <td style="font-size:12px;color:#8f98a0;">${c.created_at ? new Date(c.created_at).toLocaleDateString() : ''}</td>
                         <td>
+                            <button class="diag-btn" data-action="client-detail" data-id="${c.id}" data-name="${escapeHtml(c.name)}" style="font-size:11px;padding:4px 8px;">Details</button>
                             <button class="diag-btn" data-action="client-devices" data-id="${c.id}" style="font-size:11px;padding:4px 8px;">Devices</button>
                             <button class="diag-btn" data-action="client-users" data-id="${c.id}" data-name="${escapeHtml(c.name)}" style="font-size:11px;padding:4px 8px;margin-left:4px;">Users</button>
                             <button class="diag-btn" data-action="client-installer" data-id="${c.id}" style="font-size:11px;padding:4px 8px;margin-left:4px;">Installer</button>
@@ -3920,6 +3921,146 @@
                     manageClientUsers(clientId, document.getElementById('client-users-title').textContent);
                 }
             } catch (err) { console.error('Unassign error:', err); }
+        }
+
+        // === Client Detail Panel (Notes + Custom Fields) ===
+        let activeClientDetailId = null;
+
+        async function openClientDetail(clientId, clientName) {
+            activeClientDetailId = clientId;
+            document.getElementById('client-detail-title').textContent = clientName;
+            document.getElementById('client-detail-panel').style.display = '';
+            document.getElementById('client-field-add-form').style.display = 'none';
+            await Promise.all([loadClientCustomFields(clientId), loadClientNotes(clientId)]);
+            document.getElementById('client-detail-panel').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function closeClientDetail() {
+            activeClientDetailId = null;
+            document.getElementById('client-detail-panel').style.display = 'none';
+        }
+
+        async function loadClientCustomFields(clientId) {
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${clientId}/custom-fields`);
+                const fields = await res.json();
+                const container = document.getElementById('client-custom-fields-list');
+                if (fields.length === 0) {
+                    container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">No custom fields.</div>';
+                    return;
+                }
+                container.innerHTML = fields.map(f => `
+                    <div style="background:#0f1923; border:1px solid #3d5a2e; border-left:3px solid #3d5a2e; border-radius:6px; padding:10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:start;">
+                            <div>
+                                <div style="font-size:15px; font-weight:600; color:#c7d5e0;">${escapeHtml(f.field_value || '')}</div>
+                                <div style="font-size:11px; color:#8f98a0; margin-top:2px;">${escapeHtml(f.field_name)}</div>
+                                <div style="font-size:10px; color:#556b7a; margin-top:2px;">by ${escapeHtml(f.updated_by)} &middot; ${f.updated_at ? new Date(f.updated_at + 'Z').toLocaleString() : ''}</div>
+                            </div>
+                            <button class="diag-btn" data-action="delete-client-field" data-field="${escapeHtml(f.field_name)}" style="font-size:10px; padding:2px 6px; background:#5c2020; color:#ef5350;">&times;</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load client custom fields:', err);
+            }
+        }
+
+        async function saveClientCustomField() {
+            if (!activeClientDetailId) return;
+            const nameEl = document.getElementById('client-field-name');
+            const valueEl = document.getElementById('client-field-value');
+            const name = nameEl.value.trim();
+            const value = valueEl.value.trim();
+            if (!name) return showToast('Field name is required');
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${activeClientDetailId}/custom-fields`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fields: { [name]: value } })
+                });
+                if (res.ok) {
+                    nameEl.value = '';
+                    valueEl.value = '';
+                    document.getElementById('client-field-add-form').style.display = 'none';
+                    await loadClientCustomFields(activeClientDetailId);
+                    showToast('Field saved');
+                } else {
+                    const data = await res.json();
+                    showToast(data.error || 'Failed to save field');
+                }
+            } catch (err) { showToast('Error: ' + err.message); }
+        }
+
+        async function deleteClientCustomField(fieldName) {
+            if (!activeClientDetailId) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${activeClientDetailId}/custom-fields/${encodeURIComponent(fieldName)}`, { method: 'DELETE' });
+                if (res.ok) {
+                    await loadClientCustomFields(activeClientDetailId);
+                    showToast('Field deleted');
+                }
+            } catch (err) { showToast('Error: ' + err.message); }
+        }
+
+        async function loadClientNotes(clientId) {
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${clientId}/notes`);
+                const notes = await res.json();
+                document.getElementById('client-notes-count').textContent = notes.length > 0 ? `(${notes.length})` : '';
+                const container = document.getElementById('client-notes-list');
+                if (notes.length === 0) {
+                    container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">No notes yet.</div>';
+                    return;
+                }
+                container.innerHTML = notes.map(n => `
+                    <div style="background:#0f1923; border:1px solid #2a475e; border-radius:6px; padding:10px; margin-bottom:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:4px;">
+                            <span style="font-size:12px; color:#66c0f4; font-weight:600;">${escapeHtml(n.author)}</span>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:11px; color:#556b7a;">${n.created_at ? new Date(n.created_at + 'Z').toLocaleString() : ''}</span>
+                                <button class="diag-btn" data-action="delete-client-note" data-note-id="${n.id}" style="font-size:10px; padding:2px 6px; background:#5c2020; color:#ef5350;">&times;</button>
+                            </div>
+                        </div>
+                        <div style="font-size:13px; color:#c7d5e0; white-space:pre-wrap;">${escapeHtml(n.content)}</div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load client notes:', err);
+            }
+        }
+
+        async function addClientNote() {
+            if (!activeClientDetailId) return;
+            const input = document.getElementById('client-note-input');
+            const content = input.value.trim();
+            if (!content) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${activeClientDetailId}/notes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                if (res.ok) {
+                    input.value = '';
+                    await loadClientNotes(activeClientDetailId);
+                    showToast('Note added');
+                } else {
+                    const data = await res.json();
+                    showToast(data.error || 'Failed to add note');
+                }
+            } catch (err) { showToast('Error: ' + err.message); }
+        }
+
+        async function deleteClientNote(noteId) {
+            if (!activeClientDetailId) return;
+            try {
+                const res = await fetchWithAuth(`${API}/api/clients/${activeClientDetailId}/notes/${noteId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    await loadClientNotes(activeClientDetailId);
+                    showToast('Note deleted');
+                }
+            } catch (err) { showToast('Error: ' + err.message); }
         }
 
         async function downloadInstaller(clientId, btn) {
@@ -5330,6 +5471,18 @@
             // Clients
             document.getElementById('btn-create-client').addEventListener('click', createClient);
             document.getElementById('btn-assign-user').addEventListener('click', assignUserToClient);
+            document.getElementById('btn-close-client-detail')?.addEventListener('click', closeClientDetail);
+            document.getElementById('btn-add-client-field')?.addEventListener('click', () => {
+                document.getElementById('client-field-add-form').style.display = '';
+            });
+            document.getElementById('btn-cancel-client-field')?.addEventListener('click', () => {
+                document.getElementById('client-field-add-form').style.display = 'none';
+            });
+            document.getElementById('btn-save-client-field')?.addEventListener('click', saveClientCustomField);
+            document.getElementById('btn-add-client-note')?.addEventListener('click', addClientNote);
+            document.getElementById('client-note-input')?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') addClientNote();
+            });
 
             // Reports
             document.getElementById('btn-export-csv').addEventListener('click', () => exportReport('csv'));
@@ -5594,10 +5747,21 @@
             const btn = e.target.closest('[data-action]');
             if (!btn) return;
             const id = parseInt(btn.dataset.id, 10);
-            if (btn.dataset.action === 'client-devices') viewClientDevices(id);
+            if (btn.dataset.action === 'client-detail') openClientDetail(id, btn.dataset.name);
+            else if (btn.dataset.action === 'client-devices') viewClientDevices(id);
             else if (btn.dataset.action === 'client-users') manageClientUsers(id, btn.dataset.name);
             else if (btn.dataset.action === 'client-installer') downloadInstaller(id, btn);
             else if (btn.dataset.action === 'client-delete') deleteClient(id);
+        });
+
+        // Client detail panel — custom fields and notes
+        document.getElementById('client-custom-fields-list').addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-action="delete-client-field"]');
+            if (btn) deleteClientCustomField(btn.dataset.field);
+        });
+        document.getElementById('client-notes-list').addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-action="delete-client-note"]');
+            if (btn) deleteClientNote(parseInt(btn.dataset.noteId, 10));
         });
 
         // Client users panel — unassign user

@@ -107,6 +107,8 @@ router.delete('/:id', requireAdmin, (req, res) => {
   }
 
   try {
+    db.prepare('DELETE FROM client_notes WHERE client_id = ?').run(clientId);
+    db.prepare('DELETE FROM client_custom_fields WHERE client_id = ?').run(clientId);
     db.prepare('DELETE FROM enrollment_tokens WHERE client_id = ?').run(clientId);
     db.prepare('DELETE FROM user_client_assignments WHERE client_id = ?').run(clientId);
     db.prepare('DELETE FROM clients WHERE id = ?').run(clientId);
@@ -168,6 +170,100 @@ router.delete('/:id/users/:userId', requireAdmin, (req, res) => {
 
   const result = db.prepare('DELETE FROM user_client_assignments WHERE user_id = ? AND client_id = ?').run(userId, clientId);
   if (result.changes === 0) return res.status(404).json({ error: 'Assignment not found' });
+  res.json({ success: true });
+});
+
+// === Client Notes ===
+
+// List notes for a client (newest first, max 50)
+router.get('/:id/notes', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const clientId = parseInt(req.params.id);
+  if (!req.clientScope.isAdmin && (!req.clientScope.clientIds || !req.clientScope.clientIds.includes(clientId))) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const notes = db.prepare('SELECT * FROM client_notes WHERE client_id = ? ORDER BY created_at DESC LIMIT 50').all(clientId);
+  res.json(notes);
+});
+
+// Add note to client
+router.post('/:id/notes', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const clientId = parseInt(req.params.id);
+  if (!req.clientScope.isAdmin && (!req.clientScope.clientIds || !req.clientScope.clientIds.includes(clientId))) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const { content } = req.body;
+  if (!content || !content.trim()) return res.status(400).json({ error: 'Note content is required' });
+  if (content.length > 5000) return res.status(400).json({ error: 'Note too long (max 5000 chars)' });
+  const author = req.user?.username || 'system';
+  const result = db.prepare("INSERT INTO client_notes (client_id, author, content, created_at) VALUES (?, ?, ?, datetime('now'))").run(clientId, author, content.trim());
+  const note = db.prepare('SELECT * FROM client_notes WHERE id = ?').get(result.lastInsertRowid);
+  res.status(201).json(note);
+});
+
+// Delete note
+router.delete('/:id/notes/:noteId', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const clientId = parseInt(req.params.id);
+  if (!req.clientScope.isAdmin && (!req.clientScope.clientIds || !req.clientScope.clientIds.includes(clientId))) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const noteId = parseInt(req.params.noteId);
+  const note = db.prepare('SELECT * FROM client_notes WHERE id = ? AND client_id = ?').get(noteId, clientId);
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+  db.prepare('DELETE FROM client_notes WHERE id = ?').run(noteId);
+  res.json({ success: true });
+});
+
+// === Client Custom Fields ===
+
+// Get all custom fields for a client
+router.get('/:id/custom-fields', requireIT, resolveClientScope, (req, res) => {
+  const db = req.app.locals.db;
+  const clientId = parseInt(req.params.id);
+  if (!req.clientScope.isAdmin && (!req.clientScope.clientIds || !req.clientScope.clientIds.includes(clientId))) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const fields = db.prepare('SELECT * FROM client_custom_fields WHERE client_id = ? ORDER BY field_name ASC').all(clientId);
+  res.json(fields);
+});
+
+// Upsert custom fields (batch)
+router.put('/:id/custom-fields', requireAdmin, (req, res) => {
+  const db = req.app.locals.db;
+  const clientId = parseInt(req.params.id);
+  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const { fields } = req.body;
+  if (!fields || typeof fields !== 'object') return res.status(400).json({ error: 'fields object is required' });
+  const author = req.user?.username || 'admin';
+  const upsert = db.prepare("INSERT INTO client_custom_fields (client_id, field_name, field_value, updated_at, updated_by) VALUES (?, ?, ?, datetime('now'), ?) ON CONFLICT(client_id, field_name) DO UPDATE SET field_value = excluded.field_value, updated_at = excluded.updated_at, updated_by = excluded.updated_by");
+  const runAll = db.transaction(() => {
+    for (const [name, value] of Object.entries(fields)) {
+      if (!name || name.length > 100) continue;
+      const val = value !== null && value !== undefined ? String(value).slice(0, 2000) : '';
+      upsert.run(clientId, name, val, author);
+    }
+  });
+  runAll();
+  const updated = db.prepare('SELECT * FROM client_custom_fields WHERE client_id = ? ORDER BY field_name ASC').all(clientId);
+  res.json(updated);
+});
+
+// Delete a custom field
+router.delete('/:id/custom-fields/:fieldName', requireAdmin, (req, res) => {
+  const db = req.app.locals.db;
+  const clientId = parseInt(req.params.id);
+  const fieldName = decodeURIComponent(req.params.fieldName);
+  const result = db.prepare('DELETE FROM client_custom_fields WHERE client_id = ? AND field_name = ?').run(clientId, fieldName);
+  if (result.changes === 0) return res.status(404).json({ error: 'Field not found' });
   res.json({ success: true });
 });
 

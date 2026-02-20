@@ -712,6 +712,47 @@
                     <button class="diag-btn" id="btn-assign-user" style="margin-left: 8px;">Assign</button>
                 </div>
             </div>
+            <div id="client-detail-panel" style="display:none; margin-top: 24px; background: #1b2838; border: 1px solid #2a475e; border-radius: 8px; padding: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <h3 style="color:#c7d5e0;">Client Details — <span id="client-detail-title"></span></h3>
+                    <button class="diag-btn" id="btn-close-client-detail" style="font-size:11px;padding:4px 8px;">Close</button>
+                </div>
+
+                <!-- Custom Fields Section -->
+                <div style="margin-bottom:20px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <h4 style="color:#c7d5e0; margin:0;">Custom Fields</h4>
+                        <button class="diag-btn" id="btn-add-client-field" style="font-size:11px; padding:2px 8px;">+ Add Field</button>
+                    </div>
+                    <div id="client-field-add-form" style="display:none; margin-bottom:12px; padding:10px; background:#0f1923; border-radius:6px; border:1px solid #2a475e;">
+                        <div style="display:flex; gap:8px; align-items:end;">
+                            <div style="flex:1;">
+                                <label style="font-size:11px; color:#8f98a0; display:block; margin-bottom:2px;">Field Name</label>
+                                <input type="text" id="client-field-name" maxlength="100" placeholder="e.g. SLA Tier" style="width:100%;">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="font-size:11px; color:#8f98a0; display:block; margin-bottom:2px;">Value</label>
+                                <input type="text" id="client-field-value" maxlength="2000" placeholder="e.g. Gold" style="width:100%;">
+                            </div>
+                            <button class="diag-btn" id="btn-save-client-field" style="font-size:11px; padding:4px 10px;">Save</button>
+                            <button class="diag-btn" id="btn-cancel-client-field" style="font-size:11px; padding:4px 10px;">Cancel</button>
+                        </div>
+                    </div>
+                    <div id="client-custom-fields-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:8px;">
+                        <div style="color:#8f98a0; font-size:13px;">No custom fields.</div>
+                    </div>
+                </div>
+
+                <!-- Notes Section -->
+                <div>
+                    <h4 style="color:#c7d5e0; margin:0 0 8px 0;">Notes <span id="client-notes-count" style="font-size:12px; color:#8f98a0;"></span></h4>
+                    <div style="display:flex; gap:8px; margin-bottom:12px;">
+                        <input type="text" id="client-note-input" placeholder="Add a note..." maxlength="5000" style="flex:1;">
+                        <button class="diag-btn" id="btn-add-client-note">Add Note</button>
+                    </div>
+                    <div id="client-notes-list"></div>
+                </div>
+            </div>
         </div>
 
         <!-- Reports page -->
@@ -1138,6 +1179,41 @@
                         <tr><td colspan="7" style="text-align:center; padding:32px; color:#8f98a0;">Loading...</td></tr>
                     </tbody>
                 </table>
+            </div>
+            <!-- Scripting Integration Guide -->
+            <div style="margin-top:24px; background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px;">
+                <h3 style="color:#c7d5e0; margin:0 0 12px 0;">Scripting Integration Guide</h3>
+                <details style="margin-bottom:12px;">
+                    <summary style="cursor:pointer; color:#66c0f4; font-size:13px;">Auto-populate Device Custom Fields</summary>
+                    <div style="padding:8px 0; font-size:13px; color:#c7d5e0;">
+                        <p style="margin:0 0 8px;">Scripts can set custom fields on the device they run on by printing a special marker line:</p>
+                        <code style="display:block; background:#0f1923; padding:8px 12px; border-radius:4px; font-size:12px; color:#66c0f4; margin-bottom:8px;">POCKET_IT_FIELDS:{"Department":"Engineering","Asset Tag":"A1234","Warranty":"2027-03"}</code>
+                        <p style="margin:0; font-size:12px; color:#8f98a0;">The JSON is parsed and upserted as device custom fields. Multiple marker lines are supported. Source shows as "script" in field cards on the device page.</p>
+                    </div>
+                </details>
+                <details style="margin-bottom:12px;">
+                    <summary style="cursor:pointer; color:#66c0f4; font-size:13px;">Auto-populate Client Custom Fields</summary>
+                    <div style="padding:8px 0; font-size:13px; color:#c7d5e0;">
+                        <p style="margin:0 0 8px;">Scripts can also set custom fields on the client that owns the device:</p>
+                        <code style="display:block; background:#0f1923; padding:8px 12px; border-radius:4px; font-size:12px; color:#66c0f4; margin-bottom:8px;">POCKET_IT_CLIENT_FIELDS:{"SLA Tier":"Gold","Contract End":"2026-12","Account Manager":"Jane Doe"}</code>
+                        <p style="margin:0; font-size:12px; color:#8f98a0;">Fields are upserted on the device's parent client. Source shows as "script" in field cards on the Client Management page.</p>
+                    </div>
+                </details>
+                <details>
+                    <summary style="cursor:pointer; color:#66c0f4; font-size:13px;">Example: Collect system info into both device and client fields</summary>
+                    <div style="padding:8px 0; font-size:13px; color:#c7d5e0;">
+<pre style="background:#0f1923; padding:12px; border-radius:4px; font-size:12px; color:#c7d5e0; overflow-x:auto; margin:0;">
+# Collect device-level info
+$os = (Get-CimInstance Win32_OperatingSystem).Caption
+$serial = (Get-CimInstance Win32_BIOS).SerialNumber
+Write-Host "POCKET_IT_FIELDS:{`"OS`":`"$os`",`"Serial`":`"$serial`"}"
+
+# Collect client-level info (e.g. domain/org)
+$domain = (Get-CimInstance Win32_ComputerSystem).Domain
+Write-Host "POCKET_IT_CLIENT_FIELDS:{`"Domain`":`"$domain`"}"
+</pre>
+                    </div>
+                </details>
             </div>
         </div>
 

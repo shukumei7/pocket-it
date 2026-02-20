@@ -4,6 +4,27 @@ All notable changes to Pocket IT will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
+## [0.20.0] - 2026-02-20
+
+### Added
+- **Client Notes** — Logbook-style notes per client; IT staff can create, view, and delete timestamped notes attached to a client record; newest notes displayed first (max 50 per client); content capped at 5,000 characters; stored in new `client_notes` table
+- **Client Custom Fields** — Key-value metadata store per client; IT staff can set, update, and delete arbitrary fields (e.g. "VPN provider", "Active Directory domain"); stored in new `client_custom_fields` table; upsert semantics — setting an existing key replaces its value
+- **`POCKET_IT_CLIENT_FIELDS:` script output marker** — Scripts can emit `POCKET_IT_CLIENT_FIELDS: {"key":"value",...}` on a single line in their stdout to automatically upsert client-level custom fields on the device's owning client; parsed by `agentNamespace.js` after `script_result` events and written via the custom fields service
+- **Scripting Integration Guide** — Script Library page gains an inline guide explaining available output markers, with copy-ready PowerShell examples for `POCKET_IT_CLIENT_FIELDS:` and other structured output patterns
+- **Client detail panel** — Client Management page gains an expandable detail panel per client showing notes and custom fields inline; supports adding/deleting notes and editing custom fields without leaving the page
+
+### Changed
+- **Version bump to 0.20.0**
+- **Schema v0.20.0** — Two new tables (`client_notes`, `client_custom_fields`) auto-created via sequential migration in `server/db/schema.js`
+
+### Technical
+- NEW: `server/routes/clients.js` — `GET /POST /DELETE /api/clients/:id/notes` and `GET /PUT /DELETE /api/clients/:id/custom-fields` endpoints (IT auth; admin required for write ops)
+- EDIT: `server/db/schema.js` — `client_notes (id, client_id, content, created_by, created_at)` and `client_custom_fields (id, client_id, key, value, updated_at, UNIQUE(client_id, key))` tables; sequential migration
+- EDIT: `server/socket/agentNamespace.js` — `script_result` handler parses `POCKET_IT_CLIENT_FIELDS:` marker lines and upserts fields to the device's owning client
+- EDIT: `server/public/dashboard/index.html` — Client detail panel on Clients Management page; notes list with add/delete; custom fields key-value editor; Scripting Integration Guide section on Script Library page
+
+---
+
 ## [Unreleased]
 
 ### Added
@@ -492,7 +513,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/example/pocket-it/compare/v0.18.0...v0.20.0
 [0.18.0]: https://github.com/example/pocket-it/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/example/pocket-it/compare/v0.13.4...v0.17.0
 [0.13.4]: https://github.com/example/pocket-it/compare/v0.12.8...v0.13.4

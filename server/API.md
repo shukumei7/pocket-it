@@ -1309,6 +1309,188 @@ curl -X DELETE http://localhost:9100/api/clients/2/users/2
 
 ---
 
+### GET /api/clients/:id/notes
+
+List logbook notes for a client, newest first. Returns at most 50 notes.
+
+**Auth:** IT staff (localhost bypass in MVP)
+
+**Response:**
+```json
+[
+  {
+    "id": 7,
+    "client_id": 2,
+    "content": "Moved domain controller to new hardware on 2026-02-20.",
+    "created_by": "admin",
+    "created_at": "2026-02-20T09:15:00.000Z"
+  }
+]
+```
+
+**Errors:**
+- `403` — Not in scope (technician accessing unassigned client)
+- `404` — Client not found
+
+**Example:**
+```bash
+curl http://localhost:9100/api/clients/2/notes
+```
+
+---
+
+### POST /api/clients/:id/notes
+
+Add a logbook note to a client.
+
+**Auth:** IT staff (localhost bypass in MVP)
+
+**Request Body:**
+```json
+{
+  "content": "Moved domain controller to new hardware on 2026-02-20."
+}
+```
+
+**Fields:**
+- `content` (required) — Note body; max 5,000 characters
+
+**Response:**
+```json
+{
+  "id": 7
+}
+```
+
+**Errors:**
+- `400` — `content` is required or empty
+- `400` — `content` exceeds 5,000 characters
+- `403` — Not in scope
+- `404` — Client not found
+
+**Example:**
+```bash
+curl -X POST http://localhost:9100/api/clients/2/notes \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Renewed SSL certificate. Expires 2027-02-20."}'
+```
+
+---
+
+### DELETE /api/clients/:id/notes/:noteId
+
+Delete a specific note from a client.
+
+**Auth:** IT staff (localhost bypass in MVP)
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `403` — Not in scope
+- `404` — Client not found, or note does not belong to this client
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:9100/api/clients/2/notes/7
+```
+
+---
+
+### GET /api/clients/:id/custom-fields
+
+List all custom fields for a client as a flat key-value object.
+
+**Auth:** IT staff (localhost bypass in MVP)
+
+**Response:**
+```json
+{
+  "VPN Provider": "Tailscale",
+  "AD Domain": "corp.acme.local",
+  "Contract Tier": "Enterprise"
+}
+```
+
+**Errors:**
+- `403` — Not in scope
+- `404` — Client not found
+
+**Example:**
+```bash
+curl http://localhost:9100/api/clients/2/custom-fields
+```
+
+---
+
+### PUT /api/clients/:id/custom-fields
+
+Upsert one or more custom fields for a client. Existing keys are overwritten; new keys are inserted.
+
+**Auth:** Admin only
+
+**Request Body:**
+```json
+{
+  "fields": {
+    "VPN Provider": "Tailscale",
+    "AD Domain": "corp.acme.local"
+  }
+}
+```
+
+**Fields:**
+- `fields` (required) — Object of key-value pairs to upsert; must be non-empty; values must be strings
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `400` — `fields` is required or empty
+- `403` — Admin role required
+- `404` — Client not found
+
+**Example:**
+```bash
+curl -X PUT http://localhost:9100/api/clients/2/custom-fields \
+  -H "Content-Type: application/json" \
+  -d '{"fields": {"Contract Tier": "Enterprise", "Support SLA": "4h"}}'
+```
+
+---
+
+### DELETE /api/clients/:id/custom-fields/:fieldName
+
+Delete a single custom field by name.
+
+**Auth:** Admin only
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+- `403` — Admin role required
+- `404` — Client not found, or field does not exist on this client
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:9100/api/clients/2/custom-fields/Contract%20Tier
+```
+
+---
+
 ### GET /api/clients/:id/installer
 
 Download a pre-configured installer for this client. Auto-generates a fresh enrollment token (24h expiry) bound to the client. The device enrolls automatically on first launch — no manual token entry needed.

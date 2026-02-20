@@ -36,9 +36,9 @@ async function main() {
 
   db.prepare(
     'INSERT INTO it_users (username, password_hash, display_name, role, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(username, passwordHash, username, 'admin', createdAt);
+  ).run(username, passwordHash, username, 'superadmin', createdAt);
 
-  console.log(`Admin user '${username}' created successfully`);
+  console.log(`Superadmin user '${username}' created successfully`);
   db.close();
 }
 

@@ -1,6 +1,6 @@
 # Pocket IT — Technical Specification
 
-Version: 0.12.8
+Version: 0.17.0
 
 ## System Architecture
 
@@ -50,12 +50,13 @@ Version: 0.12.8
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  SQLite Database (better-sqlite3)                            │   │
-│  │  18 tables: devices, enrollment_tokens, it_users,            │   │
+│  │  19 tables: devices, enrollment_tokens, it_users,            │   │
 │  │  chat_messages, tickets, ticket_comments,                    │   │
 │  │  diagnostic_results, audit_log, alert_thresholds, alerts,   │   │
 │  │  notification_channels, auto_remediation_policies,           │   │
 │  │  script_library, report_schedules, report_history,           │   │
-│  │  clients, user_client_assignments, update_packages           │   │
+│  │  clients, user_client_assignments, update_packages,          │   │
+│  │  chat_read_cursors                                           │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -89,6 +90,8 @@ Version: 0.12.8
       })
       ↓
 6. DiagnosticAI.processMessage():
+      - Check AI disable gate (order: global → per-device → IT-active)
+        - If disabled: save user message, send system message to user, notify IT watchers, return early
       - Build conversation context (last 20 messages)
       - Add system prompt with agent name and capabilities
       - Call LLM provider
@@ -439,6 +442,23 @@ Request client to execute a system tool and return results.
 - `service_action` — `{ "name": "Spooler", "action": "restart" }` — Performs start/stop/restart on named service
 - `event_log_query` — `{ "log": "System", "level": "Error", "count": 50, "source": "" }` — Queries Windows Event Log
 
+#### `ai_status`
+Sent to the device client when its AI enabled/disabled state changes, and on initial connection. Added in v0.17.0.
+
+```json
+{
+  "enabled": false,
+  "reason": "IT technician is active"
+}
+```
+
+**Possible `reason` values (when `enabled` is `false`):**
+- `"AI is globally disabled"` — global toggle is off
+- `"AI is disabled for this device"` — per-device disable (temporary or permanent)
+- `"IT technician is active"` — IT tech sent a message within the last 5 minutes (transient, clears automatically)
+
+When `enabled` is `true`, the `reason` field is omitted.
+
 ### Namespace: `/it` (IT Staff Dashboard)
 
 **Connection authentication:**
@@ -499,6 +519,23 @@ IT staff requests execution of a system tool on a specific device. The server fo
   "params": {}
 }
 ```
+
+#### `set_device_ai`
+IT staff sets the AI mode for a specific device. Added in v0.17.0.
+
+```json
+{
+  "deviceId": "abc123",
+  "mode": "temporary"
+}
+```
+
+**`mode` values:**
+- `"enabled"` — clears per-device disable; AI resumes if no other disable condition applies
+- `"temporary"` — sets `devices.ai_disabled = 'temporary'`; AI paused until IT manually re-enables
+- `"permanent"` — sets `devices.ai_disabled = 'permanent'`; AI permanently disabled for this device
+
+The server records `devices.ai_disabled_by` as the IT username, emits `ai_status` to the device client, and broadcasts `device_ai_changed` to all IT watchers.
 
 **Server → Client Events:**
 
@@ -615,6 +652,39 @@ System tool execution result relayed from device back to the requesting IT dashb
 }
 ```
 
+#### `device_ai_changed`
+Broadcast to all IT dashboard clients when a device's AI mode is changed. Added in v0.17.0.
+
+```json
+{
+  "deviceId": "abc123",
+  "aiDisabled": "temporary",
+  "aiDisabledBy": "tech_sarah"
+}
+```
+
+`aiDisabled` is `null` when AI is enabled, `"temporary"` or `"permanent"` when disabled per-device.
+
+#### `device_watchers`
+Sent to an IT client immediately after `watch_device` with the current list of IT users viewing that device. Added in v0.17.0.
+
+```json
+{
+  "deviceId": "abc123",
+  "watchers": ["tech_sarah", "admin_tom"]
+}
+```
+
+#### `device_watchers_changed`
+Broadcast to all IT clients watching a device when the watcher list changes (someone joins or leaves the device page). Added in v0.17.0.
+
+```json
+{
+  "deviceId": "abc123",
+  "watchers": ["tech_sarah"]
+}
+```
+
 ## Database Schema
 
 ### Table: `devices`
@@ -660,7 +730,10 @@ CREATE TABLE devices (
   form_factor TEXT,                            -- e.g. "Laptop", "Desktop", "Tower" (Win32_SystemEnclosure ChassisTypes)
   tpm_version TEXT,                            -- e.g. "2.0" or "Not Present" (PowerShell Get-Tpm)
   secure_boot TEXT,                            -- "True", "False", or "Unknown" (Confirm-SecureBootUEFI)
-  domain_join_type TEXT                        -- "On-Premises AD", "Azure AD", "Hybrid", or "Workgroup" (dsregcmd /status)
+  domain_join_type TEXT,                       -- "On-Premises AD", "Azure AD", "Hybrid", or "Workgroup" (dsregcmd /status)
+  -- AI disable (v0.17.0)
+  ai_disabled TEXT,                            -- NULL | 'temporary' | 'permanent'
+  ai_disabled_by TEXT                          -- IT username who set the disable state
 );
 ```
 
@@ -893,6 +966,34 @@ CREATE TABLE update_packages (
 5. If server returns a newer version, client downloads from `GET /api/updates/download/:version`
 6. Client verifies downloaded file's SHA-256 against the value from the check response
 7. Client launches installer with `/VERYSILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS`
+
+### Table: `chat_read_cursors`
+
+Per-IT-user read position per device. Used to compute unread chat message counts for the fleet badge system. Added in v0.17.0.
+
+```sql
+CREATE TABLE chat_read_cursors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  it_user_id INTEGER NOT NULL REFERENCES it_users(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  last_read_id INTEGER NOT NULL,               -- id of the last chat_messages row the IT user has read
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(it_user_id, device_id)
+);
+
+CREATE INDEX idx_crc_user_id ON chat_read_cursors(it_user_id);
+CREATE INDEX idx_crc_device_id ON chat_read_cursors(device_id);
+```
+
+**Indexes:**
+- Unique constraint on `(it_user_id, device_id)` — one cursor per IT user per device
+- Index on `it_user_id` for `GET /api/devices/unread-counts` queries
+- Index on `device_id` for cleanup on device removal
+
+**Behavior:**
+- Cursor upserted when an IT user calls `watch_device`
+- `GET /api/devices/unread-counts` returns `COUNT(*)` of `chat_messages` with `id > last_read_id` per device
+- Devices with no cursor row are treated as having zero read messages (all messages unread)
 
 ## Whitelisted Remediation Actions
 
@@ -1847,6 +1948,15 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut (manual alternative)
 
 ## Version History
+
+**0.17.0**
+- AI Disable System: `ai.enabled` key in `server_settings` for global toggle; `devices.ai_disabled` column (NULL | 'temporary' | 'permanent') and `devices.ai_disabled_by` for per-device control; `itActiveChatDevices` Map for transient IT-active auto-disable (5-minute pause); disable gate checked in order: global → per-device → IT-active; user messages saved and IT notified when AI is off
+- New socket events: `ai_status` (server→/agent), `set_device_ai` (dashboard→/it), `device_ai_changed` (server→/it), `device_watchers` (server→/it), `device_watchers_changed` (server→/it)
+- Fleet Unread Chat Badges: new `chat_read_cursors` table (it_user_id, device_id, last_read_id, updated_at); `GET /api/devices/unread-counts` endpoint; cursor updated on `watch_device`; orange unread badges on fleet device cards with live increment via `device_chat_update`
+- IT User Presence: `deviceWatchers` Map on server; `device_watchers` sent on `watch_device`; `device_watchers_changed` broadcast on join/leave/disconnect; dashboard shows colored IT username pills on device pages
+- Client RDP In/Out Alerts: `start_desktop` and `stop_desktop` events include `it_username`; client displays system chat messages on connect and disconnect
+- Client Resizable Window + Dark Chrome: `FormBorderStyle.Sizable`, `MinimumSize(360, 500)`, `MaximizeBox = true`; DWM dark titlebar via `DwmSetWindowAttribute` (DWMWA_USE_IMMERSIVE_DARK_MODE); Mica backdrop on Win11 22H2+ with silent fallback
+- Dashboard AI Controls: AI toggle on Settings page; AI control buttons (Enabled / Disable Temporarily / Disable Permanently) on Device page; real-time state sync via `device_ai_changed`
 
 **0.13.0**
 - Enhanced system information collection: 6 new hardware identity fields collected once on connect and stored in `devices` table (`device_manufacturer`, `device_model`, `form_factor`, `tpm_version`, `secure_boot`, `domain_join_type`)

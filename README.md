@@ -69,7 +69,7 @@ Server emits "chat_response" back to client
 | Client Database | Microsoft.Data.Sqlite | Local message queue and settings |
 | Server Runtime | Node.js (Express 4.21) | HTTP and WebSocket server |
 | Server WebSockets | Socket.IO 4.7 | Two namespaces: /agent and /it |
-| Server Database | SQLite (better-sqlite3) | 17 tables for devices, tickets, chat, diagnostics, clients, and more |
+| Server Database | SQLite (better-sqlite3) | 19 tables for devices, tickets, chat, diagnostics, clients, and more |
 | LLM Providers | Ollama, OpenAI, Anthropic, Claude CLI | Flexible AI backend (4 provider options) |
 | Authentication | JWT (jsonwebtoken 9.0) | IT staff authentication (MVP: localhost bypass) |
 
@@ -496,6 +496,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `GET /api/devices/:id` — Get device details with hardware specs and health score (IT auth)
 - `GET /api/devices/:id/diagnostics` — Get diagnostic history (IT auth)
 - `GET /api/devices/health/summary` — Get fleet health summary (IT auth)
+- `GET /api/devices/unread-counts` — Per-device unread chat message counts for the authenticated IT user (IT auth)
 - `DELETE /api/devices/:id` — Remove device and all related data (admin auth)
 
 ### Tickets
@@ -580,12 +581,13 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `remediation_request` — Request remediation approval: `{ actionId, requestId }`
 - `screenshot_request` — Request a screenshot with user approval: `{ requestId }`
 - `update_available` — Server notifies client an update is available: `{ version, downloadUrl }`
-- `start_desktop` — Start desktop capture session: `{ quality, fps, scale }`
+- `start_desktop` — Start desktop capture session: `{ quality, fps, scale, it_username }`
 - `desktop_mouse` — Mouse input event: `{ type, x, y, button, delta }`
 - `desktop_keyboard` — Keyboard input event: `{ type, keyCode }`
 - `desktop_quality` — Adjust capture settings: `{ quality, fps, scale }`
-- `stop_desktop` — Stop desktop capture session
+- `stop_desktop` — Stop desktop capture session: `{ it_username }`
 - `system_tool_request` — Request system tool execution: `{ requestId, tool, params }`
+- `ai_status` — AI enabled/disabled state for this device: `{ enabled: bool, reason?: string }`
 
 ### /it (IT Staff Dashboard)
 
@@ -600,6 +602,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `desktop_quality` — Change capture quality/FPS/scale: `{ deviceId, quality, fps, scale }`
 - `stop_desktop` — Stop remote desktop session: `{ deviceId }`
 - `system_tool_request` — Forward tool request to a device: `{ deviceId, requestId, tool, params }`
+- `set_device_ai` — Set per-device AI mode: `{ deviceId, mode: 'enabled' | 'temporary' | 'permanent' }`
 
 **Server events:**
 - `device_status` — Device status update: `{ deviceId, status, ... }`
@@ -615,14 +618,17 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `desktop_denied` — Device denied desktop access: `{ deviceId }`
 - `system_tool_result` — Tool result relayed from device: `{ deviceId, requestId, tool, success, data, error }`
 - `server_url_changed` — Broadcast when admin changes the Public URL in Settings: `{ url: string }` (clients update `appsettings.json` and reconnect)
+- `device_ai_changed` — AI mode changed for a device: `{ deviceId, aiDisabled: null | 'temporary' | 'permanent', aiDisabledBy: string | null }`
+- `device_watchers` — Initial list of IT users currently viewing a device: `{ deviceId, watchers: string[] }`
+- `device_watchers_changed` — IT user presence on a device changed: `{ deviceId, watchers: string[] }`
 
 ## Database Schema
 
-The server uses SQLite with 18 tables:
+The server uses SQLite with 19 tables:
 
 | Table | Purpose |
 |-------|---------|
-| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, client_version, enrolled_at, last_seen, client_id, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters, previous_logged_in_users, + 6 hardware identity fields: device_manufacturer, device_model, form_factor, tpm_version, secure_boot, domain_join_type) |
+| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, client_version, enrolled_at, last_seen, client_id, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters, previous_logged_in_users, + 6 hardware identity fields: device_manufacturer, device_model, form_factor, tpm_version, secure_boot, domain_join_type, + AI disable fields: ai_disabled, ai_disabled_by) |
 | `enrollment_tokens` | One-time enrollment tokens (token, expires_at, status, used_by_device, client_id) |
 | `it_users` | IT staff accounts (username, password_hash, role CHECK superadmin/admin/technician/viewer, display_name, last_login) |
 | `chat_messages` | Chat history (device_id, sender, content, message_type, metadata) |
@@ -640,6 +646,7 @@ The server uses SQLite with 18 tables:
 | `clients` | Client organizations for MSP multi-tenancy (name, slug, contact_name, contact_email, notes) |
 | `user_client_assignments` | Many-to-many mapping of IT technicians to clients |
 | `update_packages` | Self-update installer packages (version, filename, file_size, sha256, release_notes, uploaded_by) |
+| `chat_read_cursors` | Per-IT-user read position per device for fleet unread badge tracking (it_user_id, device_id, last_read_id, updated_at) |
 
 ## AI Personality System
 
@@ -893,7 +900,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.13.4)
+## Current Status (v0.17.0)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -944,6 +951,12 @@ pocket-it/
 - **Superadmin Role**: new top-level role (`superadmin > admin > technician > viewer`) with full client access
 - **Auto-push updates on device connect**: server emits `update_available` immediately on connect if the client version is outdated, eliminating reliance on the 4-hour poll
 - **Form controls normalization**: consistent styling across all dashboard inputs, selects, and textareas (36px height, blue focus highlight)
+- **AI Disable System**: global AI toggle (`ai.enabled` in server settings), per-device disable (`devices.ai_disabled` column: NULL | temporary | permanent), IT-active auto-disable (5-minute pause when IT tech sends a message); user messages still saved and IT notified when AI is off
+- **Fleet Unread Chat Badges**: `chat_read_cursors` table tracks per-IT-user read position per device; orange unread count badges on dashboard fleet device cards; live updates via `device_chat_update`
+- **IT User Presence**: dashboard device pages show colored pills for other IT users currently viewing the same device; `device_watchers` and `device_watchers_changed` socket events
+- **Client RDP In/Out Alerts**: system messages in client chat when an IT tech connects or disconnects from remote desktop, including the tech's username
+- **Client Resizable Window + Dark Chrome**: sizable window with minimum dimensions, DWM dark titlebar, and Mica backdrop on Windows 11 22H2+
+- **Dashboard AI Controls**: AI toggle on Settings page; per-device AI control buttons (Enabled / Disable Temporarily / Disable Permanently) with real-time state sync
 
 ### Setup
 
@@ -1002,6 +1015,7 @@ dotnet run
 | v0.11.0 | Self-Update & Admin Elevation | Server-hosted update packages, client auto-update with SHA-256 verification, admin elevation via manifest, Task Scheduler auto-start, fleet version tracking, dashboard column sorting and event log search |
 | v0.12.8 | User Tracking, AI Screenshots & UX Polish | Current/previous user tracking, AI screenshot diagnostic with multimodal LLM support, Users management page, Admin dropdown nav, superadmin role, auto-push updates on connect, form controls normalization |
 | v0.13.4 | Security Audit Remediation | Prompt injection hardening, bcrypt device secrets, DPAPI client credential protection, AES-256-GCM API key encryption, centralized action whitelist, scoped integrity events, enrollment rate limiting, CSP unsafe-inline removed, PowerShell Base64 encoding |
+| v0.17.0 | AI Control, Fleet Presence & Client UX | Global and per-device AI disable system, IT-active auto-pause, fleet unread chat badges, IT user presence on device pages, RDP in/out alerts in client chat, resizable dark-chrome client window |
 
 ### Planned
 | Version | Theme | Key Capabilities |

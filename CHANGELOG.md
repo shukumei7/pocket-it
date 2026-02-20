@@ -6,12 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-02-20
+
 ### Added
+- **AI Disable System** — global AI toggle via `ai.enabled` key in `server_settings`; per-device disable via `devices.ai_disabled` column (`NULL` | `'temporary'` | `'permanent'`) and `devices.ai_disabled_by` column; IT-active auto-disable pauses AI for 5 minutes when an IT tech sends a chat message to a device (transient, via `itActiveChatDevices` Map); three disable conditions checked in order: global → per-device → IT active
+- **AI disable behavior** — when AI is disabled, user messages are still saved to the database; a system message is sent to the device user; IT watchers are notified
+- **`set_device_ai` socket event** — IT dashboard sends this to the server to control per-device AI mode
+- **`ai_status` socket event** — server sends to device clients indicating whether AI is enabled or disabled and the reason
+- **Fleet Unread Chat Badges** — new `chat_read_cursors` table tracks per-IT-user read position per device; `GET /api/devices/unread-counts` returns per-device unread message counts for the authenticated IT user; read cursor updated when IT user watches a device; dashboard fleet page shows orange badges on device cards with unread count; `device_chat_update` increments badge for non-active devices in real time
+- **IT User Presence on Device Pages** — `deviceWatchers` Map tracks which IT users are viewing each device; `device_watchers` event sends initial watcher list; `device_watchers_changed` event broadcasts updates; dashboard shows colored pills with IT usernames viewing the same device; watchers cleaned up on unwatch and disconnect
+- **Client RDP In/Out Alerts** — `start_desktop` and `stop_desktop` server events now include `it_username` field; client shows system messages in chat: "{username} is connecting to your device." and "{username} has left your device."; cleanup notification sent on disconnect
+- **Client Resizable Window** — `FormBorderStyle.Sizable` with `MinimumSize(360, 500)` and `MaximizeBox = true`
+- **Client Dark Chrome** — DWM dark titlebar via `DwmSetWindowAttribute` (`DWMWA_USE_IMMERSIVE_DARK_MODE`); Mica backdrop on Windows 11 22H2+ with silent fallback on older Windows
+- **Dashboard AI Controls** — Settings page: AI Assistant toggle (on/off) at the top of the AI/LLM section; Device page: AI control buttons (Enabled / Disable Temporarily / Disable Permanently); `device_ai_changed` socket event updates button state in real time
 - **Periodic git-based client release detection** — server runs `git fetch origin main` every 24 hours, checks whether `releases/version.json` has changed, sparse-checkouts the updated release files, registers the new build in `update_packages`, and pushes `update_available` to all outdated connected devices; no server restart required
 - **Manual client update check endpoint** — `GET /api/updates/client-check` (IT auth) triggers the git-based release check on demand and returns `{ updated, version?, notified?, reason? }`
 - **Expected Version card on Updates page** — dashboard Updates page now shows the latest registered client version, fleet status (X up to date, Y outdated), and a "Check for Client Update" button for manual trigger
 
 ### Technical
+- EDIT: `server/db/schema.js` — added `ai_disabled TEXT` and `ai_disabled_by TEXT` columns to `devices` table; new `chat_read_cursors (it_user_id, device_id, last_read_id, updated_at)` table; added `ai.enabled` to `server_settings` allowlist
+- EDIT: `server/socket/itNamespace.js` — `set_device_ai` handler; `device_watchers` and `device_watchers_changed` events via `deviceWatchers` Map; `itActiveChatDevices` Map for IT-active auto-disable; read cursor update on `watch_device`
+- EDIT: `server/socket/agentNamespace.js` — `ai_status` event emitted to device on connect and when AI state changes; AI disable gate checks global → per-device → IT-active before calling LLM
+- EDIT: `server/routes/devices.js` — new `GET /api/devices/unread-counts` endpoint (IT auth) returning per-device unread message counts
+- EDIT: `server/routes/admin.js` — `ai.enabled` key added to `server_settings` allowlist
+- EDIT: `server/public/dashboard/index.html` — AI toggle on Settings page; AI control buttons on Device page; orange unread badges on fleet device cards; IT user presence pills on device pages; `device_ai_changed` handler; `device_watchers` and `device_watchers_changed` handlers
+- EDIT: `client/PocketIT/Core/ServerConnection.cs` — `ai_status` event handler; `start_desktop` and `stop_desktop` handlers updated to read `it_username` field and display system messages in chat
+- EDIT: `client/PocketIT/ChatWindow.cs` — `FormBorderStyle.Sizable`; `MinimumSize(360, 500)`; `MaximizeBox = true`; DWM dark titlebar via P/Invoke `DwmSetWindowAttribute`; Mica backdrop on Win11 22H2+
 - EDIT: `server/services/serverUpdate.js` — exported `checkClientRelease(db)` and `isNewerVersion` for use by the scheduled timer and the manual-check route
 - EDIT: `server/routes/updates.js` — new `GET /api/updates/client-check` route (IT auth) calls `checkClientRelease` and returns result JSON
 - EDIT: `server/public/dashboard/index.html` — Expected Version card added to Updates page with fleet up-to-date/outdated counts and manual check button
@@ -399,7 +419,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.13.4...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/example/pocket-it/compare/v0.13.4...v0.17.0
 [0.13.4]: https://github.com/example/pocket-it/compare/v0.12.8...v0.13.4
 [0.12.8]: https://github.com/example/pocket-it/compare/v0.11.0...v0.12.8
 [0.11.0]: https://github.com/example/pocket-it/compare/v0.10.0...v0.11.0

@@ -61,6 +61,11 @@
             if (!active || !socket) return;
             const el = document.getElementById('paste-status');
             try {
+                if (!navigator.clipboard || !navigator.clipboard.readText) {
+                    el.textContent = 'Clipboard API unavailable (requires HTTPS)';
+                    el.style.color = '#ef5350';
+                    return;
+                }
                 const text = await navigator.clipboard.readText();
                 if (!text) { el.textContent = 'Clipboard empty'; return; }
                 socket.emit('desktop_paste_text', { deviceId, text });

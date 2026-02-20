@@ -5,6 +5,22 @@
             if (cachedPrefs.theme) document.documentElement.dataset.theme = cachedPrefs.theme;
         } catch(e) {}
 
+        // Clipboard fallback for non-secure contexts (HTTP on non-localhost)
+        function copyToClipboard(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return copyToClipboard(text);
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            return Promise.resolve();
+        }
+
         const API = '';
         let socket = null;
         let currentDeviceId = null;
@@ -235,7 +251,7 @@
 
             // Store login data for after user acknowledges
             document.getElementById('btn-copy-backup').onclick = () => {
-                navigator.clipboard.writeText(codes.join('\n')).then(() => {
+                copyToClipboard(codes.join('\n')).then(() => {
                     document.getElementById('btn-copy-backup').textContent = 'Copied!';
                     setTimeout(() => { document.getElementById('btn-copy-backup').textContent = 'Copy All Codes'; }, 2000);
                 });
@@ -2687,7 +2703,7 @@
 
         function fileActionCopyPaths() {
             if (selectedFiles.size === 0) return;
-            navigator.clipboard.writeText([...selectedFiles].join('\n')).then(() => {
+            copyToClipboard([...selectedFiles].join('\n')).then(() => {
                 showFileBrowserMsg('Paths copied to clipboard');
             }).catch(() => {
                 alert([...selectedFiles].join('\n'));
@@ -2890,7 +2906,7 @@
 
         function copyFileContent() {
             const pre = document.getElementById('file-content-pre');
-            if (pre) navigator.clipboard.writeText(pre.textContent);
+            if (pre) copyToClipboard(pre.textContent);
         }
 
         function formatFileSize(bytes) {
@@ -5391,7 +5407,7 @@
             document.getElementById('btn-save-prefs')?.addEventListener('click', savePreferences);
             document.getElementById('btn-copy-account-backup')?.addEventListener('click', () => {
                 const codes = document.getElementById('account-backup-codes').textContent;
-                navigator.clipboard.writeText(codes).then(() => {
+                copyToClipboard(codes).then(() => {
                     document.getElementById('btn-copy-account-backup').textContent = 'Copied!';
                     setTimeout(() => { document.getElementById('btn-copy-account-backup').textContent = 'Copy All'; }, 2000);
                 });

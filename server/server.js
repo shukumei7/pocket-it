@@ -93,6 +93,13 @@ app.use(cors({
         if (allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
+        // Allow same-host requests (dashboard served by this server on any IP)
+        try {
+            const url = new URL(origin);
+            if (url.port === String(PORT) || (!url.port && url.protocol === 'http:')) {
+                return callback(null, true);
+            }
+        } catch (e) { /* invalid origin, fall through */ }
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true
@@ -231,6 +238,12 @@ const io = new Server(server, {
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
+      try {
+        const url = new URL(origin);
+        if (url.port === String(PORT) || (!url.port && url.protocol === 'http:')) {
+          return callback(null, true);
+        }
+      } catch (e) { /* invalid origin */ }
       callback(new Error('Not allowed by CORS'));
     },
     credentials: true

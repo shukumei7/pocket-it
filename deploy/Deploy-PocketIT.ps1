@@ -46,6 +46,11 @@
     .\Deploy-PocketIT.ps1 -ComputerName WS-042,WS-043 -ServerUrl http://10.0.0.5:9100 -Token "abc-123" -Credential $cred
 #>
 
+# DEPRECATED: This bulk deployment script is superseded by the online installer.
+# Use the IT dashboard (Clients → Download) to generate per-client installers instead.
+# The online installer auto-generates enrollment tokens and embeds them in the EXE.
+# This script is kept for backwards compatibility only.
+
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]

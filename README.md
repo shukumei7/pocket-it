@@ -384,9 +384,59 @@ When an admin changes the **Public URL** in Settings, the server emits a `server
 - On connect, server compares the device's reported `exe_hash` against the known hash for its version
 - If mismatch, `integrity_warning` is emitted to the IT dashboard (potential tampering indicator)
 
-## Building the Installer
+## Online Installer (Recommended)
 
-For enterprise deployment, Pocket IT includes an Inno Setup installer that creates a self-contained, production-ready package.
+The recommended way to deploy Pocket IT to client devices. The IT dashboard generates a per-client installer with the enrollment token already embedded — the end user just downloads and runs it.
+
+### How It Works
+
+1. IT admin opens the dashboard → **Clients** tab → selects a client → clicks **Download**
+2. Server generates a fresh enrollment token (24h expiry) and embeds it in the installer EXE
+3. Admin sends the `PocketIT-{client}-setup.exe` to the end user
+4. User runs the EXE → bootstrapper downloads client binaries from the server → installs → enrolls automatically
+
+### What the Online Installer Does
+
+- Downloads client binaries from `GET /api/installer/package`
+- Installs to `C:\Program Files\PocketIT`
+- Preserves existing config and database on upgrades
+- Sets folder permissions (Administrators + SYSTEM: Full, Users: Read/Execute)
+- Protects `appsettings.json` (read-only after enrollment)
+- Registers auto-start via Task Scheduler at `HIGHEST` privilege
+- Launches the client
+
+### Building the Online Installer
+
+```bash
+cd installer/online/PocketIT.Setup
+dotnet publish -c Release -r win-x64 --self-contained
+```
+
+Once built, the dashboard automatically serves the bootstrapper EXE. If not built, it falls back to a ZIP download.
+
+### PE Config Embedding
+
+The server embeds configuration into the EXE at download time using a PE overlay:
+
+```
+[PocketIT.Setup.exe binary] + [JSON config (UTF-8)] + [length (4 bytes LE)] + [magic "PKIT_CFG"]
+```
+
+The JSON contains `ServerUrl` and `EnrollmentToken`. The bootstrapper reads this from its own binary at startup via `EmbeddedConfig.Read()`.
+
+### Offline Installer (CLI Token)
+
+For environments where the online installer can't reach the server, the Inno Setup installer supports a `/ENROLLTOKEN=` parameter:
+
+```bash
+PocketIT-setup.exe /SILENT /ENROLLTOKEN=abc-123-def
+```
+
+The client also accepts `--enroll-token <token>` as a CLI argument for scripted deployment.
+
+## Building the Offline Installer (Inno Setup)
+
+For environments without server connectivity during installation, Pocket IT also includes an Inno Setup offline installer.
 
 ### Prerequisites
 

@@ -1047,26 +1047,65 @@ curl -X DELETE http://localhost:9100/api/clients/2/users/2
 
 ### GET /api/clients/:id/installer
 
-Download a pre-configured installer ZIP for this client. The archive contains the published client binary and an `appsettings.json` pre-seeded with the server URL and a freshly generated enrollment token bound to this client.
+Download a pre-configured installer for this client. Auto-generates a fresh enrollment token (24h expiry) bound to the client. The device enrolls automatically on first launch — no manual token entry needed.
+
+**Two delivery modes** (selected automatically):
+
+1. **Bootstrapper EXE** (primary) — If the online installer is built (`installer/online/PocketIT.Setup/`), serves a self-extracting EXE with the server URL and enrollment token embedded via PE overlay (`PKIT_CFG` magic marker). The bootstrapper downloads client binaries from the server, installs to Program Files, registers auto-start, and launches.
+
+2. **ZIP fallback** — If the bootstrapper isn't built, serves a ZIP containing client binaries with `appsettings.json` pre-seeded with server URL and enrollment token. User extracts and runs manually.
 
 **Auth:** Admin only
 
-**Response:** Binary ZIP file download
+**Response (bootstrapper mode):**
+```
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="PocketIT-acme-corp-setup.exe"
+```
 
-**Headers:**
+**Response (ZIP fallback):**
 ```
 Content-Type: application/zip
-Content-Disposition: attachment; filename="pocket-it-acme-corp.zip"
+Content-Disposition: attachment; filename="PocketIT-acme-corp-setup.zip"
 ```
 
 **Errors:**
 - `403` — Admin role required
 - `404` — Client not found
-- `500` — Client build not found (run `dotnet publish` first)
+- `503` — Client binaries not built (run `installer/build.bat` first)
 
 **Example:**
 ```bash
 curl -O -J http://localhost:9100/api/clients/2/installer
+```
+
+---
+
+### GET /api/installer/package
+
+Download client binaries as a ZIP archive. Used internally by the online installer bootstrapper to fetch the application files during installation. Validates the enrollment token but does **not** consume it — token consumption happens when the client calls `POST /api/enrollment/enroll` on first launch.
+
+**Auth:** None (token-validated)
+
+**Query params:**
+- `token` (required) — Active enrollment token
+
+**Response:** Binary ZIP of client binaries (excludes `appsettings.json` — the bootstrapper writes its own)
+
+**Headers:**
+```
+Content-Type: application/zip
+Content-Disposition: attachment; filename="pocket-it-client.zip"
+```
+
+**Errors:**
+- `400` — Token required
+- `401` — Invalid or expired token
+- `503` — Client binaries not built
+
+**Example:**
+```bash
+curl -O -J "http://localhost:9100/api/installer/package?token=abc-123-def"
 ```
 
 ---

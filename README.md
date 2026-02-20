@@ -255,6 +255,26 @@ git commit -m "chore: publish client v$(cat releases/version.json | jq -r .versi
 git push
 ```
 
+### Periodic Git-Based Release Detection (every 24 hours)
+
+The server automatically checks the git remote for a new client release once every 24 hours without requiring a restart:
+
+1. Runs `git fetch origin main` to retrieve remote refs
+2. Compares the remote `releases/version.json` against the currently registered version
+3. If a newer version is detected, sparse-checkouts the updated release files (`releases/`)
+4. Registers the new build in the `update_packages` table (same as `publish-local` does locally)
+5. Pushes `update_available` to all currently connected devices running an older version
+
+This enables remote servers to pick up newly published client builds automatically, without any manual intervention beyond the initial `git push` on the dev machine.
+
+To trigger the check on demand without waiting for the 24-hour interval, use:
+
+```bash
+curl http://localhost:9100/api/updates/client-check
+# Response: { "updated": true, "version": "0.14.0", "notified": 3 }
+# or:       { "updated": false, "reason": "already up to date" }
+```
+
 ### Server-Side Auto-Push (on device connect)
 
 - Server compares the connected device's `client_version` against the latest `update_packages` entry
@@ -291,6 +311,7 @@ When deploying to a remote server, you only need to:
 | `/api/updates/push/:version` | POST | IT auth | Manually push update notification |
 | `/api/updates/latest` | GET | IT auth | Get latest version info |
 | `/api/updates/fleet-versions` | GET | IT auth | Version distribution across fleet |
+| `/api/updates/client-check` | GET | IT auth | Trigger git-based client release check on demand; returns `{ updated, version?, notified?, reason? }` |
 | `/api/updates/server-check` | GET | IT auth | Check if server update available via git |
 | `/api/updates/server-apply` | POST | IT auth | Pull and apply server update (triggers restart) |
 
@@ -334,7 +355,7 @@ npm run dev     # Development: runs server.js directly (no wrapper)
 | File | Purpose |
 |------|---------|
 | `server/wrapper.js` | Process manager — restarts server on exit code 75 |
-| `server/services/serverUpdate.js` | Git check/pull, `npm install`, ZIP registration, restart logic |
+| `server/services/serverUpdate.js` | Git check/pull, `npm install`, ZIP registration, restart logic; exports `checkClientRelease(db)` and `isNewerVersion` |
 | `releases/PocketIT-latest.zip` | Latest client ZIP (Git LFS tracked) |
 | `releases/version.json` | Version metadata written by `publish-local` |
 
@@ -518,6 +539,7 @@ All endpoints accept `localhost` without authentication for MVP development.
 - `GET /api/updates/check?version=X.Y.Z` — Check if update is available (device auth)
 - `GET /api/updates/download/:version` — Download installer (device auth)
 - `GET /api/updates/fleet-versions` — Version distribution across fleet (IT/admin auth)
+- `GET /api/updates/client-check` — Trigger git-based client release check on demand; returns `{ updated, version?, notified?, reason? }` (IT auth)
 - `GET /api/updates/server-check` — Check if server updates are available via git (IT auth)
 - `POST /api/updates/server-apply` — Pull and apply server update; triggers restart via wrapper (IT auth)
 
@@ -910,6 +932,8 @@ pocket-it/
 - **Per-client installer download**: admin can generate a pre-configured installer ZIP per client with pre-seeded enrollment token
 - **Dashboard client selector**: filter entire dashboard by client; fleet page shows grouped device view under client headers when all clients selected
 - **Self-update system**: server hosts installer packages; clients poll every 4 hours and check on connect, verify downloads via SHA-256, and launch installer silently; fleet version distribution visible in dashboard
+- **Periodic client release detection**: server checks git remote every 24 hours for a new client build; sparse-checkouts and registers the new release automatically; pushes `update_available` to all outdated connected devices; manual trigger via `GET /api/updates/client-check`
+- **Expected Version card on Updates page**: displays latest registered client version, fleet status (X up to date, Y outdated), and a "Check for Client Update" button for on-demand git-based release checks
 - **Admin elevation**: client runs with administrator privileges via `app.manifest`; auto-start uses Task Scheduler at `HIGHEST` privilege instead of registry Run key (no UAC prompt)
 - **Dashboard enhancements**: column sorting on Processes, Services, and Event Log tables; event log search input; services auto-load on tab switch
 - **Security fix**: device API responses no longer leak `device_secret` or `certificate_fingerprint`

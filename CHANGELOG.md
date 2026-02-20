@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Periodic git-based client release detection** — server runs `git fetch origin main` every 24 hours, checks whether `releases/version.json` has changed, sparse-checkouts the updated release files, registers the new build in `update_packages`, and pushes `update_available` to all outdated connected devices; no server restart required
+- **Manual client update check endpoint** — `GET /api/updates/client-check` (IT auth) triggers the git-based release check on demand and returns `{ updated, version?, notified?, reason? }`
+- **Expected Version card on Updates page** — dashboard Updates page now shows the latest registered client version, fleet status (X up to date, Y outdated), and a "Check for Client Update" button for manual trigger
+
+### Technical
+- EDIT: `server/services/serverUpdate.js` — exported `checkClientRelease(db)` and `isNewerVersion` for use by the scheduled timer and the manual-check route
+- EDIT: `server/routes/updates.js` — new `GET /api/updates/client-check` route (IT auth) calls `checkClientRelease` and returns result JSON
+- EDIT: `server/public/dashboard/index.html` — Expected Version card added to Updates page with fleet up-to-date/outdated counts and manual check button
+
 ## [0.13.4] - 2026-02-19
 
 ### Security

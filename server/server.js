@@ -45,7 +45,7 @@ app.use(helmet({
       imgSrc: ["'self'", "data:"],
       fontSrc: ["'self'", "data:"],
       // Disable upgrade-insecure-requests — server is HTTP-only on non-localhost origins
-      upgradeInsecureRequests: []
+      upgradeInsecureRequests: null
     }
   },
   // Disable COOP on non-HTTPS origins (ignored by browsers anyway)

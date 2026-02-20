@@ -231,7 +231,7 @@ User sends a message to AI.
 ```
 
 #### `system_profile`
-Client sends device hardware information. Extended fields were added in v0.9.0.
+Client sends device hardware information. Extended fields were added in v0.9.0. Hardware identity fields were added in v0.13.0.
 
 ```json
 {
@@ -252,7 +252,13 @@ Client sends device hardware information. Extended fields were added in v0.9.0.
   "loggedInUsers": ["CORP\\jsmith", "CORP\\admin"],
   "networkAdapters": [
     { "name": "Ethernet", "macAddress": "00:1A:2B:3C:4D:5E", "ipAddress": "192.168.1.100", "speed": "1 Gbps" }
-  ]
+  ],
+  "deviceManufacturer": "Dell Inc.",
+  "deviceModel": "Latitude 5520",
+  "formFactor": "Laptop",
+  "tpmVersion": "2.0",
+  "secureBoot": "True",
+  "domainJoinType": "On-Premises AD"
 }
 ```
 
@@ -647,7 +653,14 @@ CREATE TABLE devices (
   -- Self-update (v0.11.0)
   client_version TEXT,                         -- Last reported client application version
   -- User tracking (v0.12.8)
-  previous_logged_in_users TEXT                -- JSON array saved when logged_in_users changes
+  previous_logged_in_users TEXT,               -- JSON array saved when logged_in_users changes
+  -- Hardware identity (v0.13.0)
+  device_manufacturer TEXT,                    -- e.g. "Dell Inc." (wmic computersystem get Manufacturer)
+  device_model TEXT,                           -- e.g. "Latitude 5520" (wmic computersystem get Model)
+  form_factor TEXT,                            -- e.g. "Laptop", "Desktop", "Tower" (Win32_SystemEnclosure ChassisTypes)
+  tpm_version TEXT,                            -- e.g. "2.0" or "Not Present" (PowerShell Get-Tpm)
+  secure_boot TEXT,                            -- "True", "False", or "Unknown" (Confirm-SecureBootUEFI)
+  domain_join_type TEXT                        -- "On-Premises AD", "Azure AD", "Hybrid", or "Workgroup" (dsregcmd /status)
 );
 ```
 
@@ -1154,6 +1167,176 @@ public async Task<DiagnosticResult> RunAsync()
         Status = "completed",
         Data = new { adapters, internetConnectivity, dnsResolution, latency }
     };
+}
+```
+
+### Check: `security`
+
+**Data collected:**
+- BitLocker encryption status per volume
+- Windows Defender real-time protection state and signature age
+- Firewall status per profile (Domain, Private, Public)
+- Local administrator account list
+
+**Implementation:** `SecurityCheck.cs`
+
+```csharp
+public async Task<DiagnosticResult> RunAsync()
+{
+    var script = @"
+        $bitlocker = Get-BitLockerVolume | Select-Object MountPoint, ProtectionStatus, EncryptionPercentage
+        $defender = Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AntivirusSignatureLastUpdated
+        $firewall = Get-NetFirewallProfile | Select-Object Name, Enabled
+        $admins = Get-LocalGroupMember -Group 'Administrators' | Select-Object Name, ObjectClass
+        [PSCustomObject]@{
+            BitLocker = $bitlocker
+            Defender  = $defender
+            Firewall  = $firewall
+            LocalAdmins = $admins
+        } | ConvertTo-Json -Depth 5
+    ";
+
+    var psi = new ProcessStartInfo
+    {
+        FileName = "powershell",
+        Arguments = $"-NonInteractive -NoProfile -Command \"{script}\"",
+        UseShellExecute = false,
+        RedirectStandardOutput = true,
+        CreateNoWindow = true
+    };
+
+    using var process = Process.Start(psi)!;
+    var output = await process.StandardOutput.ReadToEndAsync();
+    await process.WaitForExitAsync();
+
+    var data = JsonSerializer.Deserialize<JsonElement>(output);
+
+    return new DiagnosticResult
+    {
+        CheckType = "security",
+        Status = "completed",
+        Data = data
+    };
+}
+```
+
+**Status determination:**
+- `error` — BitLocker protection off on any volume, or Defender real-time protection disabled
+- `warning` — any firewall profile disabled, or Defender signatures older than 7 days
+- `ok` — all checks pass
+
+**Example output:**
+
+```json
+{
+  "checkType": "security",
+  "status": "completed",
+  "results": {
+    "bitLocker": [
+      { "mountPoint": "C:", "protectionStatus": "On", "encryptionPercentage": 100 }
+    ],
+    "defender": {
+      "realTimeProtectionEnabled": true,
+      "antivirusSignatureLastUpdated": "2024-01-15T03:00:00Z"
+    },
+    "firewall": [
+      { "name": "Domain", "enabled": true },
+      { "name": "Private", "enabled": true },
+      { "name": "Public", "enabled": true }
+    ],
+    "localAdmins": [
+      { "name": "CORP\\Administrator", "objectClass": "User" }
+    ]
+  }
+}
+```
+
+### Check: `battery`
+
+**Data collected:**
+- Charge percentage
+- Battery health percentage (full charge capacity vs. design capacity)
+- Cycle count
+- Design capacity (mWh)
+- Full charge capacity (mWh)
+- Estimated runtime (minutes)
+
+Returns "No battery detected (desktop)" on machines without a battery.
+
+**Implementation:** `BatteryCheck.cs`
+
+```csharp
+public async Task<DiagnosticResult> RunAsync()
+{
+    var batteries = new ManagementObjectSearcher(
+        "SELECT * FROM Win32_Battery").Get();
+
+    if (!batteries.Cast<ManagementObject>().Any())
+    {
+        return new DiagnosticResult
+        {
+            CheckType = "battery",
+            Status = "completed",
+            Data = new { message = "No battery detected (desktop)" }
+        };
+    }
+
+    var designCapacities = new ManagementObjectSearcher(
+        "SELECT * FROM BatteryStaticData",
+        new ManagementScope("\\\\.\\root\\WMI")).Get();
+
+    var fullCapacities = new ManagementObjectSearcher(
+        "SELECT * FROM BatteryFullChargedCapacity",
+        new ManagementScope("\\\\.\\root\\WMI")).Get();
+
+    var results = batteries.Cast<ManagementObject>().Select(b => new
+    {
+        ChargePercent      = (ushort)b["EstimatedChargeRemaining"],
+        CycleCount         = designCapacities.Cast<ManagementObject>()
+                                .FirstOrDefault()?["CycleCount"],
+        DesignCapacityMWh  = designCapacities.Cast<ManagementObject>()
+                                .FirstOrDefault()?["DesignedCapacity"],
+        FullCapacityMWh    = fullCapacities.Cast<ManagementObject>()
+                                .FirstOrDefault()?["FullChargedCapacity"],
+        EstimatedRuntimeMin = (uint)b["EstimatedRunTime"]
+    }).ToList();
+
+    var first = results.First();
+    var healthPercent = first.DesignCapacityMWh is uint d && d > 0 && first.FullCapacityMWh is uint f
+        ? (double)f / d * 100 : (double?)null;
+
+    return new DiagnosticResult
+    {
+        CheckType = "battery",
+        Status = "completed",
+        Data = new { batteries = results, healthPercent }
+    };
+}
+```
+
+**Status determination:**
+- `error` — health < 50% or charge < 10%
+- `warning` — health < 80% or charge < 20%
+- `ok` — otherwise
+
+**Example output:**
+
+```json
+{
+  "checkType": "battery",
+  "status": "completed",
+  "results": {
+    "batteries": [
+      {
+        "chargePercent": 82,
+        "cycleCount": 143,
+        "designCapacityMWh": 86000,
+        "fullCapacityMWh": 79000,
+        "estimatedRuntimeMin": 210
+      }
+    ],
+    "healthPercent": 91.9
+  }
 }
 ```
 
@@ -1664,6 +1847,15 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Startup folder shortcut (manual alternative)
 
 ## Version History
+
+**0.13.0**
+- Enhanced system information collection: 6 new hardware identity fields collected once on connect and stored in `devices` table (`device_manufacturer`, `device_model`, `form_factor`, `tpm_version`, `secure_boot`, `domain_join_type`)
+- `DeviceIdentity.cs` extended: manufacturer and model via `wmic computersystem`, form factor from `Win32_SystemEnclosure` ChassisTypes mapping, TPM version via `Get-Tpm`, Secure Boot via `Confirm-SecureBootUEFI`, domain join type parsed from `dsregcmd /status`
+- `SecurityCheck.cs` (new): composite PowerShell check covering BitLocker, Windows Defender, firewall profiles, and local administrator accounts; type: `security`
+- `BatteryCheck.cs` (new): WMI/CIM check for charge%, health%, cycle count, design/full capacity, runtime; gracefully returns "No battery detected" on desktops; type: `battery`
+- `DiagnosticsEngine.cs`: registers SecurityCheck and BatteryCheck (total diagnostic checks: 11)
+- `agentNamespace.js`: stores 6 new hardware identity fields from `system_profile` event
+- `db/schema.js`: v15 migration adds 6 new columns to `devices` table
 
 **0.12.8**
 - Current/previous user tracking: `previous_logged_in_users TEXT` column added to `devices`; `agentNamespace.js` saves old `logged_in_users` before overwriting; dashboard device cards show current user with 👤 icon; device detail shows "Current User" and "Previous User" stat cards

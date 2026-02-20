@@ -600,7 +600,7 @@ The server uses SQLite with 18 tables:
 
 | Table | Purpose |
 |-------|---------|
-| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, client_version, enrolled_at, last_seen, client_id, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters, previous_logged_in_users) |
+| `devices` | Enrolled devices (device_id, hostname, os_version, status, cpu_model, total_ram_gb, total_disk_gb, processor_count, health_score, client_version, enrolled_at, last_seen, client_id, + 12 extended profile fields: os_edition, os_build, os_architecture, bios_manufacturer, bios_version, gpu_model, serial_number, domain, last_boot_time, uptime_hours, logged_in_users, network_adapters, previous_logged_in_users, + 6 hardware identity fields: device_manufacturer, device_model, form_factor, tpm_version, secure_boot, domain_join_type) |
 | `enrollment_tokens` | One-time enrollment tokens (token, expires_at, status, used_by_device, client_id) |
 | `it_users` | IT staff accounts (username, password_hash, role CHECK superadmin/admin/technician/viewer, display_name, last_login) |
 | `chat_messages` | Chat history (device_id, sender, content, message_type, metadata) |
@@ -693,7 +693,7 @@ The client only executes actions from a hardcoded whitelist:
 
 ## Diagnostic Checks
 
-The client can run four types of diagnostic checks:
+The client can run diagnostic checks across multiple categories:
 
 | Check Type | Data Collected |
 |------------|----------------|
@@ -701,6 +701,13 @@ The client can run four types of diagnostic checks:
 | `memory` | RAM usage, available memory, top 5 processes by memory |
 | `disk` | Disk space on all drives (total, free, percentage used) |
 | `network` | Adapter status, internet connectivity, DNS resolution |
+| `services` | Windows service status (running/stopped) |
+| `windows_updates` | Pending Windows updates |
+| `startup_programs` | Programs configured to run at startup |
+| `event_log` | Recent errors and warnings from Windows Event Log |
+| `installed_software` | Installed applications list |
+| `security` | BitLocker encryption status, Windows Defender state, firewall profiles, local administrator accounts |
+| `battery` | Charge percentage, battery health, cycle count, design/full capacity, estimated runtime; returns "No battery detected" on desktops |
 
 **Usage:** AI can request checks using action tag `[ACTION:DIAGNOSE:checkType]`. Results are sent back to AI for interpretation.
 
@@ -820,7 +827,9 @@ pocket-it/
         │       ├── CpuCheck.cs
         │       ├── MemoryCheck.cs
         │       ├── DiskCheck.cs
-        │       └── NetworkCheck.cs
+        │       ├── NetworkCheck.cs
+        │       ├── SecurityCheck.cs  # BitLocker, Defender, Firewall, Local Admins
+        │       └── BatteryCheck.cs   # Charge%, health%, cycle count, runtime estimate
         ├── SystemTools/
         │   ├── ISystemTool.cs            # Interface + SystemToolResult
         │   ├── SystemToolsEngine.cs      # Tool registry + dispatch
@@ -852,7 +861,7 @@ pocket-it/
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
 - Device enrollment with one-time tokens
 - Device secret authentication on Socket.IO connections (required, no legacy null secrets allowed)
-- 10 diagnostic checks (CPU, memory, disk, network, top_processes, event_log, windows_update, installed_software, services, system profile)
+- 11 diagnostic checks (CPU, memory, disk, network, top_processes, event_log, windows_update, installed_software, services, security, battery)
 - 7 whitelisted remediation actions (flush DNS, clear temp, restart spooler, repair network, clear browser cache, kill process, restart service)
 - **Real device diagnostics**: auto-collect system profile (CPU model, RAM, disk, cores) on connect
 - **Health scoring system**: 0-100 score computed from all 8 check types (ok=100, warning=50, error=0)
@@ -866,6 +875,7 @@ pocket-it/
 - **Reports & Analytics**: fleet health trends, device metrics, alert/ticket summaries, CSV/PDF export, scheduled reports with cron
 - **System Tools Engine**: generic `system_tool_request`/`system_tool_result` socket event pattern with 5 tools: process_list, process_kill, service_list, service_action, event_log_query
 - **Enhanced Device Profile**: 12 new fields collected on connect — GPU, serial number, BIOS, OS edition/build/architecture, domain, uptime, logged-in users, network adapters
+- **Enhanced System Information**: 6 additional hardware identity fields collected on connect — device manufacturer, model, form factor, TPM version, Secure Boot state, domain join type (On-Premises AD, Azure AD, Hybrid, Workgroup)
 - **Dashboard System Tools tab**: tabbed UI (Processes, Services, Event Log) for live system inspection from the IT dashboard
 - Support ticket system with IT staff escalation
 - Offline message queueing with IT contact fallback

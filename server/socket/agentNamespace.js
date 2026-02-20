@@ -33,6 +33,8 @@ function setup(io, app) {
     windows_update: 'Windows Update status — recent patches and pending reboots',
     installed_software: 'List of installed programs with versions',
     services: 'Windows services status — focuses on stopped auto-start services',
+    security: 'Security posture — BitLocker, Defender, Firewall, Local Admins',
+    battery: 'Battery health and charge status (laptops)',
     all: 'Full System Diagnostic'
   };
 
@@ -196,9 +198,12 @@ function setup(io, app) {
           UPDATE devices SET
             cpu_model = ?, total_ram_gb = ?, total_disk_gb = ?, processor_count = ?,
             os_edition = ?, os_build = ?, os_architecture = ?,
+            os_display_version = ?, os_install_date = ?, os_name = ?,
             bios_manufacturer = ?, bios_version = ?, gpu_model = ?,
             serial_number = ?, domain = ?, last_boot_time = ?,
-            uptime_hours = ?, logged_in_users = ?, network_adapters = ?
+            uptime_hours = ?, logged_in_users = ?, network_adapters = ?,
+            device_manufacturer = ?, device_model = ?, form_factor = ?,
+            tpm_version = ?, secure_boot = ?, domain_join_type = ?
           WHERE device_id = ?
         `).run(
           data.cpuModel || null,
@@ -208,6 +213,9 @@ function setup(io, app) {
           data.osEdition || null,
           data.osBuild || null,
           data.osArchitecture || null,
+          data.osDisplayVersion || null,
+          data.osInstallDate || null,
+          data.osName || null,
           data.biosManufacturer || null,
           data.biosVersion || null,
           data.gpuModel || null,
@@ -217,6 +225,12 @@ function setup(io, app) {
           data.uptimeHours || null,
           data.loggedInUsers ? JSON.stringify(data.loggedInUsers) : null,
           data.networkAdapters ? JSON.stringify(data.networkAdapters) : null,
+          data.deviceManufacturer || null,
+          data.deviceModel || null,
+          data.formFactor || null,
+          data.tpmVersion || null,
+          data.secureBoot || null,
+          data.domainJoinType || null,
           deviceId
         );
       } catch (err) {

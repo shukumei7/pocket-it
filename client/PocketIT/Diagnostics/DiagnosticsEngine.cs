@@ -15,6 +15,8 @@ public class DiagnosticsEngine
         _checks.Add(new Checks.WindowsUpdateCheck());
         _checks.Add(new Checks.InstalledSoftwareCheck());
         _checks.Add(new Checks.ServicesCheck());
+        _checks.Add(new Checks.SecurityCheck());
+        _checks.Add(new Checks.BatteryCheck());
     }
 
     public async Task<List<DiagnosticResult>> RunAllAsync()

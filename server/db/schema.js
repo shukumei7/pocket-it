@@ -140,6 +140,37 @@ function initDatabase(dbPath) {
     }
   }
 
+  // v0.15.0: Enhanced OS version columns
+  const v15_os_columns = [
+    { name: 'os_display_version', type: 'TEXT' },
+    { name: 'os_install_date', type: 'TEXT' },
+    { name: 'os_name', type: 'TEXT' },
+  ];
+  for (const col of v15_os_columns) {
+    try {
+      db.prepare(`ALTER TABLE devices ADD COLUMN ${col.name} ${col.type}`).run();
+    } catch (err) {
+      // Column already exists
+    }
+  }
+
+  // v15: Enhanced device identity and security columns
+  const v15_device_columns = [
+    { name: 'device_manufacturer', type: 'TEXT' },
+    { name: 'device_model', type: 'TEXT' },
+    { name: 'form_factor', type: 'TEXT' },
+    { name: 'tpm_version', type: 'TEXT' },
+    { name: 'secure_boot', type: 'TEXT' },
+    { name: 'domain_join_type', type: 'TEXT' },
+  ];
+  for (const col of v15_device_columns) {
+    try {
+      db.prepare(`ALTER TABLE devices ADD COLUMN ${col.name} ${col.type}`).run();
+    } catch (err) {
+      // Column already exists
+    }
+  }
+
   // v0.10.0: Multi-tenancy tables (must come before ALTER TABLE references)
   db.exec(`
     CREATE TABLE IF NOT EXISTS clients (

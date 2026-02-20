@@ -120,6 +120,37 @@ public static class DeviceIdentity
             profile["osEdition"] = "Unknown";
         }
 
+        // Display version (e.g., "23H2", "24H2")
+        try
+        {
+            using var dvKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            profile["osDisplayVersion"] = dvKey?.GetValue("DisplayVersion")?.ToString() ?? "Unknown";
+        }
+        catch
+        {
+            profile["osDisplayVersion"] = "Unknown";
+        }
+
+        // Install date from registry (Unix timestamp)
+        try
+        {
+            using var idKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            var installDateVal = idKey?.GetValue("InstallDate");
+            if (installDateVal is int unixTs)
+            {
+                var installDate = DateTimeOffset.FromUnixTimeSeconds(unixTs).LocalDateTime;
+                profile["osInstallDate"] = installDate.ToString("o");
+            }
+            else
+            {
+                profile["osInstallDate"] = "Unknown";
+            }
+        }
+        catch
+        {
+            profile["osInstallDate"] = "Unknown";
+        }
+
         // OS Build (Build.UBR format)
         try
         {
@@ -136,7 +167,28 @@ public static class DeviceIdentity
         }
 
         // OS Architecture
-        profile["osArchitecture"] = Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit";
+        profile["osArchitecture"] = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString();
+
+        // Compose friendly OS name: "Windows 11 Pro 24H2 (Build 22631.2715) X64"
+        try
+        {
+            var edition = profile.ContainsKey("osEdition") ? profile["osEdition"]?.ToString() ?? "" : "";
+            var displayVer = profile.ContainsKey("osDisplayVersion") ? profile["osDisplayVersion"]?.ToString() ?? "" : "";
+            var build = profile.ContainsKey("osBuild") ? profile["osBuild"]?.ToString() ?? "" : "";
+            var arch = profile.ContainsKey("osArchitecture") ? profile["osArchitecture"]?.ToString() ?? "" : "";
+
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(edition) && edition != "Unknown") parts.Add(edition);
+            if (!string.IsNullOrEmpty(displayVer) && displayVer != "Unknown") parts.Add(displayVer);
+            if (!string.IsNullOrEmpty(build) && build != "Unknown") parts.Add($"(Build {build})");
+            if (!string.IsNullOrEmpty(arch) && arch != "Unknown") parts.Add(arch);
+
+            profile["osName"] = parts.Count > 0 ? string.Join(" ", parts) : Environment.OSVersion.ToString();
+        }
+        catch
+        {
+            profile["osName"] = Environment.OSVersion.ToString();
+        }
 
         // BIOS Manufacturer
         try
@@ -316,6 +368,184 @@ public static class DeviceIdentity
         {
             Logger.Warn($"System profile: Network adapters query failed: {ex.Message}");
             profile["networkAdapters"] = new List<object>();
+        }
+
+        // Device Manufacturer
+        try
+        {
+            var wmicPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wbem", "wmic.exe");
+            var info = new ProcessStartInfo(wmicPath, "computersystem get Manufacturer /value")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(info);
+            if (process != null)
+            {
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                var match = Regex.Match(output, @"Manufacturer=(.+)");
+                profile["deviceManufacturer"] = match.Success ? match.Groups[1].Value.Trim() : "Unknown";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"System profile: Device manufacturer query failed: {ex.Message}");
+            profile["deviceManufacturer"] = "Unknown";
+        }
+
+        // Device Model
+        try
+        {
+            var wmicPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wbem", "wmic.exe");
+            var info = new ProcessStartInfo(wmicPath, "computersystem get Model /value")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(info);
+            if (process != null)
+            {
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                var match = Regex.Match(output, @"Model=(.+)");
+                profile["deviceModel"] = match.Success ? match.Groups[1].Value.Trim() : "Unknown";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"System profile: Device model query failed: {ex.Message}");
+            profile["deviceModel"] = "Unknown";
+        }
+
+        // Form Factor (chassis type)
+        try
+        {
+            var wmicPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wbem", "wmic.exe");
+            var info = new ProcessStartInfo(wmicPath, "path Win32_SystemEnclosure get ChassisTypes /value")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(info);
+            if (process != null)
+            {
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                var match = Regex.Match(output, @"ChassisTypes=\{(\d+)\}");
+                if (match.Success && int.TryParse(match.Groups[1].Value, out int chassisType))
+                {
+                    profile["formFactor"] = chassisType switch
+                    {
+                        3 or 4 or 5 or 6 or 7 => "Desktop",
+                        8 or 9 or 10 or 11 or 12 or 14 => "Laptop",
+                        13 => "All-in-One",
+                        15 or 16 => "Tablet",
+                        >= 17 and <= 24 => "Server",
+                        _ => "Unknown"
+                    };
+                }
+                else
+                {
+                    profile["formFactor"] = "Unknown";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"System profile: Form factor query failed: {ex.Message}");
+            profile["formFactor"] = "Unknown";
+        }
+
+        // TPM Version via PowerShell
+        try
+        {
+            var psPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell", "v1.0", "powershell.exe");
+            var info = new ProcessStartInfo(psPath, "-NoProfile -Command \"(Get-Tpm).ManufacturerVersion\"")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(info);
+            if (process != null)
+            {
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                var trimmed = output.Trim();
+                profile["tpmVersion"] = string.IsNullOrEmpty(trimmed) ? "Not Present" : trimmed;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"System profile: TPM version query failed: {ex.Message}");
+            profile["tpmVersion"] = "Not Present";
+        }
+
+        // Secure Boot via PowerShell
+        try
+        {
+            var psPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell", "v1.0", "powershell.exe");
+            var info = new ProcessStartInfo(psPath, "-NoProfile -Command \"Confirm-SecureBootUEFI\"")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(info);
+            if (process != null)
+            {
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                var trimmed = output.Trim();
+                profile["secureBoot"] = string.IsNullOrEmpty(trimmed) ? "Unknown" : trimmed;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"System profile: Secure Boot query failed: {ex.Message}");
+            profile["secureBoot"] = "Unknown";
+        }
+
+        // Domain Join Type via dsregcmd
+        try
+        {
+            var info = new ProcessStartInfo("dsregcmd", "/status")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(info);
+            if (process != null)
+            {
+                var output = await process.StandardOutput.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                var azureMatch = Regex.Match(output, @"AzureAdJoined\s*:\s*(\w+)", RegexOptions.IgnoreCase);
+                var domainMatch = Regex.Match(output, @"DomainJoined\s*:\s*(\w+)", RegexOptions.IgnoreCase);
+                bool azureJoined = azureMatch.Success && azureMatch.Groups[1].Value.Equals("YES", StringComparison.OrdinalIgnoreCase);
+                bool domainJoined = domainMatch.Success && domainMatch.Groups[1].Value.Equals("YES", StringComparison.OrdinalIgnoreCase);
+
+                profile["domainJoinType"] = (azureJoined, domainJoined) switch
+                {
+                    (true, true) => "Hybrid",
+                    (true, false) => "Azure AD",
+                    (false, true) => "On-Premises AD",
+                    _ => "Workgroup"
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"System profile: Domain join type query failed: {ex.Message}");
+            profile["domainJoinType"] = "Unknown";
         }
 
         return profile;

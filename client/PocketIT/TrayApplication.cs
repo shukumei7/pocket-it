@@ -38,6 +38,7 @@ public class TrayApplication : ApplicationContext
     private readonly InstallerExecutionService _installerExecution = new();
     private UpdateService? _updateService;
     private UpdateInfo? _pendingUpdate;
+    private string? _cliEnrollToken;
     private bool _isEnrolled;
     private bool _wasConnected;
     private Icon? _remoteActiveIcon;
@@ -45,8 +46,9 @@ public class TrayApplication : ApplicationContext
     private bool _hasUnreadMessages;
     private bool _remoteDesktopActive;
 
-    public TrayApplication()
+    public TrayApplication(string? cliEnrollToken = null)
     {
+        _cliEnrollToken = cliEnrollToken;
         _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
 
         Logger.Initialize();
@@ -121,6 +123,7 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnInstallerRequest += OnServerInstallerRequest;
         _serverConnection.OnScreenshotRequest += OnServerScreenshotRequest;
         _serverConnection.OnServerUrlChanged += OnServerUrlChanged;
+        _serverConnection.OnAIStatusChanged += OnAIStatusChanged;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -251,7 +254,7 @@ public class TrayApplication : ApplicationContext
             Logger.Info($"Enrollment check: secret={(!string.IsNullOrEmpty(deviceSecret) ? "present" : "empty")}");
             var isEnrolled = await _enrollmentFlow.CheckEnrolledAsync(deviceSecret);
             Logger.Info($"Enrollment status: {isEnrolled}");
-            var enrollmentToken = _config["Enrollment:Token"] ?? "";
+            var enrollmentToken = _cliEnrollToken ?? _config["Enrollment:Token"] ?? "";
 
             if (!isEnrolled && !string.IsNullOrEmpty(enrollmentToken))
             {
@@ -471,6 +474,11 @@ public class TrayApplication : ApplicationContext
                     _remoteDesktop = null;
                     _remoteDesktopActive = false;
                     UpdateTrayIcon();
+                }
+                if (_remoteDesktopActive)
+                {
+                    var rdpDisconnectMsg = JsonSerializer.Serialize(new { type = "desktop_session_notify", active = false, username = "IT technician" });
+                    _chatWindow?.SendToWebView(rdpDisconnectMsg);
                 }
             }
             _wasConnected = connected;
@@ -756,6 +764,10 @@ public class TrayApplication : ApplicationContext
             // Send initial monitor list
             _ = _serverConnection.SendDesktopMonitors(_remoteDesktop.GetMonitors());
             _uiContext.Post(_ => { _remoteDesktopActive = true; UpdateTrayIcon(); }, null);
+            // Notify chat UI about remote desktop session
+            var itUsername = _serverConnection.LastDesktopItUsername ?? "IT Support";
+            var rdpMsg = JsonSerializer.Serialize(new { type = "desktop_session_notify", active = true, username = itUsername });
+            _uiContext.Post(_ => _chatWindow?.SendToWebView(rdpMsg), null);
             return;
         }
 
@@ -780,6 +792,10 @@ public class TrayApplication : ApplicationContext
         _remoteDesktop?.Dispose();
         _remoteDesktop = null;
         _uiContext.Post(_ => { _remoteDesktopActive = false; UpdateTrayIcon(); TryAutoApplyPendingUpdate(); }, null);
+        // Notify chat UI
+        var itUsername = _serverConnection.LastDesktopItUsername ?? "IT Support";
+        var rdpStopMsg = JsonSerializer.Serialize(new { type = "desktop_session_notify", active = false, username = itUsername });
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(rdpStopMsg), null);
     }
 
     private void OnServerDesktopQualityUpdate(int quality, int fps, float scale)
@@ -1011,6 +1027,12 @@ public class TrayApplication : ApplicationContext
             reason,
             requiresApproval = true
         });
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
+    }
+
+    private void OnAIStatusChanged(bool enabled, string? reason)
+    {
+        var msg = JsonSerializer.Serialize(new { type = "ai_status", enabled, reason = reason ?? (object?)null });
         _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
     }
 

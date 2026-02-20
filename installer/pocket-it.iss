@@ -59,9 +59,9 @@ Filename: "schtasks"; Parameters: "/Create /TN ""PocketIT"" /TR """"""{app}\{#My
 ; Lock down install folder permissions (Administrators + SYSTEM only)
 Filename: "icacls"; Parameters: """{app}"" /inheritance:r /grant:r ""SYSTEM:(OI)(CI)F"" ""BUILTIN\Administrators:(OI)(CI)F"" ""BUILTIN\Users:(OI)(CI)RX"""; Flags: runhidden
 ; Launch after install
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "{code:GetEnrollParam}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 ; Auto-relaunch after silent update
-Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall skipifnotsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "{code:GetEnrollParam}"; Flags: nowait postinstall skipifnotsilent
 
 [UninstallRun]
 Filename: "schtasks"; Parameters: "/Delete /TN ""PocketIT"" /F"; Flags: runhidden
@@ -94,6 +94,17 @@ begin
         Result := True;
     end;
   end;
+end;
+
+function GetEnrollParam(Param: String): String;
+var
+  Token: String;
+begin
+  Token := ExpandConstant('{param:ENROLLTOKEN|}');
+  if Token <> '' then
+    Result := '--enroll-token ' + Token
+  else
+    Result := '';
 end;
 
 function InitializeSetup: Boolean;

@@ -16,7 +16,18 @@ static class Program
             return;
         }
 
+        string? enrollToken = null;
+        var args = Environment.GetCommandLineArgs();
+        for (int i = 1; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--enroll-token")
+            {
+                enrollToken = args[i + 1];
+                break;
+            }
+        }
+
         ApplicationConfiguration.Initialize();
-        Application.Run(new TrayApplication());
+        Application.Run(new TrayApplication(enrollToken));
     }
 }

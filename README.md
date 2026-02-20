@@ -728,28 +728,44 @@ Pocket IT prioritizes security and integrity at every layer:
 ### Authentication & Authorization
 - **JWT required** — `POCKET_IT_JWT_SECRET` must be set (server refuses to start without it)
 - **Device enrollment** — one-time tokens with 24-hour expiry; re-enrollment of existing devices rejected
-- **Device secrets** — unique `device_secret` generated at enrollment, validated on every Socket.IO connection
-- **IT staff auth** — JWT Bearer tokens with role-based access (admin/technician/viewer)
+- **Device secrets** — unique `device_secret` generated at enrollment, hashed with bcrypt in the server DB, validated on every Socket.IO connection; plaintext secrets migrated automatically on startup
+- **Device secret transport** — secret sent in the Socket.IO `auth` object (not the query string) to keep it out of server logs and URL history
+- **IT staff auth** — JWT Bearer tokens with role-based access (superadmin/admin/technician/viewer); JWT decode failure defaults to `{ isAdmin: false }` (no fallback elevation)
 - **Localhost bypass** — development only; remote access requires full auth
+
+### Credential & Secret Storage
+- **LLM API keys encrypted at rest** — API keys stored in server settings are encrypted with AES-256-GCM (`server/config/encryption.js`) using a key derived from `POCKET_IT_JWT_SECRET`
+- **Bcrypt device secrets** — server stores only bcrypt hashes of device secrets; plaintext never persisted after initial enrollment
+- **DPAPI client-side protection** — device secret is encrypted with Windows DPAPI (`ProtectedData.Protect`) before being written to the client's local SQLite database; readable only by the same Windows user account
 
 ### Input Validation & Integrity
 - **Parameterized SQL** — all database queries use prepared statements
 - **Body size limit** — 100KB max on JSON payloads
 - **CORS whitelist** — specific origins only (no wildcard, no null)
 - **Ticket validation** — status and priority values validated against allowed enums
-- **Prompt injection defense** — user messages wrapped in `<user_message>` tags
+- **Prompt injection defense** — LLM inputs sanitized by `sanitizeForLLM()`: strips injection markers (`IGNORE`, `SYSTEM`, `OVERRIDE`), XML-like tags (`<system>`, `<prompt>`), and role markers (`[INST]`, `<<SYS>>`); diagnostic JSON objects sanitized recursively before reaching the LLM
+- **LLM error sanitization** — provider errors are logged server-side; clients receive a generic error message only
 
 ### Rate Limiting & Abuse Prevention
 - **API rate limit** — 100 requests per 15 minutes per IP
 - **Auth rate limit** — 10 attempts per 15 minutes per IP
+- **Enrollment rate limit** — 5 enrollment requests per IP per 15 minutes
 - **Account lockout** — 5 failed logins locks account for 15 minutes
 - **LLM timeouts** — 30-second abort on all LLM HTTP calls
 
 ### Remediation Safety
-- **Hardcoded whitelist** — only `flush_dns` and `clear_temp` allowed (client AND server)
+- **Centralized whitelist** — `VALID_ACTIONS` and `ALLOWED_SERVICES` defined once in `server/config/actionWhitelist.js`; all consumers import from this single source of truth
 - **User approval required** — no action executes without explicit user consent
 - **Server-side validation** — AI-suggested actions checked against whitelist before forwarding to client
 - **Audit logging** — all remediation executions logged to `audit_log` table
+- **PowerShell Base64 encoding** — PowerShell scripts in client diagnostics use `-EncodedCommand` with Base64; no string-escaped command construction
+
+### Multi-Tenant Isolation
+- **Scoped Socket.IO events** — integrity warnings and device events are emitted via `emitToScoped()`, targeting only IT users whose client scope includes the affected device
+- **Chat history scope check** — `GET /api/chat/:deviceId` returns 403 if the device is not in the requesting user's client scope
+
+### Content Security Policy
+- **`unsafe-inline` removed** — CSP `scriptSrc` and `scriptSrcAttr` no longer include `unsafe-inline` in the helmet configuration
 
 ## Security Model
 
@@ -855,7 +871,7 @@ pocket-it/
             └── chat.js                   # WebView2 JavaScript
 ```
 
-## Current Status (v0.12.8)
+## Current Status (v0.13.4)
 
 ### Completed
 - AI chat with 4 LLM providers (Ollama, OpenAI, Anthropic, Claude CLI)
@@ -961,6 +977,7 @@ dotnet run
 | v0.10.0 | Multi-Tenancy (MSP Model) | Client organizations, technician-to-client assignment, scope middleware, scoped Socket.IO broadcasts, per-client installer download, dashboard client management |
 | v0.11.0 | Self-Update & Admin Elevation | Server-hosted update packages, client auto-update with SHA-256 verification, admin elevation via manifest, Task Scheduler auto-start, fleet version tracking, dashboard column sorting and event log search |
 | v0.12.8 | User Tracking, AI Screenshots & UX Polish | Current/previous user tracking, AI screenshot diagnostic with multimodal LLM support, Users management page, Admin dropdown nav, superadmin role, auto-push updates on connect, form controls normalization |
+| v0.13.4 | Security Audit Remediation | Prompt injection hardening, bcrypt device secrets, DPAPI client credential protection, AES-256-GCM API key encryption, centralized action whitelist, scoped integrity events, enrollment rate limiting, CSP unsafe-inline removed, PowerShell Base64 encoding |
 
 ### Planned
 | Version | Theme | Key Capabilities |

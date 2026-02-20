@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ## [Unreleased]
 
+## [0.13.4] - 2026-02-19
+
+### Security
+- **Prompt injection defense hardened** — `sanitizeForLLM()` in `diagnosticAI.js` now strips prompt injection markers (`IGNORE`, `SYSTEM`, `OVERRIDE`, etc.), XML-like tags (`<system>`, `<prompt>`, etc.), and role markers (`[INST]`, `<<SYS>>`, etc.); new `sanitizeDiagnosticData()` recursively sanitizes JSON diagnostic objects before they reach the LLM
+- **Admin fallback corrected** — JWT decode failure in `itNamespace.js` now defaults to `{ isAdmin: false, clientIds: [] }` instead of granting full admin access
+- **Centralized action/service whitelist** — `VALID_ACTIONS` and `ALLOWED_SERVICES` extracted into `server/config/actionWhitelist.js` (single source of truth); all consumers import from this module
+- **Scoped integrity warnings** — `integrity_warning` events are now emitted via `emitToScoped` so only IT users whose scope includes the affected device receive them
+- **Chat history scope check** — `GET /api/chat/:deviceId` returns 403 if the requesting user does not have the device in their client scope
+- **Device secrets hashed at rest** — Device secrets are now stored as bcrypt hashes in the server DB; backward-compatible migration hashes existing plaintext secrets on startup
+- **Enrollment rate limiting** — Enrollment endpoint (`POST /api/enrollment/enroll`) is now rate-limited to 5 requests per IP per 15 minutes
+- **PowerShell Base64 encoding** — `SecurityCheck.cs` and `BatteryCheck.cs` now pass PowerShell scripts via `-EncodedCommand` with Base64 instead of string escaping
+- **DPAPI client credential protection** — Device secret is now encrypted with Windows DPAPI (`ProtectedData.Protect`) in `LocalDatabase.cs` before being written to the local SQLite database
+- **Device secret moved out of query string** — Device secret is transmitted in the Socket.IO `auth` object rather than the query string, keeping it out of server logs and URL history
+- **CSP `unsafe-inline` removed** — `scriptSrc` and `scriptSrcAttr` in `server.js` helmet configuration no longer include `unsafe-inline`
+- **LLM API keys encrypted at rest** — API keys stored in settings are encrypted using AES-256-GCM via the new `server/config/encryption.js` module
+- **LLM error sanitization** — LLM provider errors are no longer forwarded verbatim to clients; a generic error message is returned while the full error is logged server-side
+
+### Technical
+- NEW: `server/config/actionWhitelist.js` — centralized `VALID_ACTIONS` and `ALLOWED_SERVICES` constants
+- NEW: `server/config/encryption.js` — AES-256-GCM `encrypt()` / `decrypt()` helpers for settings secrets
+- EDIT: `server/services/diagnosticAI.js` — hardened `sanitizeForLLM()`; added recursive `sanitizeDiagnosticData()`
+- EDIT: `server/socket/itNamespace.js` — JWT decode failure defaults to `{ isAdmin: false, clientIds: [] }`; imports `actionWhitelist.js`
+- EDIT: `server/socket/agentNamespace.js` — device secret read from Socket.IO `auth` object; imports `actionWhitelist.js`
+- EDIT: `server/routes/chat.js` — scope check added to `GET /api/chat/:deviceId`
+- EDIT: `server/routes/enrollment.js` — 5 req/IP/15 min rate limit applied to enroll endpoint
+- EDIT: `server/auth/middleware.js` — imports `actionWhitelist.js` for validation
+- EDIT: `server/db/schema.js` — startup migration hashes any plaintext device secrets with bcrypt
+- EDIT: `server/routes/admin.js` — LLM API keys encrypted via `encryption.js` before persistence
+- EDIT: `server/server.js` — removed `unsafe-inline` from CSP `scriptSrc` and `scriptSrcAttr`
+- EDIT: `client/PocketIT/Diagnostics/Checks/SecurityCheck.cs` — PowerShell uses `-EncodedCommand` with Base64
+- EDIT: `client/PocketIT/Diagnostics/Checks/BatteryCheck.cs` — PowerShell uses `-EncodedCommand` with Base64
+- EDIT: `client/PocketIT/Core/LocalDatabase.cs` — device secret encrypted with DPAPI before storage
+- EDIT: `client/PocketIT/Core/ServerConnection.cs` — device secret sent in Socket.IO `auth` object, not query string
+- EDIT: `client/PocketIT/PocketIT.csproj` — added `System.Security.Cryptography.ProtectedData` package reference
+- DEPS: Added `bcrypt` for server-side device secret hashing
+
 ## [0.12.8] - 2026-02-19
 
 ### Added
@@ -353,7 +389,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.12.8...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.13.4...HEAD
+[0.13.4]: https://github.com/example/pocket-it/compare/v0.12.8...v0.13.4
 [0.12.8]: https://github.com/example/pocket-it/compare/v0.11.0...v0.12.8
 [0.11.0]: https://github.com/example/pocket-it/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/example/pocket-it/compare/v0.9.0...v0.10.0

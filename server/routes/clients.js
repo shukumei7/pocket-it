@@ -174,6 +174,10 @@ router.delete('/:id/users/:userId', requireAdmin, (req, res) => {
 // Per-client installer download (admin only)
 // Serves bootstrapper EXE with embedded config, or falls back to ZIP
 router.get('/:id/installer', requireAdmin, async (req, res) => {
+  if (process.env.POCKET_IT_DOCKER === 'true') {
+    return res.status(501).json({ error: 'Per-client installer generation is not available in Docker mode' });
+  }
+
   const db = req.app.locals.db;
   const clientId = parseInt(req.params.id);
   const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);

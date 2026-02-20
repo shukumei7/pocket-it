@@ -10,16 +10,19 @@ const router = express.Router();
 
 const IS_DOCKER = process.env.POCKET_IT_DOCKER === 'true';
 
-// Store uploads in server/updates/
+// uploads stored in server/updates/ — mapped via docker-compose volume in Docker
 const uploadsDir = path.join(__dirname, '..', 'updates');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Ensure releases/ directory exists (at project root for git tracking)
-const releasesDir = path.join(__dirname, '..', '..', 'releases');
-if (!fs.existsSync(releasesDir)) {
-  fs.mkdirSync(releasesDir, { recursive: true });
+// Ensure releases/ directory exists (at project root for git tracking, non-Docker only)
+let releasesDir = null;
+if (process.env.POCKET_IT_DOCKER !== 'true') {
+  releasesDir = path.join(__dirname, '..', '..', 'releases');
+  if (!fs.existsSync(releasesDir)) {
+    fs.mkdirSync(releasesDir, { recursive: true });
+  }
 }
 
 const upload = multer({

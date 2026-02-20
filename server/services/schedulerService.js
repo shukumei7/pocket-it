@@ -9,7 +9,8 @@ class SchedulerService {
     this.exportService = exportService;
     this.notificationService = notificationService;
     this.cronJob = null;
-    this.reportsDir = path.join(__dirname, '..', 'reports');
+    const DATA_DIR = process.env.POCKET_IT_DATA_DIR || path.join(__dirname, '..', 'db');
+    this.reportsDir = path.join(DATA_DIR, 'reports');
 
     if (!fs.existsSync(this.reportsDir)) {
       fs.mkdirSync(this.reportsDir, { recursive: true });

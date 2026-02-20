@@ -1983,6 +1983,7 @@ Portal: **https://helpdesk.example.com**
 | Control | Implementation | Location |
 |---------|---------------|----------|
 | JWT secret required | Server exits on startup if `POCKET_IT_JWT_SECRET` unset (no hardcoded fallback) | `server.js:5-9`, `socket/itNamespace.js` |
+| Docker mode guard | `POCKET_IT_DOCKER=true` disables git-based update features (server self-update, client release check, publish-local) with 501 responses; auto-set in `Dockerfile` | `server/server.js`, `server/routes/updates.js`, `server/services/serverUpdate.js` |
 | Device DB validation | `requireDevice` middleware verifies device_id in database | `auth/middleware.js:17-31` |
 | Device secret auth (Socket.IO) | Socket.IO handshake validates `device_secret` from enrollment; null secrets rejected | `socket/agentNamespace.js:23-35` |
 | Device secret auth (HTTP) | `requireDevice` middleware validates `x-device-secret` header | `auth/middleware.js` |
@@ -2218,6 +2219,27 @@ npm run test:e2e
 - Set up log rotation
 - Enable firewall rules
 - Configure backup for SQLite database
+
+### Docker Deployment
+
+The server supports containerized deployment via `Dockerfile` and `docker-compose.yml`. Set `POCKET_IT_DOCKER=true` to disable git-based features that require a `.git` directory.
+
+**Quick start:**
+```bash
+POCKET_IT_JWT_SECRET=$(openssl rand -hex 32) docker compose up -d
+```
+
+**Volumes:**
+- `./data/db:/app/server/db` — SQLite database persistence
+- `./data/updates:/app/server/updates` — Client installer packages
+
+**Disabled in Docker mode (501 responses):**
+- `GET /api/updates/server-check` — Use container image tags instead
+- `POST /api/updates/server-apply` — Pull new image and recreate container
+- `GET /api/updates/client-check` — Upload builds via `/api/updates/upload`
+- `POST /api/updates/publish-local` — Upload builds via `/api/updates/upload`
+
+**Ollama connectivity:** If Ollama runs on the Docker host, set `POCKET_IT_OLLAMA_URL=http://host.docker.internal:11434` (Docker Desktop) or `http://172.17.0.1:11434` (Linux).
 
 ### Client Deployment
 

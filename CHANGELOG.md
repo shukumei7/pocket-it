@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ### Added
 - **Google Gemini LLM Provider** — Gemini added as a 5th AI provider alongside Ollama, OpenAI, Anthropic, and Claude CLI; supports chat and vision (screenshot analysis); configurable via dashboard Settings page or `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` environment variables; default model: `gemini-2.0-flash`
+- **Docker Support** — `Dockerfile` (Node 20 Alpine with `better-sqlite3` native build), `docker-compose.yml` with persistent volume mounts for `db/` and `updates/`, `.dockerignore`; `POCKET_IT_DOCKER=true` env var disables git-based features (server self-update, client release check, publish-local) with 501 responses; manual upload and fleet push endpoints remain functional
 
 ### Changed
 - **Dashboard toggle switches** — All checkbox inputs in settings and script library forms converted to toggle switch UI (`.toggle-switch` / `.toggle-track` CSS pattern)
@@ -17,6 +18,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - **Client terminal notifications** — IT-initiated remote terminal sessions no longer show "Terminal session ended" / "Terminal session active" messages in the end-user's chat window; only user-approved terminal sessions display chat notifications
 
 ### Technical
+- NEW: `Dockerfile` — Node 20 Alpine, `better-sqlite3` native compilation via `python3 make g++`, production deps only
+- NEW: `docker-compose.yml` — persistent volumes `./data/db` and `./data/updates`, commented LLM provider config with `host.docker.internal` Ollama example
+- NEW: `.dockerignore` — excludes `client/`, `.git`, `node_modules/`, test files, SQLite WAL files
+- EDIT: `server/server.js` — git-based release registration and 24h client check interval wrapped in `POCKET_IT_DOCKER` guard; `pushUpdateToOutdatedDevices` always defined
+- EDIT: `server/routes/updates.js` — `server-check`, `server-apply`, `client-check`, `publish-local` return 501 in Docker mode
+- EDIT: `server/services/serverUpdate.js` — `checkForUpdates`, `applyUpdate`, `checkClientRelease` guarded; `getCurrentCommit` returns `POCKET_IT_VERSION` env or `'docker'`
 - EDIT: `server/services/llmService.js` — `_geminiChat()` method using Gemini REST API with `systemInstruction`, multimodal `inlineData` for images, abort controller timeout; `geminiKey` and `geminiModel` properties; `getModels()` updated
 - EDIT: `server/server.js` — Gemini env vars in LLMService constructor and startup reconfigure
 - EDIT: `server/routes/admin.js` — `llm.gemini.apiKey` and `llm.gemini.model` in defaults, allowedKeys, decrypt/mask/encrypt flows, and PUT reconfigure

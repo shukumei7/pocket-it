@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
 ### Added
 - **Google Gemini LLM Provider** — Gemini added as a 5th AI provider alongside Ollama, OpenAI, Anthropic, and Claude CLI; supports chat and vision (screenshot analysis); configurable via dashboard Settings page or `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` environment variables; default model: `gemini-2.0-flash`
-- **Docker Support** — `Dockerfile` (Node 20 Alpine with `better-sqlite3` native build), `docker-compose.yml` with persistent volume mounts for `db/` and `updates/`, `.dockerignore`; `POCKET_IT_DOCKER=true` env var disables git-based features (server self-update, client release check, publish-local) with 501 responses; manual upload and fleet push endpoints remain functional
+- **Docker Support** — `Dockerfile` (Node 20 Alpine with `better-sqlite3` native build), `docker-compose.yml` with persistent volume mounts for `db/` and `updates/`, `.dockerignore`; `POCKET_IT_DOCKER=true` env var disables git-based features (server self-update, client release check, publish-local) with 501 responses; manual upload and fleet push endpoints remain functional; JWT secret auto-generated on first Docker run and persisted to volume-mounted db/.jwt-secret (env var override still takes priority)
 
 ### Changed
 - **Dashboard toggle switches** — All checkbox inputs in settings and script library forms converted to toggle switch UI (`.toggle-switch` / `.toggle-track` CSS pattern)

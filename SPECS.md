@@ -1982,7 +1982,7 @@ Portal: **https://helpdesk.example.com**
 
 | Control | Implementation | Location |
 |---------|---------------|----------|
-| JWT secret required | Server exits on startup if `POCKET_IT_JWT_SECRET` unset (no hardcoded fallback) | `server.js:5-9`, `socket/itNamespace.js` |
+| JWT secret required | In Docker mode (`POCKET_IT_DOCKER=true`): auto-generated 256-bit secret saved to `db/.jwt-secret` on first run; env var `POCKET_IT_JWT_SECRET` takes priority. In bare-metal mode: server exits on startup if neither is present (no hardcoded fallback) | `server.js:5-9`, `socket/itNamespace.js` |
 | Docker mode guard | `POCKET_IT_DOCKER=true` disables git-based update features (server self-update, client release check, publish-local) with 501 responses; auto-set in `Dockerfile` | `server/server.js`, `server/routes/updates.js`, `server/services/serverUpdate.js` |
 | Device DB validation | `requireDevice` middleware verifies device_id in database | `auth/middleware.js:17-31` |
 | Device secret auth (Socket.IO) | Socket.IO handshake validates `device_secret` from enrollment; null secrets rejected | `socket/agentNamespace.js:23-35` |
@@ -2226,8 +2226,10 @@ The server supports containerized deployment via `Dockerfile` and `docker-compos
 
 **Quick start:**
 ```bash
-POCKET_IT_JWT_SECRET=$(openssl rand -hex 32) docker compose up -d
+docker compose up -d
 ```
+
+**JWT secret:** Auto-generated on first run and saved to `db/.jwt-secret` (persisted via volume mount). To use an explicit secret, set `POCKET_IT_JWT_SECRET` env var — it takes priority over the file.
 
 **Volumes:**
 - `./data/db:/app/server/db` — SQLite database persistence

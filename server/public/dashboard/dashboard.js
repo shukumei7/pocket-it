@@ -8,7 +8,7 @@
         // Clipboard fallback for non-secure contexts (HTTP on non-localhost)
         function copyToClipboard(text) {
             if (navigator.clipboard && navigator.clipboard.writeText) {
-                return copyToClipboard(text);
+                return navigator.clipboard.writeText(text);
             }
             const ta = document.createElement('textarea');
             ta.value = text;
@@ -130,7 +130,7 @@
             initSocket();
             await loadUserPreferences();
             const hash = location.hash.slice(1);
-            if (!hash || (!hash.startsWith('device/') && !['fleet','tickets','alerts','reports','updates','deploy','wishlist','settings','account','clients','users'].includes(hash))) {
+            if (!hash || (!hash.startsWith('device/') && !['fleet','tickets','alerts','reports','updates','deploy','wishlist','settings','account','clients','users','scripts'].includes(hash))) {
                 showPage(userPreferences.defaultPage || 'fleet');
                 history.replaceState({ page: userPreferences.defaultPage || 'fleet' }, '', '#' + (userPreferences.defaultPage || 'fleet'));
             } else if (!restoreFromHash()) {
@@ -416,7 +416,7 @@
                     return true;
                 }
             }
-            const validPages = ['fleet', 'tickets', 'alerts', 'reports', 'updates', 'deploy', 'wishlist', 'settings', 'account', 'clients', 'users'];
+            const validPages = ['fleet', 'tickets', 'alerts', 'reports', 'updates', 'deploy', 'wishlist', 'settings', 'account', 'clients', 'users', 'scripts'];
             if (validPages.includes(hash)) {
                 showPage(hash);
                 history.replaceState({ page: hash }, '', '#' + hash);
@@ -2215,8 +2215,7 @@
                 const list = document.getElementById('alert-list');
                 if (alerts.length === 0) {
                     list.innerHTML = '<div class="empty-state">No alerts.</div>';
-                    return;
-                }
+                } else {
 
                 list.innerHTML = alerts.map(a => `
                     <li class="alert-item">
@@ -2237,6 +2236,7 @@
                         </div>
                     </li>
                 `).join('');
+                }
 
                 // Load thresholds
                 await loadThresholds();

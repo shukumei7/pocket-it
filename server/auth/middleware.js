@@ -108,6 +108,7 @@ function requireAdmin(req, res, next) {
 
 module.exports = {
   isLocalhost,
+  getJwtSecret,
   requireDevice,
   requireIT,
   requireAdmin

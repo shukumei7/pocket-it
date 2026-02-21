@@ -58,14 +58,26 @@ app.use(helmet({
 
 // Rate limiting (skip localhost — consistent with auth bypass)
 const rateLimit = require('express-rate-limit');
-const { isLocalhost } = require('./auth/middleware');
+const jwt = require('jsonwebtoken');
+const { isLocalhost, getJwtSecret } = require('./auth/middleware');
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 100, // limit unauthenticated requests per IP
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => isLocalhost(req),
+  skip: (req) => {
+    if (isLocalhost(req)) return true;
+    // Skip for authenticated IT users — dashboard makes many legitimate requests
+    const authHeader = req.headers['authorization'];
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.slice(7), getJwtSecret());
+        return !decoded.purpose; // user tokens have no purpose field
+      } catch { /* invalid/expired token — apply rate limit */ }
+    }
+    return false;
+  },
   message: { error: 'Too many requests, please try again later' }
 });
 

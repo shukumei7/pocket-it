@@ -3097,8 +3097,22 @@
                     }
                 }
                 // Normal auth check (remote or auto-login failed)
+                if (!authToken) {
+                    showLogin();
+                    return;
+                }
                 const res = await fetchWithAuth(`${API}/api/admin/stats`);
                 if (res.ok) {
+                    // Fetch user profile + clients to populate session data
+                    const [profileRes, clientsRes] = await Promise.all([
+                        fetchWithAuth(`${API}/api/admin/user/profile`),
+                        fetchWithAuth(`${API}/api/clients`)
+                    ]);
+                    if (profileRes.ok) {
+                        const user = await profileRes.json();
+                        const clients = clientsRes.ok ? await clientsRes.json() : [];
+                        setupClientData({ user, clients });
+                    }
                     hideLogin();
                     initSocket();
                     setupDesktopInput();

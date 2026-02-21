@@ -138,6 +138,8 @@ class LLMService {
   }
 
   async _geminiChat(messages) {
+    if (!this.geminiKey) throw new Error('Gemini API key not configured');
+    if (!this.geminiModel) throw new Error('Gemini model not configured');
     const systemMsg = messages.find(m => m.role === 'system');
     const chatMessages = messages.filter(m => m.role !== 'system').map(m => {
       const parts = [];
@@ -174,6 +176,12 @@ class LLMService {
       }
       const data = await response.json();
       return data.candidates[0].content.parts[0].text;
+    } catch (err) {
+      // Surface underlying network error cause (e.g. ENOTFOUND, ECONNREFUSED, TLS error)
+      if (err.cause) {
+        throw new Error(`Gemini fetch failed: ${err.cause.message || err.cause.code || String(err.cause)}`);
+      }
+      throw err;
     } finally {
       clearTimeout(timeout);
     }
@@ -269,6 +277,13 @@ class LLMService {
   }
 
   getModels() {
+    const defaults = {
+      openai: 'gpt-4o-mini',
+      anthropic: 'claude-sonnet-4-5-20250929',
+      'claude-cli': 'default',
+      gemini: 'gemini-2.0-flash',
+      ollama: 'llama3.2'
+    };
     const modelMap = {
       openai: this.openaiModel,
       anthropic: this.anthropicModel,
@@ -278,7 +293,7 @@ class LLMService {
     };
     return {
       provider: this.provider,
-      model: modelMap[this.provider] || this.ollamaModel
+      model: modelMap[this.provider] || defaults[this.provider] || this.ollamaModel
     };
   }
 }

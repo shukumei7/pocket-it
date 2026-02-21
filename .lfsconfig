@@ -1,0 +1,5 @@
+[lfs]
+	# Keep LFS objects for recent refs only (prune aggressively)
+	fetchrecentrefsdays = 7
+	fetchrecentcommitsdays = 2
+	pruneoffsetdays = 0

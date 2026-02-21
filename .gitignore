@@ -4,6 +4,11 @@ node_modules/
 db/*.db
 db/.jwt-secret
 server/__tests__/test-*.db
+server/__tests__/test-*.db-shm
+server/__tests__/test-*.db-wal
+server/pocket-it.db
+server/test-debug.db
+server/test-results/
 
 # .NET
 bin/
@@ -13,8 +18,9 @@ publish/
 *.suo
 .vs/
 
-# Installer (build output excluded; bootstrapper EXE deployed separately via deploy.sh)
+# Installer (build output excluded; bootstrapper EXE tracked via Git LFS)
 installer/output/
+!installer/PocketIT.Setup.exe
 
 # OS
 .DS_Store

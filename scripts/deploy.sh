@@ -4,18 +4,20 @@
 # Usage:
 #   ./scripts/deploy.sh [remote] [options]
 #
-#   remote          SSH target, e.g. user@192.168.1.10  (default: brownstone@100.120.23.109)
+#   remote              SSH target (default: brownstone@100.120.23.109)
 #
 # Options:
-#   --no-bootstrapper   Skip building and pushing the online installer bootstrapper
-#   --no-client-zip     Skip pushing the client release ZIP
-#   --bootstrapper-only Just build and push the bootstrapper EXE (no docker deploy)
-#   --help              Show this message
+#   --skip-bootstrapper   Skip building and committing the bootstrapper EXE
+#   --skip-client-zip     Skip building and committing the client ZIP
+#   --help                Show this message
+#
+# First-time remote setup:
+#   ssh user@host "apt-get install -y git-lfs && cd ~/pocket-it && git lfs install && git lfs pull"
 #
 # Prerequisites:
 #   - SSH access to remote (key-based recommended)
 #   - dotnet SDK installed locally (for bootstrapper build)
-#   - Remote has docker + docker-compose and ~/pocket-it/ checked out
+#   - Remote has docker + docker-compose and ~/pocket-it/ checked out with git lfs installed
 
 set -e
 
@@ -25,15 +27,13 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REMOTE="${1:-brownstone@100.120.23.109}"
 REMOTE_DIR="~/pocket-it"
 BUILD_BOOTSTRAPPER=true
-PUSH_CLIENT_ZIP=true
-DEPLOY_SERVER=true
+BUILD_CLIENT_ZIP=true
 
 # Parse flags
 for arg in "$@"; do
   case $arg in
-    --no-bootstrapper)   BUILD_BOOTSTRAPPER=false ;;
-    --no-client-zip)     PUSH_CLIENT_ZIP=false ;;
-    --bootstrapper-only) DEPLOY_SERVER=false; PUSH_CLIENT_ZIP=false ;;
+    --skip-bootstrapper) BUILD_BOOTSTRAPPER=false ;;
+    --skip-client-zip)   BUILD_CLIENT_ZIP=false ;;
     --help)
       sed -n '/^# Usage/,/^[^#]/p' "$0" | head -n -1 | sed 's/^# \?//'
       exit 0 ;;
@@ -43,61 +43,56 @@ done
 echo "==> Deploying Pocket IT to $REMOTE"
 echo ""
 
-# ── 1. Build bootstrapper EXE ────────────────────────────────────────────────
 BOOTSTRAPPER_CSPROJ="$PROJECT_ROOT/installer/online/PocketIT.Setup/PocketIT.Setup.csproj"
-BOOTSTRAPPER_EXE="$PROJECT_ROOT/installer/online/PocketIT.Setup/bin/Release/net8.0-windows/win-x64/publish/PocketIT.Setup.exe"
-REMOTE_INSTALLER_DIR="$REMOTE_DIR/installer"
+BOOTSTRAPPER_BUILD="$PROJECT_ROOT/installer/online/PocketIT.Setup/bin/Release/net8.0-windows/win-x64/publish/PocketIT.Setup.exe"
+BOOTSTRAPPER_DEST="$PROJECT_ROOT/installer/PocketIT.Setup.exe"
+CLIENT_ZIP_SRC="$PROJECT_ROOT/releases/PocketIT-latest.zip"
+COMMITTED=false
 
+# ── 1. Build + commit bootstrapper EXE ───────────────────────────────────────
 if [ "$BUILD_BOOTSTRAPPER" = true ]; then
   if [ -f "$BOOTSTRAPPER_CSPROJ" ]; then
-    echo "[1/4] Building online installer bootstrapper..."
+    echo "[1/3] Building online installer bootstrapper..."
     dotnet publish "$BOOTSTRAPPER_CSPROJ" \
       -c Release -r win-x64 --self-contained \
       -p:PublishSingleFile=true \
       -p:IncludeNativeLibrariesForSelfExtract=true \
       --nologo -v quiet
-    echo "      Built: $BOOTSTRAPPER_EXE"
+    cp "$BOOTSTRAPPER_BUILD" "$BOOTSTRAPPER_DEST"
+    SIZE=$(python3 -c "import os; s=os.path.getsize('$BOOTSTRAPPER_DEST'); print(f'{s//1024//1024} MB')" 2>/dev/null || echo "?")
+    echo "      Built ($SIZE) → installer/PocketIT.Setup.exe"
+    COMMITTED=true
   else
-    echo "[1/4] Bootstrapper project not found — skipping EXE build"
+    echo "[1/3] Bootstrapper project not found — skipping"
     BUILD_BOOTSTRAPPER=false
   fi
 else
-  echo "[1/4] Bootstrapper build skipped"
+  echo "[1/3] Bootstrapper build skipped"
+fi
+
+# Commit and push LFS files if any were updated
+if [ "$COMMITTED" = true ]; then
+  echo "      Committing LFS files and pushing..."
+  git -C "$PROJECT_ROOT" add installer/PocketIT.Setup.exe
+  [ "$BUILD_CLIENT_ZIP" = true ] && [ -f "$CLIENT_ZIP_SRC" ] && git -C "$PROJECT_ROOT" add releases/PocketIT-latest.zip
+  git -C "$PROJECT_ROOT" diff --cached --quiet || \
+    git -C "$PROJECT_ROOT" commit -m "chore: update release binaries (LFS)" --no-verify
+  git -C "$PROJECT_ROOT" push
+  # Prune old LFS objects locally (keeps last 2 versions per .lfsconfig)
+  git -C "$PROJECT_ROOT" lfs prune --verify-remote
+  echo "      Pushed and pruned old LFS objects"
 fi
 
 # ── 2. Deploy server (git pull + docker rebuild) ─────────────────────────────
-if [ "$DEPLOY_SERVER" = true ]; then
-  echo "[2/4] Pulling latest code and rebuilding container..."
-  ssh "$REMOTE" "cd $REMOTE_DIR && git pull && docker-compose up --build -d"
-  echo "      Container restarted"
-else
-  echo "[2/4] Server deploy skipped"
-fi
+echo "[2/3] Deploying to remote (git pull + docker rebuild)..."
+ssh "$REMOTE" "cd $REMOTE_DIR && git pull && docker-compose up --build -d"
+echo "      Container restarted"
 
-# ── 3. Push client release ZIP ───────────────────────────────────────────────
-CLIENT_ZIP="$PROJECT_ROOT/releases/PocketIT-latest.zip"
-
-if [ "$PUSH_CLIENT_ZIP" = true ] && [ -f "$CLIENT_ZIP" ]; then
-  ZIP_SIZE=$(python3 -c "import os; s=os.path.getsize('$CLIENT_ZIP'); print(f'{s//1024//1024} MB')" 2>/dev/null || echo "?")
-  echo "[3/4] Pushing client ZIP ($ZIP_SIZE)..."
-  ssh "$REMOTE" "mkdir -p $REMOTE_DIR/releases"
-  scp "$CLIENT_ZIP" "$REMOTE:$REMOTE_DIR/releases/PocketIT-latest.zip"
-  echo "      Pushed releases/PocketIT-latest.zip"
-else
-  echo "[3/4] Client ZIP push skipped"
-fi
-
-# ── 4. Push bootstrapper EXE ─────────────────────────────────────────────────
-if [ "$BUILD_BOOTSTRAPPER" = true ] && [ -f "$BOOTSTRAPPER_EXE" ]; then
-  EXE_SIZE=$(python3 -c "import os; s=os.path.getsize('$BOOTSTRAPPER_EXE'); print(f'{s//1024//1024} MB')" 2>/dev/null || echo "?")
-  echo "[4/4] Pushing bootstrapper EXE ($EXE_SIZE) to installer/PocketIT.Setup.exe..."
-  ssh "$REMOTE" "mkdir -p $REMOTE_DIR/installer"
-  scp "$BOOTSTRAPPER_EXE" "$REMOTE:$REMOTE_DIR/installer/PocketIT.Setup.exe"
-  echo "      Pushed installer/PocketIT.Setup.exe"
-else
-  echo "[4/4] Bootstrapper EXE push skipped"
-fi
+# ── 3. Health check ───────────────────────────────────────────────────────────
+echo "[3/3] Health check..."
+sleep 3
+REMOTE_HOST=$(echo "$REMOTE" | cut -d@ -f2)
+curl -s --max-time 10 "http://$REMOTE_HOST:9100/health" && echo "" || echo "  (health check failed — server may still be starting)"
 
 echo ""
-echo "==> Done! Server health check:"
-curl -s --max-time 5 "http://$(echo $REMOTE | cut -d@ -f2):9100/health" 2>/dev/null && echo "" || echo "  (health check failed — server may still be starting)"
+echo "==> Done!"

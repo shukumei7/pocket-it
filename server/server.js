@@ -157,10 +157,14 @@ app.locals.llmService = llmService;
 
 // Load saved settings from DB and reconfigure LLM service
 try {
+  const { decrypt } = require('./config/encryption');
   const savedSettings = db.prepare('SELECT key, value FROM server_settings').all();
   if (savedSettings.length > 0) {
     const s = {};
-    for (const row of savedSettings) s[row.key] = row.value;
+    const API_KEY_FIELDS = ['llm.openai.apiKey', 'llm.anthropic.apiKey', 'llm.gemini.apiKey'];
+    for (const row of savedSettings) {
+      s[row.key] = API_KEY_FIELDS.includes(row.key) ? decrypt(row.value) : row.value;
+    }
     llmService.reconfigure({
       provider: s['llm.provider'] || llmService.provider,
       ollamaUrl: s['llm.ollama.url'] || llmService.ollamaUrl,

@@ -591,6 +591,7 @@ router.post('/settings/test-llm', requireAdmin, async (req, res) => {
       model: llmService.provider === 'ollama' ? llmService.ollamaModel
         : llmService.provider === 'openai' ? llmService.openaiModel
         : llmService.provider === 'anthropic' ? llmService.anthropicModel
+        : llmService.provider === 'gemini' ? llmService.geminiModel
         : llmService.claudeCliModel || 'default',
       response: response.substring(0, 200)
     });

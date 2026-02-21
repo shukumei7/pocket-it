@@ -13,7 +13,7 @@ publish/
 *.suo
 .vs/
 
-# Installer
+# Installer (build output excluded; bootstrapper EXE deployed separately via deploy.sh)
 installer/output/
 
 # OS

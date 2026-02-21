@@ -282,7 +282,7 @@ router.get('/:id/installer', requireAdmin, async (req, res) => {
   const PROJECT_ROOT = path.join(__dirname, '..', '..');
   const publishDir = path.join(PROJECT_ROOT, 'client', 'publish', 'win-x64');
   const releaseZip = path.join(PROJECT_ROOT, 'releases', 'PocketIT-latest.zip');
-  const setupExePath = path.join(PROJECT_ROOT, 'installer', 'online', 'PocketIT.Setup', 'bin', 'Release', 'net8.0-windows', 'win-x64', 'publish', 'PocketIT.Setup.exe');
+  const setupExePath = path.join(PROJECT_ROOT, 'installer', 'PocketIT.Setup.exe');
 
   // Need either publish dir (local) or release ZIP (Docker/remote)
   const hasPublishDir = fs.existsSync(publishDir);

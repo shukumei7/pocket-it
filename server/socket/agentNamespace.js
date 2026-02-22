@@ -1116,8 +1116,8 @@ function setup(io, app) {
 
       // Parse POCKET_IT_CLIENT_FIELDS markers from script output
       const clientFieldLines = (data.output || '').split('\n').filter(l => l.trim().startsWith('POCKET_IT_CLIENT_FIELDS:'));
-      if (clientFieldLines.length > 0 && socket.deviceId) {
-        const device = db.prepare('SELECT client_id FROM devices WHERE device_id = ?').get(socket.deviceId);
+      if (clientFieldLines.length > 0 && deviceId) {
+        const device = db.prepare('SELECT client_id FROM devices WHERE device_id = ?').get(deviceId);
         if (device && device.client_id) {
           const upsert = db.prepare("INSERT INTO client_custom_fields (client_id, field_name, field_value, updated_at, updated_by) VALUES (?, ?, ?, datetime('now'), 'script') ON CONFLICT(client_id, field_name) DO UPDATE SET field_value = excluded.field_value, updated_at = excluded.updated_at, updated_by = 'script'");
           for (const line of clientFieldLines) {

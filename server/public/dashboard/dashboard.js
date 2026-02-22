@@ -1952,6 +1952,7 @@
                     }
                 }
                 document.getElementById('detail-info').innerHTML = infoHtml.join('');
+                window._currentDeviceClientId = d.client_id || null;
 
                 // Set initial AI control state
                 updateAIControlButtons(d.ai_disabled);
@@ -2027,6 +2028,12 @@
             document.getElementById('device-passwords-toggle').innerHTML = '&#x25BC;';
             document.getElementById('device-passwords-count').textContent = '';
             document.getElementById('device-passwords-list').innerHTML = '';
+            // Reset client info section (lazy)
+            document.getElementById('client-info-section').style.display = 'none';
+            document.getElementById('client-info-section-loaded').value = '';
+            document.getElementById('client-info-toggle').innerHTML = '&#x25BC;';
+            document.getElementById('client-info-content').innerHTML = '';
+            window._currentDeviceClientId = null;
             // Reset and load activity history
             document.getElementById('activity-category-filter').value = '';
             document.getElementById('activity-date-from').value = '';
@@ -5959,6 +5966,9 @@
         // Device passwords heading — toggle section
         document.getElementById('device-passwords-heading').addEventListener('click', toggleDevicePasswordsSection);
 
+        // Client info heading — toggle section
+        document.getElementById('client-info-heading').addEventListener('click', toggleClientInfoSection);
+
         // Passwords table — event delegation for all row actions
         document.getElementById('passwords-table-container').addEventListener('click', handlePasswordTableClick);
 
@@ -5982,6 +5992,70 @@
                     loaded.value = '1';
                     loadDevicePasswords(currentDeviceId);
                 }
+            }
+        }
+
+        function toggleClientInfoSection() {
+            const content = document.getElementById('client-info-section');
+            const toggle = document.getElementById('client-info-toggle');
+            const loaded = document.getElementById('client-info-section-loaded');
+            const isOpen = content.style.display !== 'none';
+            if (isOpen) {
+                content.style.display = 'none';
+                toggle.innerHTML = '&#x25BC;';
+            } else {
+                content.style.display = '';
+                toggle.innerHTML = '&#x25B2;';
+                if (!loaded.value) {
+                    loaded.value = '1';
+                    loadClientInfoForDevice();
+                }
+            }
+        }
+
+        async function loadClientInfoForDevice() {
+            const container = document.getElementById('client-info-content');
+            const clientId = window._currentDeviceClientId;
+            if (!clientId) {
+                container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">No client assigned to this device.</div>';
+                return;
+            }
+            container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">Loading...</div>';
+            try {
+                const [clientRes, fieldsRes] = await Promise.all([
+                    fetchWithAuth(`${API}/api/clients/${clientId}`),
+                    fetchWithAuth(`${API}/api/clients/${clientId}/custom-fields`)
+                ]);
+                const client = await clientRes.json();
+                const fields = await fieldsRes.json();
+
+                let html = `<div style="font-size:12px; color:#8f98a0; margin-bottom:12px;">Client: <span style="color:#66c0f4; font-weight:600;">${escapeHtml(client.name || '')}</span></div>`;
+
+                html += `<h4 style="margin:0 0 8px 0; font-size:12px; color:#8f98a0; text-transform:uppercase; letter-spacing:0.5px;">Client Notes</h4>`;
+                if (client.notes && client.notes.trim()) {
+                    html += `<div style="background:#0f1923; border:1px solid #2a475e; border-radius:6px; padding:10px; margin-bottom:12px; font-size:13px; color:#c7d5e0; white-space:pre-wrap;">${escapeHtml(client.notes)}</div>`;
+                } else {
+                    html += `<div style="color:#8f98a0; font-size:13px; margin-bottom:12px;">No client notes.</div>`;
+                }
+
+                html += `<h4 style="margin:0 0 8px 0; font-size:12px; color:#8f98a0; text-transform:uppercase; letter-spacing:0.5px;">Client Custom Fields</h4>`;
+                if (!Array.isArray(fields) || fields.length === 0) {
+                    html += `<div style="color:#8f98a0; font-size:13px;">No custom fields.</div>`;
+                } else {
+                    html += `<div class="stats-row" style="margin-bottom:0;">`;
+                    html += fields.map(f => {
+                        const ts = f.updated_at ? new Date(f.updated_at + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
+                        return `<div class="stat-card" style="border-left:3px solid #2a6496;">
+                    <div class="value" style="font-size:16px;">${escapeHtml(f.field_value || '—')}</div>
+                    <div class="label">${escapeHtml(f.field_name)}</div>
+                    <div style="font-size:10px; color:#616161; margin-top:2px;">by ${escapeHtml(f.updated_by || 'unknown')} &middot; ${ts}</div>
+                </div>`;
+                    }).join('');
+                    html += `</div>`;
+                }
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = '<div style="color:#ef5350; font-size:13px;">Failed to load client info.</div>';
             }
         }
 

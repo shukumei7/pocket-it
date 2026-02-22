@@ -28,14 +28,14 @@ module.exports = function createScriptsRouter() {
   });
 
   router.post('/', (req, res) => {
-    const { name, description, script_content, category, requires_elevation, timeout_seconds, ai_tool } = req.body;
+    const { name, description, script_content, category, requires_elevation, timeout_seconds, ai_tool, os_type = 'windows' } = req.body;
     if (!name || !script_content) {
       return res.status(400).json({ error: 'Missing required fields: name, script_content' });
     }
     try {
       const result = req.app.locals.db.prepare(
-        'INSERT INTO script_library (name, description, script_content, category, requires_elevation, timeout_seconds, ai_tool) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(name, description || null, script_content, category || 'general', requires_elevation || 0, timeout_seconds || 60, ai_tool || 0);
+        'INSERT INTO script_library (name, description, script_content, category, requires_elevation, timeout_seconds, ai_tool, os_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(name, description || null, script_content, category || 'general', requires_elevation || 0, timeout_seconds || 60, ai_tool || 0, os_type);
       const script = req.app.locals.db.prepare('SELECT * FROM script_library WHERE id = ?').get(result.lastInsertRowid);
       res.status(201).json(script);
     } catch (err) {
@@ -45,7 +45,7 @@ module.exports = function createScriptsRouter() {
 
   router.patch('/:id', (req, res) => {
     const { id } = req.params;
-    const allowed = ['name', 'description', 'script_content', 'category', 'requires_elevation', 'timeout_seconds', 'ai_tool'];
+    const allowed = ['name', 'description', 'script_content', 'category', 'requires_elevation', 'timeout_seconds', 'ai_tool', 'os_type'];
     const updates = [];
     const values = [];
     for (const key of allowed) {

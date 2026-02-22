@@ -5203,14 +5203,16 @@
                 const scripts = await res.json();
                 const tbody = document.getElementById('scripts-table-body');
                 document.getElementById('script-count').textContent = `${scripts.length} script${scripts.length !== 1 ? 's' : ''}`;
+                const osLabels = { 'windows': 'Windows', 'windows-server': 'Win Server', 'macos': 'macOS', 'linux': 'Linux' };
                 if (scripts.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#8f98a0;">No scripts found. Create one above.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#8f98a0;">No scripts found. Create one above.</td></tr>';
                     return;
                 }
                 tbody.innerHTML = scripts.map(s => `
                     <tr style="border-bottom:1px solid #1a2a3a;">
                         <td style="padding:8px 12px; color:#c7d5e0; font-weight:600;">${escapeHtml(s.name)}</td>
                         <td style="padding:8px 12px;"><span style="background:#1a3a5c; color:#66c0f4; padding:2px 8px; border-radius:10px; font-size:11px;">${escapeHtml(s.category || 'general')}</span></td>
+                        <td style="padding:8px 12px;"><span style="background:#1a2a1a; color:#8bc34a; padding:2px 8px; border-radius:10px; font-size:11px;">${escapeHtml(osLabels[s.os_type] || 'Windows')}</span></td>
                         <td style="padding:8px 12px; color:#8f98a0; font-size:12px; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.description || '—')}</td>
                         <td style="padding:8px 12px; text-align:center;">${s.requires_elevation ? '<span style="color:#ffa726;" title="Runs as Administrator">&#x1F6E1;</span>' : '—'}</td>
                         <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${s.timeout_seconds}s</td>
@@ -5232,6 +5234,7 @@
             document.getElementById('script-description').value = '';
             document.getElementById('script-content').value = '';
             document.getElementById('script-category').value = 'general';
+            document.getElementById('script-os').value = 'windows';
             document.getElementById('script-elevation').checked = false;
             document.getElementById('script-timeout').value = '60';
             document.getElementById('script-ai-tool').checked = false;
@@ -5249,6 +5252,7 @@
                 document.getElementById('script-description').value = s.description || '';
                 document.getElementById('script-content').value = s.script_content;
                 document.getElementById('script-category').value = s.category || 'general';
+                document.getElementById('script-os').value = s.os_type || 'windows';
                 document.getElementById('script-elevation').checked = !!s.requires_elevation;
                 document.getElementById('script-timeout').value = s.timeout_seconds || 60;
                 document.getElementById('script-ai-tool').checked = !!s.ai_tool;
@@ -5274,6 +5278,7 @@
                 description: document.getElementById('script-description').value.trim(),
                 script_content: content,
                 category: document.getElementById('script-category').value,
+                os_type: document.getElementById('script-os').value || 'windows',
                 requires_elevation: document.getElementById('script-elevation').checked ? 1 : 0,
                 timeout_seconds: parseInt(document.getElementById('script-timeout').value) || 60,
                 ai_tool: document.getElementById('script-ai-tool').checked ? 1 : 0
@@ -5323,12 +5328,13 @@
             const content = contentEl ? contentEl.value : '';
             const description = opts.descriptionElId ? (document.getElementById(opts.descriptionElId)?.value || '') : '';
             const name = opts.nameElId ? (document.getElementById(opts.nameElId)?.value || '') : '';
+            const os = opts.osElId ? (document.getElementById(opts.osElId)?.value || 'windows') : 'windows';
 
             try {
                 const res = await fetchWithAuth(`${API}/api/llm/generate-script`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content, description, name })
+                    body: JSON.stringify({ content, description, name, os })
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Generation failed');
@@ -5572,13 +5578,13 @@
 
             // AI Script Generation
             document.getElementById('btn-generate-script-library')?.addEventListener('click', function() {
-                generateScriptWithAI('script-content', { descriptionElId: 'script-description', nameElId: 'script-name', btn: this });
+                generateScriptWithAI('script-content', { descriptionElId: 'script-description', nameElId: 'script-name', osElId: 'script-os', btn: this });
             });
             document.getElementById('btn-generate-script-deploy')?.addEventListener('click', function() {
-                generateScriptWithAI('deploy-script-content', { btn: this });
+                generateScriptWithAI('deploy-script-content', { osElId: 'deploy-script-os', btn: this });
             });
             document.getElementById('btn-generate-script-adhoc')?.addEventListener('click', function() {
-                generateScriptWithAI('adhoc-script', { btn: this });
+                generateScriptWithAI('adhoc-script', { osElId: 'adhoc-os', btn: this });
             });
 
             // Script Library

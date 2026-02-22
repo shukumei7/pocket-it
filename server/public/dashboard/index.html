@@ -304,6 +304,12 @@
                   <summary style="cursor:pointer; font-size:13px; color:#8f98a0;">Ad-hoc Script</summary>
                   <div style="margin-top:8px;">
                     <textarea id="adhoc-script" class="script-textarea" placeholder="Enter PowerShell script..." style="width:100%; min-height:80px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:8px; border-radius:4px; font-family:monospace; font-size:13px; resize:vertical; box-sizing:border-box;"></textarea>
+                    <select id="adhoc-os" style="margin-top:6px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 8px; border-radius:4px; font-size:12px;">
+                      <option value="windows">Windows</option>
+                      <option value="windows-server">Windows Server</option>
+                      <option value="macos">macOS</option>
+                      <option value="linux">Linux</option>
+                    </select>
                     <button class="diag-btn" id="btn-generate-script-adhoc" style="margin-top:6px; font-size:12px;">&#10022; Generate with AI</button>
                     <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
                       <label class="toggle-label" style="font-size:12px; color:#8f98a0;">
@@ -946,6 +952,12 @@
                         </select>
                         <label>Script Content</label>
                         <textarea id="deploy-script-content" class="deploy-textarea" placeholder="Enter PowerShell script..."></textarea>
+                        <select id="deploy-script-os" style="margin-top:6px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 8px; border-radius:4px; font-size:12px;">
+                            <option value="windows">Windows</option>
+                            <option value="windows-server">Windows Server</option>
+                            <option value="macos">macOS</option>
+                            <option value="linux">Linux</option>
+                        </select>
                         <button class="diag-btn" id="btn-generate-script-deploy" style="margin-top:6px; font-size:12px;">&#10022; Generate with AI</button>
                         <div class="deploy-checkbox-box">
                             <label class="toggle-label">
@@ -1116,6 +1128,15 @@
                             <option value="security">Security</option>
                         </select>
                     </div>
+                    <div>
+                        <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">OS</label>
+                        <select id="script-os" style="width:100%;">
+                            <option value="windows">Windows</option>
+                            <option value="windows-server">Windows Server</option>
+                            <option value="macos">macOS</option>
+                            <option value="linux">Linux</option>
+                        </select>
+                    </div>
                 </div>
                 <div style="margin-bottom:12px;">
                     <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Description</label>
@@ -1171,6 +1192,7 @@
                         <tr style="border-bottom:1px solid #2a475e; text-align:left;">
                             <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Name</th>
                             <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Category</th>
+                            <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">OS</th>
                             <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Description</th>
                             <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Elevation</th>
                             <th style="padding:8px 12px; color:#8f98a0; font-size:12px;">Timeout</th>
@@ -1179,7 +1201,7 @@
                         </tr>
                     </thead>
                     <tbody id="scripts-table-body">
-                        <tr><td colspan="7" style="text-align:center; padding:32px; color:#8f98a0;">Loading...</td></tr>
+                        <tr><td colspan="8" style="text-align:center; padding:32px; color:#8f98a0;">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>

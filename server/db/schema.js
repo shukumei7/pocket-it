@@ -312,6 +312,7 @@ function initDatabase(dbPath) {
       requires_elevation INTEGER DEFAULT 0,
       timeout_seconds INTEGER DEFAULT 60,
       created_by TEXT,
+      os_type TEXT DEFAULT 'windows',
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -658,6 +659,14 @@ function initDatabase(dbPath) {
   if (defaultClient) {
     db.prepare('UPDATE devices SET client_id = ? WHERE client_id IS NULL').run(defaultClient.id);
     db.prepare('UPDATE enrollment_tokens SET client_id = ? WHERE client_id IS NULL').run(defaultClient.id);
+  }
+
+  // v0.20.3: Add os_type column to script_library
+  const hasOsType = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='script_library'").get() &&
+    db.pragma("table_info(script_library)").some(col => col.name === 'os_type');
+  if (!hasOsType) {
+    db.exec("ALTER TABLE script_library ADD COLUMN os_type TEXT DEFAULT 'windows'");
+    console.log('[Schema] v0.20.3: Added os_type column to script_library');
   }
 
   // v0.20.2: Seed "Suspend BitLocker & Reboot" script if missing

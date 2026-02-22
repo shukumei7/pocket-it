@@ -15,6 +15,7 @@ describe('E2E Smoke Tests', () => {
     let app;
     let io;
     let testDbPath;
+    let enrolledDeviceSecret; // raw secret from enrollment (bcrypt hash stored in DB — must use raw value)
 
     before(async () => {
         // Setup test database
@@ -33,6 +34,10 @@ describe('E2E Smoke Tests', () => {
         testDbPath = path.join(__dirname, `test-e2e-${Date.now()}.db`);
         const db = initDatabase(testDbPath);
         app.locals.db = db;
+
+        // Seed test client (required for enrollment token creation)
+        const testClient = db.prepare('INSERT INTO clients (name, slug) VALUES (?, ?)').run('Test Client', 'test-client');
+        app.locals.testClientId = testClient.lastInsertRowid;
 
         // Setup minimal LLM service
         const LLMService = require('../services/llmService');
@@ -100,8 +105,8 @@ describe('E2E Smoke Tests', () => {
         assert.strictEqual(data.status, 'ok');
     });
 
-    // Test 2: Create admin user and login
-    it('should seed admin and login successfully', async () => {
+    // Test 2: Create admin user and login (2FA is mandatory — no direct token from /login)
+    it('should seed admin and require 2FA on login', async () => {
         const db = app.locals.db;
         const { hashPassword } = require('../auth/userAuth');
         const hash = await hashPassword('testpass123');
@@ -114,8 +119,10 @@ describe('E2E Smoke Tests', () => {
         });
         assert.strictEqual(loginRes.status, 200);
         const loginData = await loginRes.json();
-        assert.ok(loginData.token, 'Should return JWT token');
-        assert.strictEqual(loginData.user.role, 'admin');
+        // 2FA is mandatory — /login never returns a token directly
+        assert.ok(loginData.requiresSetup || loginData.requires2FA, 'Should require 2FA setup or verification');
+        assert.ok(loginData.tempToken, 'Should return temp token for 2FA flow');
+        // Full JWT token is available via /auto-login on localhost (see test #18)
     });
 
     // Test 3: Login with wrong password
@@ -130,8 +137,12 @@ describe('E2E Smoke Tests', () => {
 
     // Test 4: Enrollment flow
     it('should create enrollment token and enroll device', async () => {
-        // Create token (localhost bypasses admin auth)
-        const tokenRes = await fetch(`${baseUrl}/api/enrollment/token`, { method: 'POST' });
+        // Create token (localhost bypasses admin auth; client_id is required)
+        const tokenRes = await fetch(`${baseUrl}/api/enrollment/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_id: app.locals.testClientId })
+        });
         assert.strictEqual(tokenRes.status, 200);
         const tokenData = await tokenRes.json();
         assert.ok(tokenData.token, 'Should return enrollment token');
@@ -151,15 +162,14 @@ describe('E2E Smoke Tests', () => {
         const enrollData = await enrollRes.json();
         assert.ok(enrollData.deviceSecret, 'Should return device secret');
         assert.strictEqual(enrollData.deviceId, 'test-device-001');
+        enrolledDeviceSecret = enrollData.deviceSecret; // Save raw secret (DB stores bcrypt hash)
     });
 
     // Test 5: Check enrollment status with secret
     it('should verify enrollment status with device secret', async () => {
-        const db = app.locals.db;
-        const device = db.prepare('SELECT device_secret FROM devices WHERE device_id = ?').get('test-device-001');
-
+        // Must use raw secret from enrollment (DB stores bcrypt hash, not plaintext)
         const res = await fetch(`${baseUrl}/api/enrollment/status/test-device-001`, {
-            headers: { 'x-device-secret': device.device_secret }
+            headers: { 'x-device-secret': enrolledDeviceSecret }
         });
         assert.strictEqual(res.status, 200);
         const data = await res.json();
@@ -176,8 +186,12 @@ describe('E2E Smoke Tests', () => {
 
     // Test 7: Device re-enrollment rejected
     it('should reject re-enrollment of existing device', async () => {
-        // Create another token
-        const tokenRes = await fetch(`${baseUrl}/api/enrollment/token`, { method: 'POST' });
+        // Create another token (client_id required)
+        const tokenRes = await fetch(`${baseUrl}/api/enrollment/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_id: app.locals.testClientId })
+        });
         const tokenData = await tokenRes.json();
 
         const enrollRes = await fetch(`${baseUrl}/api/enrollment/enroll`, {
@@ -205,15 +219,13 @@ describe('E2E Smoke Tests', () => {
 
     // Test 9: Create ticket via device
     it('should create a ticket', async () => {
-        const db = app.locals.db;
-        const device = db.prepare('SELECT device_secret FROM devices WHERE device_id = ?').get('test-device-001');
-
+        // Must use raw secret from enrollment (DB stores bcrypt hash, not plaintext)
         const res = await fetch(`${baseUrl}/api/tickets`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'x-device-id': 'test-device-001',
-                'x-device-secret': device.device_secret
+                'x-device-secret': enrolledDeviceSecret
             },
             body: JSON.stringify({
                 title: 'Test ticket',
@@ -278,8 +290,12 @@ describe('E2E Smoke Tests', () => {
 
     // Test 14: Delete device
     it('should delete device and cascade data', async () => {
-        // First enroll another device to delete
-        const tokenRes = await fetch(`${baseUrl}/api/enrollment/token`, { method: 'POST' });
+        // First enroll another device to delete (client_id required)
+        const tokenRes = await fetch(`${baseUrl}/api/enrollment/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_id: app.locals.testClientId })
+        });
         const tokenData = await tokenRes.json();
 
         await fetch(`${baseUrl}/api/enrollment/enroll`, {

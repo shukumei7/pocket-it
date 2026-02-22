@@ -3,6 +3,9 @@ FROM node:20-alpine
 # better-sqlite3 needs build tools for native compilation
 RUN apk add --no-cache python3 make g++ ca-certificates curl git docker-cli docker-compose
 
+# Allow git to operate on volume-mounted repos owned by different host users
+RUN git config --global --add safe.directory '*'
+
 WORKDIR /app/server
 
 # Copy package files first for layer caching

@@ -1652,8 +1652,9 @@
                         <div class="ticket-info">
                             <div class="ticket-title">${escapeHtml(t.title)}</div>
                             <div class="ticket-meta">
-                                Device: ${escapeHtml((t.device_id || '').substring(0, 8))}... |
-                                Created: ${new Date(t.created_at).toLocaleString()}
+                                Device: <a href="#" class="ticket-device-link" data-device-id="${escapeHtml(t.device_id || '')}" onclick="event.stopPropagation();navigateToDevice('${escapeHtml(t.device_id || '')}');return false;">${escapeHtml(t.hostname || (t.device_id || '').substring(0, 8) + '...')}</a>
+                                ${t.requested_by ? ` | Requested by: <strong>${escapeHtml(t.requested_by)}</strong>` : ''}
+                                | Created: ${new Date(t.created_at).toLocaleString()}
                             </div>
                         </div>
                         <span class="ticket-status ${t.status}">${t.status}</span>
@@ -1675,8 +1676,10 @@
 
                 document.getElementById('ticket-detail-title').textContent = ticket.title;
                 document.getElementById('ticket-detail-info').innerHTML = `
-                    #${ticket.id} | Device: <code>${escapeHtml((ticket.device_id || '').substring(0, 12))}...</code> |
-                    Created: ${new Date(ticket.created_at).toLocaleString()}
+                    #${ticket.id} |
+                    Device: <a href="#" onclick="navigateToDevice('${escapeHtml(ticket.device_id || '')}');return false;" style="color:#66c0f4;">${escapeHtml(ticket.hostname || (ticket.device_id || '').substring(0, 12) + '...')}</a>
+                    ${ticket.requested_by ? ` | Requested by: <strong>${escapeHtml(ticket.requested_by)}</strong>` : ''}
+                    | Created: ${new Date(ticket.created_at).toLocaleString()}
                     ${ticket.ai_summary ? ' | <em>AI-generated</em>' : ''}
                 `;
                 document.getElementById('ticket-detail-description').textContent =
@@ -1840,6 +1843,42 @@
             socket.emit('delete_custom_field', { deviceId: currentDeviceId, fieldName });
         }
 
+        function navigateToDevice(deviceId) {
+            // Switch to fleet page and open the device detail
+            showPage('fleet');
+            // Allow the fleet page to render, then trigger device selection
+            setTimeout(() => {
+                const deviceEl = document.querySelector(`.device-card[data-device-id="${deviceId}"], [data-device-id="${deviceId}"]`);
+                if (deviceEl) deviceEl.click();
+            }, 150);
+        }
+
+        async function loadDeviceTickets(deviceId, container) {
+            try {
+                container.innerHTML = '<div style="color:#8f98a0;font-size:13px;padding:8px 0;">Loading tickets...</div>';
+                const res = await fetchWithAuth(`${API}/api/tickets?device_id=${encodeURIComponent(deviceId)}`);
+                const tickets = await res.json();
+                if (!tickets.length) {
+                    container.innerHTML = '<div style="color:#8f98a0;font-size:13px;padding:8px 0;">No tickets for this device.</div>';
+                    return;
+                }
+                container.innerHTML = tickets.map(t => `
+                    <div class="ticket-item" style="cursor:pointer;padding:8px 0;border-bottom:1px solid #2a475e;" onclick="openTicket(${t.id})">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="priority ${t.priority}" style="width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;"></span>
+                            <span style="font-size:13px;flex:1;">${escapeHtml(t.title)}</span>
+                            <span class="ticket-status ${t.status}" style="font-size:11px;">${t.status}</span>
+                        </div>
+                        <div style="font-size:11px;color:#8f98a0;margin-top:3px;padding-left:16px;">
+                            ${t.requested_by ? `Requested by: ${escapeHtml(t.requested_by)} · ` : ''}${new Date(t.created_at).toLocaleString()}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = '<div style="color:#8f98a0;font-size:13px;">Failed to load tickets.</div>';
+            }
+        }
+
         // ---- Device Detail ----
         function openDevice(deviceId, skipPush) {
             cleanupTerminal();
@@ -1951,6 +1990,9 @@
             document.getElementById('device-notes-count').textContent = '';
             // Device notes come via watch_device socket; custom fields loaded via REST as fallback
             loadCustomFields(deviceId);
+            // Load device tickets
+            const deviceTicketsContainer = document.getElementById('device-tickets-list');
+            if (deviceTicketsContainer) loadDeviceTickets(deviceId, deviceTicketsContainer);
 
             loadScriptLibrary();
             // Reset file browser (lazy — user clicks header to load)

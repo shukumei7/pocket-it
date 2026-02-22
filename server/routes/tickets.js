@@ -6,13 +6,22 @@ const router = express.Router();
 
 router.get('/', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
-  const { status } = req.query;
+  const { status, device_id } = req.query;
   const { clause, params } = scopeSQL(req.clientScope, 'd');
 
-  let query = `SELECT t.* FROM tickets t JOIN devices d ON t.device_id = d.device_id WHERE ${clause}`;
+  let query = `
+    SELECT t.*, d.hostname
+    FROM tickets t
+    LEFT JOIN devices d ON t.device_id = d.device_id
+    WHERE ${clause}
+  `;
   if (status) {
     query += ' AND t.status = ?';
     params.push(status);
+  }
+  if (device_id) {
+    query += ' AND t.device_id = ?';
+    params.push(device_id);
   }
   query += ' ORDER BY t.created_at DESC';
 
@@ -22,7 +31,12 @@ router.get('/', requireIT, resolveClientScope, (req, res) => {
 
 router.get('/:id', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
-  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
+  const ticket = db.prepare(`
+    SELECT t.*, d.hostname
+    FROM tickets t
+    LEFT JOIN devices d ON t.device_id = d.device_id
+    WHERE t.id = ?
+  `).get(req.params.id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
   if (!isDeviceInScope(db, ticket.device_id, req.clientScope)) {

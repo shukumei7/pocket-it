@@ -533,16 +533,24 @@ function setup(io, app) {
             // ai_summary: the conversational response text (action tag already stripped by parser)
             const aiSummary = response.text || null;
 
+            // Look up device hostname for requested_by
+            let requestedBy = null;
+            try {
+              const deviceRow = db.prepare('SELECT hostname FROM devices WHERE device_id = ?').get(deviceId);
+              requestedBy = deviceRow?.hostname || null;
+            } catch (e) { /* ignore */ }
+
             const ticketResult = db.prepare(
-              'INSERT INTO tickets (device_id, title, priority, description, ai_summary, created_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))'
-            ).run(deviceId, ticketTitle, ticketPriority, ticketDescription, aiSummary);
+              'INSERT INTO tickets (device_id, title, priority, description, ai_summary, requested_by, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'))'
+            ).run(deviceId, ticketTitle, ticketPriority, ticketDescription, aiSummary, requestedBy);
 
             // Notify IT namespace
             emitToScoped(itNs, db, deviceId, 'ticket_created', {
               id: ticketResult.lastInsertRowid,
               deviceId,
               title: ticketTitle,
-              priority: ticketPriority
+              priority: ticketPriority,
+              hostname: requestedBy
             });
           } catch (err) {
             console.error('[Agent] Ticket creation error:', err.message);

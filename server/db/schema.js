@@ -57,6 +57,7 @@ function initDatabase(dbPath) {
       category TEXT,
       assigned_to INTEGER REFERENCES it_users(id),
       ai_summary TEXT,
+      requested_by TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT
     );
@@ -668,6 +669,11 @@ function initDatabase(dbPath) {
     db.exec("ALTER TABLE script_library ADD COLUMN os_type TEXT DEFAULT 'windows'");
     console.log('[Schema] v0.20.3: Added os_type column to script_library');
   }
+
+  // v0.20.4 — requested_by column for tickets
+  try {
+    db.prepare('ALTER TABLE tickets ADD COLUMN requested_by TEXT').run();
+  } catch (e) { /* column already exists */ }
 
   // v0.20.2: Seed "Suspend BitLocker & Reboot" script if missing
   const hasBitlockerScript = db.prepare("SELECT id FROM script_library WHERE name = 'Suspend BitLocker & Reboot'").get();

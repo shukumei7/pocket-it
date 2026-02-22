@@ -690,8 +690,8 @@ if ($disk) {
 
 $fields['fields_updated'] = (Get-Date -Format 'yyyy-MM-dd HH:mm')
 
-Write-Output "POCKET_IT_FIELDS:$($fields | ConvertTo-Json -Compress)"
-Write-Output "Device health fields updated: $($fields.Keys -join ', ')"`,
+Write-Output ('POCKET_IT_FIELDS:' + ($fields | ConvertTo-Json -Compress))
+Write-Output ('Device health fields updated: ' + ($fields.Keys -join ', '))`,
     },
     {
       name: 'Write Device Custom Field',
@@ -710,8 +710,8 @@ $fields = @{
     # 'warranty_end' = '2027-06-30'
 }
 
-Write-Output "POCKET_IT_FIELDS:$($fields | ConvertTo-Json -Compress)"
-Write-Output "Wrote $($fields.Count) field(s): $($fields.Keys -join ', ')"`,
+Write-Output ('POCKET_IT_FIELDS:' + ($fields | ConvertTo-Json -Compress))
+Write-Output ('Wrote ' + $fields.Count + ' device field(s): ' + ($fields.Keys -join ', '))`,
     },
     {
       name: 'Write Client Custom Field',
@@ -731,8 +731,8 @@ $fields = @{
     # 'renewal_notes' = 'Auto-renews unless cancelled 60 days prior'
 }
 
-Write-Output "POCKET_IT_CLIENT_FIELDS:$($fields | ConvertTo-Json -Compress)"
-Write-Output "Wrote $($fields.Count) client field(s): $($fields.Keys -join ', ')"`,
+Write-Output ('POCKET_IT_CLIENT_FIELDS:' + ($fields | ConvertTo-Json -Compress))
+Write-Output ('Wrote ' + $fields.Count + ' client field(s): ' + ($fields.Keys -join ', '))`,
     },
     {
       name: 'Report Software Inventory Field',
@@ -743,14 +743,16 @@ Write-Output "Wrote $($fields.Count) client field(s): $($fields.Keys -join ', ')
       ai_tool: 1,
       os_type: 'windows',
       script_content: `# Collect installed software summary and store as a device custom field
-$software = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*,
-                              HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* \`
-            -ErrorAction SilentlyContinue |
+$regPaths = @(
+    'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',
+    'HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'
+)
+$software = Get-ItemProperty $regPaths -ErrorAction SilentlyContinue |
     Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne '' } |
     Select-Object DisplayName, DisplayVersion |
     Sort-Object DisplayName
 
-$summary = ($software | ForEach-Object { "$($_.DisplayName) $($_.DisplayVersion)".Trim() }) -join '; '
+$summary = ($software | ForEach-Object { ($_.DisplayName + ' ' + $_.DisplayVersion).Trim() }) -join '; '
 # Truncate to 1900 chars to stay within field limit
 if ($summary.Length -gt 1900) { $summary = $summary.Substring(0, 1900) + '...' }
 
@@ -760,19 +762,23 @@ $fields = @{
     'inventory_date'     = (Get-Date -Format 'yyyy-MM-dd')
 }
 
-Write-Output "POCKET_IT_FIELDS:$($fields | ConvertTo-Json -Compress)"
-Write-Output "Software inventory: $($software.Count) apps recorded"`,
+Write-Output ('POCKET_IT_FIELDS:' + ($fields | ConvertTo-Json -Compress))
+Write-Output ('Software inventory: ' + $software.Count + ' apps recorded')`,
     },
   ];
 
   for (const s of customFieldScripts) {
-    const exists = db.prepare("SELECT id FROM script_library WHERE name = ?").get(s.name);
+    const exists = db.prepare("SELECT id FROM script_library WHERE name = ? AND created_by = 'system'").get(s.name);
     if (!exists) {
       db.prepare(`
         INSERT INTO script_library (name, description, script_content, category, requires_elevation, timeout_seconds, ai_tool, os_type, created_by, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'system', datetime('now'))
       `).run(s.name, s.description, s.script_content, s.category, s.requires_elevation, s.timeout_seconds, s.ai_tool, s.os_type);
       console.log(`[Schema] v0.21.1: Seeded script "${s.name}"`);
+    } else {
+      db.prepare(`
+        UPDATE script_library SET script_content = ?, description = ? WHERE name = ? AND created_by = 'system'
+      `).run(s.script_content, s.description, s.name);
     }
   }
 

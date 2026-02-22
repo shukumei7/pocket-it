@@ -74,6 +74,7 @@
             <a href="#" class="nav-link" id="nav-admin-toggle">Admin &#9662;</a>
             <div class="nav-dropdown-menu" style="display:none; position:absolute; top:100%; left:0; z-index:100; min-width:160px; background:#1b2838; border:1px solid #2a475e; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.4); padding:4px 0;">
                 <a href="#" class="nav-dropdown-item" data-page="clients">Clients</a>
+                <a href="#" class="nav-dropdown-item" data-page="passwords">Passwords</a>
                 <a href="#" class="nav-dropdown-item" data-page="scripts">Scripts</a>
                 <a href="#" class="nav-dropdown-item" data-page="settings">Settings</a>
                 <a href="#" class="nav-dropdown-item" data-page="updates">Updates</a>
@@ -343,6 +344,16 @@
                   </div>
                   <div id="device-notes-list"></div>
                 </div>
+              </div>
+
+              <!-- Device Passwords -->
+              <h2 class="section-title" id="device-passwords-heading" style="cursor:pointer; user-select:none; margin-top:20px;" title="Click to expand/collapse">
+                Passwords <span id="device-passwords-count" style="font-size:13px; color:#8f98a0;"></span>
+                <span id="device-passwords-toggle" style="font-size:12px; color:#8f98a0; float:right;">&#x25BC;</span>
+              </h2>
+              <input type="hidden" id="device-passwords-section-loaded" value="" />
+              <div id="device-passwords-section" style="display:none; background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:12px; margin-bottom:20px;">
+                <div id="device-passwords-list"><div style="color:#8f98a0; font-size:13px;">Loading...</div></div>
               </div>
 
               <!-- Device Tickets -->
@@ -1390,6 +1401,82 @@ Write-Host "POCKET_IT_CLIENT_FIELDS:{`"Domain`":`"$domain`"}"
                 </thead>
                 <tbody id="users-table-body"></tbody>
             </table>
+        </div>
+
+        <!-- Passwords page -->
+        <div class="page" id="page-passwords">
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+            <h2 class="section-title" style="margin:0;">Password Database</h2>
+            <select id="passwords-client-filter" style="background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:6px; font-size:13px;">
+              <option value="">All Clients</option>
+            </select>
+            <input type="text" id="passwords-search" placeholder="Search name, username..." style="flex:1; max-width:300px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:6px; font-size:13px;" />
+            <button class="diag-btn" id="btn-add-password">+ Add Password</button>
+          </div>
+
+          <!-- Inline add/edit form (hidden by default) -->
+          <div id="password-form-panel" style="display:none; background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:16px;">
+            <h3 style="margin:0 0 12px; font-size:15px; color:#c7d5e0;" id="password-form-title">Add Password</h3>
+            <input type="hidden" id="password-form-id" value="" />
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div>
+                <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Name *</label>
+                <input type="text" id="pf-name" placeholder="e.g. Router Admin" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:6px; font-size:13px; box-sizing:border-box;" />
+              </div>
+              <div>
+                <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Client *</label>
+                <select id="pf-client" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:6px; font-size:13px;">
+                  <option value="">Select client...</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Device (optional)</label>
+                <select id="pf-device" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:6px; font-size:13px;">
+                  <option value="">No device</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Username</label>
+                <input type="text" id="pf-username" placeholder="Username" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:6px; font-size:13px; box-sizing:border-box;" />
+              </div>
+              <div>
+                <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Password</label>
+                <input type="password" id="pf-password" placeholder="Leave blank to keep existing" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:6px; font-size:13px; box-sizing:border-box;" />
+              </div>
+              <div>
+                <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">OTP Secret (optional)</label>
+                <input type="text" id="pf-otp" placeholder="Base32 OTP secret" style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:6px; font-size:13px; box-sizing:border-box;" />
+              </div>
+              <div style="grid-column:1/-1;">
+                <label style="font-size:12px; color:#8f98a0; display:block; margin-bottom:4px;">Notes</label>
+                <textarea id="pf-notes" rows="3" placeholder="Optional notes..." style="width:100%; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:6px; font-size:13px; box-sizing:border-box; resize:vertical;"></textarea>
+              </div>
+            </div>
+            <div style="margin-top:12px; display:flex; gap:8px;">
+              <button class="diag-btn" id="btn-pw-save">Save</button>
+              <button class="diag-btn" style="background:#2a475e;" id="btn-pw-cancel">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Passwords table -->
+          <div id="passwords-table-container">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+              <thead>
+                <tr style="color:#8f98a0; border-bottom:1px solid #2a475e;">
+                  <th style="text-align:left; padding:8px 10px; font-weight:500;">Name</th>
+                  <th style="text-align:left; padding:8px 10px; font-weight:500;">Client</th>
+                  <th style="text-align:left; padding:8px 10px; font-weight:500;">Device</th>
+                  <th style="text-align:left; padding:8px 10px; font-weight:500;">Username</th>
+                  <th style="text-align:left; padding:8px 10px; font-weight:500;">Password</th>
+                  <th style="text-align:left; padding:8px 10px; font-weight:500;">OTP</th>
+                  <th style="text-align:left; padding:8px 10px; font-weight:500;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="passwords-table-body">
+                <tr><td colspan="7" style="padding:20px; text-align:center; color:#8f98a0;">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <!-- My Account page -->

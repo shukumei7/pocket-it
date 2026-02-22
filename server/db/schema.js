@@ -697,6 +697,30 @@ function initDatabase(dbPath) {
     console.log('[Schema] v0.20.2: Added "Suspend BitLocker & Reboot" script');
   }
 
+  // v0.21.0: Password database
+  const hasPasswords = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='passwords'").get();
+  if (!hasPasswords) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS passwords (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        device_id TEXT REFERENCES devices(device_id) ON DELETE SET NULL,
+        username TEXT,
+        password_encrypted TEXT,
+        otp_secret_encrypted TEXT,
+        notes TEXT,
+        created_by TEXT,
+        updated_by TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_passwords_client_id ON passwords(client_id);
+      CREATE INDEX IF NOT EXISTS idx_passwords_device_id ON passwords(device_id);
+    `);
+    console.log('[Schema] v0.21.0: Created passwords table');
+  }
+
   // Security migration: hash plaintext device secrets
   try {
     const devices = db.prepare('SELECT device_id, device_secret FROM devices WHERE device_secret IS NOT NULL').all();

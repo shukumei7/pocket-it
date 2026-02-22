@@ -212,6 +212,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/llm', createLLMRouter(llmService));
 const clientsRouter = require('./routes/clients');
 app.use('/api/clients', clientsRouter);
+const passwordsRouter = require('./routes/passwords');
+app.use('/api/passwords', passwordsRouter);
 const updatesRouter = require('./routes/updates');
 app.use('/api/updates', updatesRouter);
 const installerRouter = require('./routes/installer');

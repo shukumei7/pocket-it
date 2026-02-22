@@ -293,7 +293,7 @@
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.nav-dropdown-item').forEach(l => l.classList.remove('active'));
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'users', 'scripts'];
+            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'passwords', 'users', 'scripts'];
             if (adminPages.includes(page)) {
                 // Highlight the Admin toggle and the specific dropdown item
                 const adminToggle = document.getElementById('nav-admin-toggle');
@@ -326,13 +326,14 @@
             if (page === 'settings') loadSettings();
             if (page === 'wishlist') loadWishes();
             if (page === 'scripts') loadScripts();
+            if (page === 'passwords') loadPasswords();
             if (page === 'users') loadUsers();
             if (page === 'deploy') loadDeployPage();
             if (page === 'account') loadAccountPage();
         }
 
         function navigateTo(page) {
-            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'users', 'scripts'];
+            const adminPages = ['updates', 'settings', 'wishlist', 'clients', 'passwords', 'users', 'scripts'];
             if (adminPages.includes(page) && currentUserRole !== 'superadmin' && currentUserRole !== 'admin') {
                 return; // Block non-admin navigation
             }
@@ -2020,6 +2021,12 @@
             if (document.getElementById('evt-search')) document.getElementById('evt-search').value = '';
             document.getElementById('sys-tools-content').style.display = 'none';
             document.getElementById('sys-tools-section-loaded').value = '';
+            // Reset device passwords section (lazy)
+            document.getElementById('device-passwords-section').style.display = 'none';
+            document.getElementById('device-passwords-section-loaded').value = '';
+            document.getElementById('device-passwords-toggle').innerHTML = '&#x25BC;';
+            document.getElementById('device-passwords-count').textContent = '';
+            document.getElementById('device-passwords-list').innerHTML = '';
             // Reset and load activity history
             document.getElementById('activity-category-filter').value = '';
             document.getElementById('activity-date-from').value = '';
@@ -5771,6 +5778,7 @@
             const deviceLink = e.target.closest('[data-device-id]');
             if (deviceLink) {
                 e.stopPropagation();
+                e.preventDefault();
                 navigateToDevice(deviceLink.dataset.deviceId);
                 return;
             }
@@ -5938,3 +5946,350 @@
             if (btn.dataset.action === 'template-use') useDeployTemplate(id);
             else if (btn.dataset.action === 'template-delete') deleteDeployTemplate(id);
         });
+
+        // Passwords page filters
+        document.getElementById('passwords-client-filter').addEventListener('change', loadPasswords);
+        document.getElementById('passwords-search').addEventListener('input', loadPasswords);
+
+        // Password form buttons
+        document.getElementById('btn-add-password').addEventListener('click', () => openPasswordModal());
+        document.getElementById('btn-pw-save').addEventListener('click', savePassword);
+        document.getElementById('btn-pw-cancel').addEventListener('click', closePasswordForm);
+
+        // Device passwords heading — toggle section
+        document.getElementById('device-passwords-heading').addEventListener('click', toggleDevicePasswordsSection);
+
+        // Passwords table — event delegation for all row actions
+        document.getElementById('passwords-table-container').addEventListener('click', handlePasswordTableClick);
+
+        // Device passwords panel — event delegation
+        document.getElementById('device-passwords-section').addEventListener('click', handlePasswordTableClick);
+
+        // ===== PASSWORD DATABASE =====
+
+        function toggleDevicePasswordsSection() {
+            const content = document.getElementById('device-passwords-section');
+            const toggle = document.getElementById('device-passwords-toggle');
+            const loaded = document.getElementById('device-passwords-section-loaded');
+            const isOpen = content.style.display !== 'none';
+            if (isOpen) {
+                content.style.display = 'none';
+                toggle.innerHTML = '&#x25BC;';
+            } else {
+                content.style.display = '';
+                toggle.innerHTML = '&#x25B2;';
+                if (!loaded.value) {
+                    loaded.value = '1';
+                    loadDevicePasswords(currentDeviceId);
+                }
+            }
+        }
+
+        let _passwordClients = [];
+
+        async function loadPasswords() {
+            const clientId = document.getElementById('passwords-client-filter').value;
+            const search = (document.getElementById('passwords-search').value || '').toLowerCase();
+            let url = `${API}/api/passwords`;
+            if (clientId) url += `?client_id=${encodeURIComponent(clientId)}`;
+            try {
+                // Populate client filter dropdown on first load
+                if (_passwordClients.length === 0) {
+                    const cr = await fetchWithAuth(`${API}/api/clients`);
+                    _passwordClients = await cr.json();
+                    const sel = document.getElementById('passwords-client-filter');
+                    const existing = Array.from(sel.options).map(o => o.value);
+                    for (const c of _passwordClients) {
+                        if (!existing.includes(String(c.id))) {
+                            const opt = document.createElement('option');
+                            opt.value = c.id;
+                            opt.textContent = c.name;
+                            sel.appendChild(opt);
+                        }
+                    }
+                }
+                const resp = await fetchWithAuth(url);
+                const rows = await resp.json();
+                const filtered = rows.filter(r =>
+                    !search ||
+                    r.name.toLowerCase().includes(search) ||
+                    (r.username || '').toLowerCase().includes(search)
+                );
+                renderPasswordsTable(filtered, document.getElementById('passwords-table-body'), false);
+            } catch (e) {
+                document.getElementById('passwords-table-body').innerHTML = '<tr><td colspan="7" style="padding:20px; text-align:center; color:#ef5350;">Failed to load passwords</td></tr>';
+            }
+        }
+
+        async function loadDevicePasswords(deviceId) {
+            const container = document.getElementById('device-passwords-list');
+            container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">Loading...</div>';
+            try {
+                const resp = await fetchWithAuth(`${API}/api/passwords?device_id=${encodeURIComponent(deviceId)}`);
+                const rows = await resp.json();
+                document.getElementById('device-passwords-count').textContent = rows.length ? `(${rows.length})` : '';
+                if (!rows.length) {
+                    container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">No passwords linked to this device.</div>';
+                    return;
+                }
+                renderPasswordsTable(rows, container, true);
+            } catch (e) {
+                container.innerHTML = '<div style="color:#ef5350; font-size:13px;">Failed to load passwords.</div>';
+            }
+        }
+
+        function renderPasswordsTable(rows, container, compact) {
+            if (!rows.length) {
+                container.innerHTML = compact
+                    ? '<div style="color:#8f98a0; font-size:13px;">No passwords found.</div>'
+                    : '<tr><td colspan="7" style="padding:20px; text-align:center; color:#8f98a0;">No passwords found.</td></tr>';
+                return;
+            }
+
+            if (compact) {
+                container.innerHTML = rows.map(r => `
+                    <div style="border-bottom:1px solid #2a475e; padding:8px 0; font-size:13px;" data-pw-id="${r.id}">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <strong style="color:#c7d5e0; min-width:120px;">${escapeHtml(r.name)}</strong>
+                            ${r.username ? `
+                                <span style="color:#8f98a0; font-size:12px;">${escapeHtml(r.username)}</span>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px;" data-action="copy-username" data-username="${escapeHtml(r.username)}">Copy User</button>
+                            ` : ''}
+                            ${r.has_password ? `
+                                <span class="pw-field" id="pw-val-${r.id}" style="color:#8f98a0; font-family:monospace;">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
+                                <span id="pw-timer-${r.id}" style="color:#ffa726; font-size:11px;"></span>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px;" data-action="reveal-password" data-pw-id="${r.id}">Show</button>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px;" data-action="copy-password" data-pw-id="${r.id}">Copy PW</button>
+                            ` : ''}
+                            ${r.has_otp ? `
+                                <span class="pw-field" id="otp-val-${r.id}" style="color:#8f98a0; font-family:monospace;">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
+                                <span id="otp-timer-${r.id}" style="color:#ffa726; font-size:11px;"></span>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px;" data-action="reveal-otp" data-pw-id="${r.id}">Show OTP</button>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px;" data-action="copy-otp" data-pw-id="${r.id}">Copy OTP</button>
+                            ` : ''}
+                        </div>
+                        ${r.notes ? `<div style="color:#8f98a0; font-size:12px; margin-top:4px;">${escapeHtml(r.notes)}</div>` : ''}
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = rows.map(r => `
+                    <tr style="border-bottom:1px solid #1b2838;" data-pw-id="${r.id}">
+                        <td style="padding:8px 10px; color:#c7d5e0;">${escapeHtml(r.name)}</td>
+                        <td style="padding:8px 10px; color:#8f98a0;">${escapeHtml(r.client_name || '')}</td>
+                        <td style="padding:8px 10px; color:#8f98a0;">${r.device_hostname ? escapeHtml(r.device_hostname) : '<span style="color:#555;">&#x2014;</span>'}</td>
+                        <td style="padding:8px 10px;">
+                            ${r.username ? `
+                                <span style="color:#c7d5e0;">${escapeHtml(r.username)}</span>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px; margin-left:4px;" data-action="copy-username" data-username="${escapeHtml(r.username)}">Copy</button>
+                            ` : '<span style="color:#555;">&#x2014;</span>'}
+                        </td>
+                        <td style="padding:8px 10px;">
+                            ${r.has_password ? `
+                                <span class="pw-field" id="pw-val-${r.id}" style="color:#8f98a0; font-family:monospace;">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
+                                <span id="pw-timer-${r.id}" style="color:#ffa726; font-size:11px; margin-left:4px;"></span>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px; margin-left:4px;" data-action="reveal-password" data-pw-id="${r.id}">Show</button>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px; margin-left:2px;" data-action="copy-password" data-pw-id="${r.id}">Copy</button>
+                            ` : '<span style="color:#555;">&#x2014;</span>'}
+                        </td>
+                        <td style="padding:8px 10px;">
+                            ${r.has_otp ? `
+                                <span class="pw-field" id="otp-val-${r.id}" style="color:#8f98a0; font-family:monospace;">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
+                                <span id="otp-timer-${r.id}" style="color:#ffa726; font-size:11px; margin-left:4px;"></span>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px; margin-left:4px;" data-action="reveal-otp" data-pw-id="${r.id}">Show OTP</button>
+                                <button class="diag-btn" style="padding:2px 8px; font-size:11px; margin-left:2px;" data-action="copy-otp" data-pw-id="${r.id}">Copy OTP</button>
+                            ` : '<span style="color:#555;">&#x2014;</span>'}
+                        </td>
+                        <td style="padding:8px 10px;">
+                            <button class="diag-btn" style="padding:2px 8px; font-size:11px;" data-action="edit-password" data-pw-id="${r.id}">Edit</button>
+                            <button class="diag-btn" style="padding:2px 8px; font-size:11px; margin-left:4px; background:#c62828;" data-action="delete-password" data-pw-id="${r.id}">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        const _revealedSecrets = {};
+        const _revealTimers = {};
+
+        async function toggleRevealSecret(passwordId, field, btn) {
+            const valEl = document.getElementById(`${field === 'password' ? 'pw' : 'otp'}-val-${passwordId}`);
+            const timerEl = document.getElementById(`${field === 'password' ? 'pw' : 'otp'}-timer-${passwordId}`);
+            const key = `${passwordId}-${field}`;
+
+            if (_revealedSecrets[key]) {
+                clearInterval(_revealTimers[key]);
+                delete _revealedSecrets[key];
+                delete _revealTimers[key];
+                valEl.textContent = '••••••••';
+                valEl.style.color = '#8f98a0';
+                if (timerEl) timerEl.textContent = '';
+                btn.textContent = field === 'password' ? 'Show' : 'Show OTP';
+                return;
+            }
+
+            try {
+                const resp = await fetchWithAuth(`${API}/api/passwords/${passwordId}/secret?fields=${field}`);
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    alert(err.error || 'Failed to reveal secret');
+                    return;
+                }
+                const data = await resp.json();
+                const value = data[field];
+                if (!value) return;
+
+                _revealedSecrets[key] = true;
+                valEl.textContent = value;
+                valEl.style.color = '#c7d5e0';
+                btn.textContent = 'Hide';
+
+                let remaining = 30;
+                if (timerEl) timerEl.textContent = `(${remaining}s)`;
+                _revealTimers[key] = setInterval(() => {
+                    remaining--;
+                    if (timerEl) timerEl.textContent = `(${remaining}s)`;
+                    if (remaining <= 0) {
+                        clearInterval(_revealTimers[key]);
+                        delete _revealedSecrets[key];
+                        delete _revealTimers[key];
+                        valEl.textContent = '••••••••';
+                        valEl.style.color = '#8f98a0';
+                        if (timerEl) timerEl.textContent = '';
+                        btn.textContent = field === 'password' ? 'Show' : 'Show OTP';
+                    }
+                }, 1000);
+            } catch (e) {
+                console.error('toggleRevealSecret error:', e);
+            }
+        }
+
+        async function copySecret(passwordId, field) {
+            try {
+                const resp = await fetchWithAuth(`${API}/api/passwords/${passwordId}/secret?fields=${field}`);
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    alert(err.error || 'Failed to copy secret');
+                    return;
+                }
+                const data = await resp.json();
+                const value = data[field];
+                if (!value) return;
+                await copyToClipboard(value);
+                setTimeout(() => { try { navigator.clipboard.writeText(''); } catch(e) {} }, 60000);
+            } catch (e) {
+                console.error('copySecret error:', e);
+            }
+        }
+
+        async function openPasswordModal(id) {
+            document.getElementById('password-form-panel').style.display = '';
+            document.getElementById('password-form-id').value = id || '';
+            document.getElementById('password-form-title').textContent = id ? 'Edit Password' : 'Add Password';
+            document.getElementById('pf-name').value = '';
+            document.getElementById('pf-username').value = '';
+            document.getElementById('pf-password').value = '';
+            document.getElementById('pf-otp').value = '';
+            document.getElementById('pf-notes').value = '';
+
+            const clientSel = document.getElementById('pf-client');
+            if (_passwordClients.length === 0) {
+                const cr = await fetchWithAuth(`${API}/api/clients`);
+                _passwordClients = await cr.json();
+            }
+            clientSel.innerHTML = '<option value="">Select client...</option>' +
+                _passwordClients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+            clientSel.onchange = () => populatePasswordDeviceDropdown(clientSel.value);
+
+            if (id) {
+                const all = await fetchWithAuth(`${API}/api/passwords`);
+                const records = await all.json();
+                const rec = records.find(r => r.id === id);
+                if (rec) {
+                    document.getElementById('pf-name').value = rec.name || '';
+                    document.getElementById('pf-username').value = rec.username || '';
+                    document.getElementById('pf-notes').value = rec.notes || '';
+                    clientSel.value = rec.client_id || '';
+                    await populatePasswordDeviceDropdown(rec.client_id);
+                    document.getElementById('pf-device').value = rec.device_id || '';
+                }
+            } else {
+                await populatePasswordDeviceDropdown('');
+            }
+
+            document.getElementById('pf-name').focus();
+            document.getElementById('password-form-panel').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function populatePasswordDeviceDropdown(clientId) {
+            const devSel = document.getElementById('pf-device');
+            devSel.innerHTML = '<option value="">No device</option>';
+            if (!clientId) return;
+            const dr = await fetchWithAuth(`${API}/api/devices?client_id=${encodeURIComponent(clientId)}`);
+            const devs = await dr.json();
+            devSel.innerHTML = '<option value="">No device</option>' +
+                devs.map(d => `<option value="${d.device_id}">${escapeHtml(d.hostname || d.device_id)}</option>`).join('');
+        }
+
+        function closePasswordForm() {
+            document.getElementById('password-form-panel').style.display = 'none';
+        }
+
+        async function savePassword() {
+            const id = document.getElementById('password-form-id').value;
+            const body = {
+                name: document.getElementById('pf-name').value.trim(),
+                client_id: document.getElementById('pf-client').value,
+                device_id: document.getElementById('pf-device').value || null,
+                username: document.getElementById('pf-username').value.trim() || null,
+                password: document.getElementById('pf-password').value || undefined,
+                otp_secret: document.getElementById('pf-otp').value.trim() || undefined,
+                notes: document.getElementById('pf-notes').value.trim() || null
+            };
+            if (!body.name) return alert('Name is required');
+            if (!body.client_id) return alert('Client is required');
+
+            const url = id ? `${API}/api/passwords/${id}` : `${API}/api/passwords`;
+            const method = id ? 'PUT' : 'POST';
+            try {
+                const resp = await fetchWithAuth(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                if (!resp.ok) { const e = await resp.json(); alert(e.error || 'Save failed'); return; }
+                closePasswordForm();
+                loadPasswords();
+            } catch (e) {
+                alert('Save failed: ' + e.message);
+            }
+        }
+
+        async function deletePassword(id) {
+            if (!confirm('Delete this password record?')) return;
+            try {
+                const resp = await fetchWithAuth(`${API}/api/passwords/${id}`, { method: 'DELETE' });
+                if (!resp.ok) { const e = await resp.json(); alert(e.error || 'Delete failed'); return; }
+                loadPasswords();
+            } catch (e) {
+                alert('Delete failed: ' + e.message);
+            }
+        }
+
+        function handlePasswordTableClick(e) {
+            const btn = e.target.closest('[data-action]');
+            if (!btn) return;
+            const action = btn.dataset.action;
+            const pwId = btn.dataset.pwId ? parseInt(btn.dataset.pwId, 10) : null;
+
+            if (action === 'copy-username') {
+                copyToClipboard(btn.dataset.username || '');
+            } else if (action === 'reveal-password') {
+                toggleRevealSecret(pwId, 'password', btn);
+            } else if (action === 'copy-password') {
+                copySecret(pwId, 'password');
+            } else if (action === 'reveal-otp') {
+                toggleRevealSecret(pwId, 'otp_secret', btn);
+            } else if (action === 'copy-otp') {
+                copySecret(pwId, 'otp_secret');
+            } else if (action === 'edit-password') {
+                openPasswordModal(pwId);
+            } else if (action === 'delete-password') {
+                deletePassword(pwId);
+            }
+        }

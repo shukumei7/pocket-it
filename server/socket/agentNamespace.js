@@ -527,10 +527,15 @@ function setup(io, app) {
             const VALID_PRIORITIES = ['low', 'medium', 'high', 'critical'];
             const ticketTitle = (response.action.title || 'Untitled').replace(/[<>&"']/g, '').substring(0, 200);
             const ticketPriority = VALID_PRIORITIES.includes(response.action.priority) ? response.action.priority : 'medium';
+            const ticketDescription = response.action.description
+              ? response.action.description.replace(/[<>&]/g, '').substring(0, 2000)
+              : null;
+            // ai_summary: the conversational response text (action tag already stripped by parser)
+            const aiSummary = response.text || null;
 
             const ticketResult = db.prepare(
-              'INSERT INTO tickets (device_id, title, priority, ai_summary, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))'
-            ).run(deviceId, ticketTitle, ticketPriority, response.text);
+              'INSERT INTO tickets (device_id, title, priority, description, ai_summary, created_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))'
+            ).run(deviceId, ticketTitle, ticketPriority, ticketDescription, aiSummary);
 
             // Notify IT namespace
             emitToScoped(itNs, db, deviceId, 'ticket_created', {

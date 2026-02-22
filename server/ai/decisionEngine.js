@@ -56,12 +56,13 @@ function parseResponse(responseText) {
     return result;
   }
 
-  const ticketMatch = result.text.match(/\[ACTION:TICKET:(\w+):(.+?)\]/);
+  const ticketMatch = result.text.match(/\[ACTION:TICKET:(\w+):([^|\]]+)(?:\|([^\]]*))?\]/);
   if (ticketMatch) {
     result.action = {
       type: 'ticket',
       priority: ticketMatch[1],
-      title: ticketMatch[2]
+      title: ticketMatch[2].trim(),
+      description: ticketMatch[3] ? ticketMatch[3].trim() : null
     };
     result.text = result.text.replace(ticketMatch[0], '').trim();
     return result;

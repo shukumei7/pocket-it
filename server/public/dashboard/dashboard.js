@@ -1653,7 +1653,7 @@
                             <div class="ticket-title">${escapeHtml(t.title)}</div>
                             <div class="ticket-meta">
                                 Device: <a href="#" class="ticket-device-link" data-device-id="${escapeHtml(t.device_id || '')}" onclick="event.stopPropagation();navigateToDevice('${escapeHtml(t.device_id || '')}');return false;">${escapeHtml(t.hostname || (t.device_id || '').substring(0, 8) + '...')}</a>
-                                ${t.requested_by ? ` | Requested by: <strong>${escapeHtml(t.requested_by)}</strong>` : ''}
+                                ${(t.requested_by || t.hostname) ? ` | By: <strong>${escapeHtml(t.requested_by || t.hostname)}</strong>` : ''}
                                 | Created: ${new Date(t.created_at).toLocaleString()}
                             </div>
                         </div>
@@ -1678,7 +1678,7 @@
                 document.getElementById('ticket-detail-info').innerHTML = `
                     #${ticket.id} |
                     Device: <a href="#" onclick="navigateToDevice('${escapeHtml(ticket.device_id || '')}');return false;" style="color:#66c0f4;">${escapeHtml(ticket.hostname || (ticket.device_id || '').substring(0, 12) + '...')}</a>
-                    ${ticket.requested_by ? ` | Requested by: <strong>${escapeHtml(ticket.requested_by)}</strong>` : ''}
+                    ${(ticket.requested_by || ticket.hostname) ? ` | By: <strong>${escapeHtml(ticket.requested_by || ticket.hostname)}</strong>` : ''}
                     | Created: ${new Date(ticket.created_at).toLocaleString()}
                     ${ticket.ai_summary ? ' | <em>AI-generated</em>' : ''}
                 `;
@@ -1849,8 +1849,7 @@
         };
 
         window.navigateAndOpenTicket = function(ticketId) {
-            showPage('tickets');
-            setTimeout(() => openTicket(ticketId), 100);
+            openTicket(ticketId);
         }
 
         async function loadDeviceTickets(deviceId, container) {
@@ -1870,7 +1869,7 @@
                             <span class="ticket-status ${t.status}" style="font-size:11px;flex-shrink:0;">${t.status}</span>
                         </div>
                         <div style="font-size:11px;color:#8f98a0;margin-top:2px;padding-left:16px;">
-                            ${t.requested_by ? `<strong style="color:#c7d5e0;">${escapeHtml(t.requested_by)}</strong> · ` : ''}${new Date(t.created_at).toLocaleString()}
+                            ${(t.requested_by || t.hostname) ? `<strong style="color:#c7d5e0;">${escapeHtml(t.requested_by || t.hostname)}</strong> · ` : ''}${new Date(t.created_at).toLocaleString()}
                         </div>
                     </div>
                 `).join('');

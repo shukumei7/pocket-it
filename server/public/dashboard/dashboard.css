@@ -364,6 +364,27 @@
             margin-top: 16px;
         }
         .detail-panel.active { display: block; }
+        #ticket-detail {
+            position: fixed;
+            top: 0;
+            right: -420px;
+            width: 400px;
+            height: 100vh;
+            overflow-y: auto;
+            margin-top: 0;
+            border-radius: 0;
+            border-left: 1px solid #2a475e;
+            border-top: none;
+            border-right: none;
+            border-bottom: none;
+            z-index: 1000;
+            box-shadow: -4px 0 24px rgba(0,0,0,0.5);
+            transition: right 0.25s ease;
+        }
+        #ticket-detail.active {
+            display: block;
+            right: 0;
+        }
         .detail-panel .panel-header {
             display: flex;
             justify-content: space-between;

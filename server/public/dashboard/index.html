@@ -535,41 +535,6 @@
             <ul class="ticket-list" id="ticket-list">
                 <div class="empty-state">No tickets yet.</div>
             </ul>
-            <!-- Ticket detail panel -->
-            <div class="detail-panel" id="ticket-detail">
-                <div class="panel-header">
-                    <h3 id="ticket-detail-title">Ticket</h3>
-                    <button class="close-btn" id="btn-close-ticket">Close</button>
-                </div>
-                <div id="ticket-detail-info" style="font-size:13px; color:#8f98a0; margin-bottom:16px;"></div>
-                <div id="ticket-detail-description" style="background:#0f1923; border:1px solid #2a475e; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px; line-height:1.5;"></div>
-                <div style="display:flex; gap:12px; margin-bottom:16px;">
-                    <div>
-                        <label style="font-size:12px; color:#8f98a0;">Status</label>
-                        <select id="ticket-status-select" style="display:block; margin-top:4px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px;">
-                            <option value="open">Open</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="resolved">Resolved</option>
-                            <option value="closed">Closed</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-size:12px; color:#8f98a0;">Priority</label>
-                        <select id="ticket-priority-select" style="display:block; margin-top:4px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px;">
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                            <option value="critical">Critical</option>
-                        </select>
-                    </div>
-                </div>
-                <h4 style="margin:16px 0 8px; color:#c7d5e0;">Comments</h4>
-                <div id="ticket-comments" style="margin-bottom:12px;"></div>
-                <div class="chat-input-row">
-                    <input type="text" id="ticket-comment-input" placeholder="Add a comment..." />
-                    <button id="btn-add-ticket-comment">Comment</button>
-                </div>
-            </div>
         </div>
 
 
@@ -1546,5 +1511,40 @@ Write-Host "POCKET_IT_CLIENT_FIELDS:{`"Domain`":`"$domain`"}"
     <script src="/socket.io/socket.io.js"></script>
     <script src="dashboard.js"></script>
 <div id="toast-container"></div>
+    <!-- Ticket detail panel (global overlay) -->
+    <div class="detail-panel" id="ticket-detail">
+        <div class="panel-header">
+            <h3 id="ticket-detail-title">Ticket</h3>
+            <button class="close-btn" id="btn-close-ticket">Close</button>
+        </div>
+        <div id="ticket-detail-info" style="font-size:13px; color:#8f98a0; margin-bottom:16px;"></div>
+        <div id="ticket-detail-description" style="background:#0f1923; border:1px solid #2a475e; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px; line-height:1.5;"></div>
+        <div style="display:flex; gap:12px; margin-bottom:16px;">
+            <div>
+                <label style="font-size:12px; color:#8f98a0;">Status</label>
+                <select id="ticket-status-select" style="display:block; margin-top:4px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px;">
+                    <option value="open">Open</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:12px; color:#8f98a0;">Priority</label>
+                <select id="ticket-priority-select" style="display:block; margin-top:4px; background:#0f1923; border:1px solid #2a475e; color:#c7d5e0; padding:6px 10px; border-radius:4px; font-size:13px;">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                </select>
+            </div>
+        </div>
+        <h4 style="margin:16px 0 8px; color:#c7d5e0;">Comments</h4>
+        <div id="ticket-comments" style="margin-bottom:12px;"></div>
+        <div class="chat-input-row">
+            <input type="text" id="ticket-comment-input" placeholder="Add a comment..." />
+            <button id="btn-add-ticket-comment">Comment</button>
+        </div>
+    </div>
 </body>
 </html>

@@ -4,6 +4,22 @@ All notable changes to Pocket IT will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
+## [0.20.1] - 2026-02-21
+
+### Fixed
+- **LLM startup reconfiguration** — Server now correctly decrypts stored API keys (OpenAI, Anthropic, Gemini) when loading LLM configuration from the database on startup; previously, encrypted ciphertext was passed directly to the LLM service after restart, causing all providers to fail until settings were manually re-saved
+- **Gemini model display in test-llm route** — Admin test-LLM route now correctly reports the active Gemini model name; previously the `gemini` case was missing from the provider switch, resulting in a blank model display in test responses
+
+### Changed
+- **Default Gemini model updated** — Default Gemini model changed from `gemini-2.0-flash` to `gemini-2.5-flash-lite` following deprecation of the previous model; affects `llmService.js` default, `admin.js` settings default, and `server.js` startup configuration
+
+### Technical
+- EDIT: `server/server.js` — Startup LLM reconfigure now calls `decrypt()` on stored API keys before passing them to `LLMService`; Gemini model default updated to `gemini-2.5-flash-lite`
+- EDIT: `server/routes/admin.js` — Added `gemini` case to test-LLM model display switch; Gemini model default updated to `gemini-2.5-flash-lite`
+- EDIT: `server/services/llmService.js` — Constructor default for `geminiModel` updated to `gemini-2.5-flash-lite`
+
+---
+
 ## [0.20.0] - 2026-02-20
 
 ### Added
@@ -513,7 +529,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.20.1...HEAD
+[0.20.1]: https://github.com/example/pocket-it/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/example/pocket-it/compare/v0.18.0...v0.20.0
 [0.18.0]: https://github.com/example/pocket-it/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/example/pocket-it/compare/v0.13.4...v0.17.0

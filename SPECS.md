@@ -2434,7 +2434,7 @@ dotnet publish -c Release -r win-x64 --self-contained
 - Client detail panel on Client Management page: expandable per-client panel with Notes tab and Custom Fields tab; add/delete notes inline; key-value field editor
 
 **Unreleased**
-- Google Gemini LLM Provider: `_geminiChat()` in `llmService.js` using Gemini REST API with `systemInstruction`, multimodal `inlineData` for vision; env vars `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` (default: `gemini-2.0-flash`); settings keys `llm.gemini.apiKey` and `llm.gemini.model`; `'gemini'` added to `supportsVision` list in `diagnosticAI.js`; "Google Gemini" option in dashboard provider dropdown with API key and model inputs
+- Google Gemini LLM Provider: `_geminiChat()` in `llmService.js` using Gemini REST API with `systemInstruction`, multimodal `inlineData` for vision; env vars `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` (default: `gemini-2.5-flash-lite`); settings keys `llm.gemini.apiKey` and `llm.gemini.model`; `'gemini'` added to `supportsVision` list in `diagnosticAI.js`; "Google Gemini" option in dashboard provider dropdown with API key and model inputs
 - Dashboard CSS extraction: inline `<style>` block (~900 lines) moved to `server/public/dashboard/dashboard.css`; `index.html` references it via `<link>`; checkbox inputs in settings and script library forms replaced with toggle switch markup (`.toggle-switch` / `.toggle-track` pattern)
 - Client terminal notification fix: IT-initiated remote terminal sessions no longer send `terminal_session_ended` or `terminal_session_active` WebView messages to the end-user's chat window; only user-approved (consent-flow) terminal sessions produce chat notifications (`TrayApplication.cs`)
 

@@ -69,7 +69,7 @@ See [docs/docker.md](docs/docker.md) for full Docker deployment details.
 | `POCKET_IT_ANTHROPIC_MODEL` | `claude-sonnet-4-5-20250929` | Anthropic model |
 | `POCKET_IT_CLAUDE_CLI_MODEL` | | Claude CLI model override |
 | `POCKET_IT_GEMINI_API_KEY` | | Google Gemini API key |
-| `POCKET_IT_GEMINI_MODEL` | `gemini-2.0-flash` | Gemini model |
+| `POCKET_IT_GEMINI_MODEL` | `gemini-2.5-flash-lite` | Gemini model |
 | `POCKET_IT_CORS_ORIGINS` | | Extra CORS origins (comma-separated) |
 | `POCKET_IT_DOCKER` | | Set to `true` in Docker (auto-set by Dockerfile) |
 | `POCKET_IT_ENCRYPTION_SALT` | | Salt for API key encryption at rest |

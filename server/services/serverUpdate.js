@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -10,31 +10,35 @@ const PROJECT_ROOT = path.join(__dirname, '..', '..');
 const RELEASES_DIR = path.join(PROJECT_ROOT, 'releases');
 const UPDATES_DIR = path.join(__dirname, '..', 'updates');
 
+// In Docker: git operations run against the mounted host repo
+const GIT_ROOT = IS_DOCKER
+  ? (process.env.POCKET_IT_REPO_DIR || '/app/repo')
+  : PROJECT_ROOT;
+
+const COMPOSE_SERVICE = process.env.POCKET_IT_COMPOSE_SERVICE || 'pocket-it';
+
 /**
  * checkForUpdates() — git fetch + compare HEAD vs origin/main
  * Returns: { available, currentCommit, remoteCommit, commitsBehind, summary[] }
  */
 async function checkForUpdates() {
-  if (IS_DOCKER) {
-    throw new Error('Server update check is not available in Docker mode');
-  }
   try {
     // git fetch origin main
-    execSync('git fetch origin main', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 30000 });
+    execSync('git fetch origin main', { cwd: GIT_ROOT, stdio: 'pipe', timeout: 30000 });
 
-    const currentCommit = execSync('git rev-parse --short HEAD', { cwd: PROJECT_ROOT, stdio: 'pipe' }).toString().trim();
-    const remoteCommit = execSync('git rev-parse --short origin/main', { cwd: PROJECT_ROOT, stdio: 'pipe' }).toString().trim();
+    const currentCommit = execSync('git rev-parse --short HEAD', { cwd: GIT_ROOT, stdio: 'pipe' }).toString().trim();
+    const remoteCommit = execSync('git rev-parse --short origin/main', { cwd: GIT_ROOT, stdio: 'pipe' }).toString().trim();
 
     if (currentCommit === remoteCommit) {
       return { available: false, currentCommit, remoteCommit, commitsBehind: 0, summary: [] };
     }
 
     // Count commits behind
-    const behindOutput = execSync('git rev-list --count HEAD..origin/main', { cwd: PROJECT_ROOT, stdio: 'pipe' }).toString().trim();
+    const behindOutput = execSync('git rev-list --count HEAD..origin/main', { cwd: GIT_ROOT, stdio: 'pipe' }).toString().trim();
     const commitsBehind = parseInt(behindOutput, 10) || 0;
 
     // Get commit summaries
-    const logOutput = execSync('git log HEAD..origin/main --oneline --no-decorate', { cwd: PROJECT_ROOT, stdio: 'pipe' }).toString().trim();
+    const logOutput = execSync('git log HEAD..origin/main --oneline --no-decorate', { cwd: GIT_ROOT, stdio: 'pipe' }).toString().trim();
     const summary = logOutput ? logOutput.split('\n').map(line => line.trim()).filter(Boolean) : [];
 
     return { available: commitsBehind > 0, currentCommit, remoteCommit, commitsBehind, summary };
@@ -50,9 +54,6 @@ async function checkForUpdates() {
  * Exits with code 75 to signal wrapper.js to restart
  */
 async function applyUpdate(db, io) {
-  if (IS_DOCKER) {
-    throw new Error('Server self-update is not available in Docker mode');
-  }
   const itNs = io ? io.of('/it') : null;
   const emit = (step, status, detail) => {
     if (itNs) itNs.emit('server_update_progress', { step, status, detail });
@@ -62,21 +63,25 @@ async function applyUpdate(db, io) {
   try {
     // Step 1: git pull
     emit('pull', 'in_progress', 'Pulling latest changes...');
-    const pullOutput = execSync('git pull origin main', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 120000 }).toString().trim();
+    const pullOutput = execSync('git pull origin main', { cwd: GIT_ROOT, stdio: 'pipe', timeout: 120000 }).toString().trim();
     emit('pull', 'done', pullOutput);
 
-    // Step 2: npm install (only if package.json changed in the pull)
+    // Step 2: npm install (non-Docker only; Docker rebuild handles npm ci)
     emit('install', 'in_progress', 'Checking dependencies...');
-    try {
-      const changedFiles = execSync('git diff HEAD~1 --name-only', { cwd: PROJECT_ROOT, stdio: 'pipe' }).toString();
-      if (changedFiles.includes('package.json') || changedFiles.includes('package-lock.json')) {
-        execSync('npm install --production', { cwd: path.join(PROJECT_ROOT, 'server'), stdio: 'pipe', timeout: 120000 });
-        emit('install', 'done', 'Dependencies updated');
-      } else {
-        emit('install', 'done', 'No dependency changes');
+    if (IS_DOCKER) {
+      emit('install', 'done', 'Dependencies will be refreshed in rebuild');
+    } else {
+      try {
+        const changedFiles = execSync('git diff HEAD~1 --name-only', { cwd: GIT_ROOT, stdio: 'pipe' }).toString();
+        if (changedFiles.includes('package.json') || changedFiles.includes('package-lock.json')) {
+          execSync('npm install --production', { cwd: path.join(GIT_ROOT, 'server'), stdio: 'pipe', timeout: 120000 });
+          emit('install', 'done', 'Dependencies updated');
+        } else {
+          emit('install', 'done', 'No dependency changes');
+        }
+      } catch (installErr) {
+        emit('install', 'warning', 'npm install had issues: ' + installErr.message);
       }
-    } catch (installErr) {
-      emit('install', 'warning', 'npm install had issues: ' + installErr.message);
     }
 
     // Step 3: Register release ZIP if present
@@ -99,13 +104,22 @@ async function applyUpdate(db, io) {
       emit('register', 'done', regResult.reason || 'No new client release');
     }
 
-    // Step 4: Schedule restart
-    emit('restart', 'in_progress', 'Server restarting...');
+    // Step 4: Schedule restart / container rebuild
+    emit('restart', 'in_progress', IS_DOCKER ? 'Triggering container rebuild...' : 'Server restarting...');
 
-    // Give time for the response to be sent and socket events to flush
-    setTimeout(() => {
-      process.exit(75);
-    }, 1500);
+    if (IS_DOCKER) {
+      // Spawn docker compose up --build -d (detached so it survives this container stopping)
+      const rebuild = spawn('docker', ['compose', 'up', '--build', '-d', COMPOSE_SERVICE], {
+        cwd: GIT_ROOT,
+        detached: true,
+        stdio: 'ignore'
+      });
+      rebuild.unref();
+    } else {
+      setTimeout(() => {
+        process.exit(75);
+      }, 1500);
+    }
 
     return { success: true, pulled: true, installed: true, registered: regResult.registered, restarting: true };
   } catch (err) {
@@ -216,7 +230,11 @@ function getServerVersion() {
  */
 function getCurrentCommit() {
   if (IS_DOCKER) {
-    return process.env.POCKET_IT_VERSION || 'docker';
+    try {
+      return execSync('git rev-parse --short HEAD', { cwd: GIT_ROOT, stdio: 'pipe' }).toString().trim();
+    } catch {
+      return process.env.POCKET_IT_VERSION || 'docker';
+    }
   }
   try {
     return execSync('git rev-parse --short HEAD', { cwd: PROJECT_ROOT, stdio: 'pipe' }).toString().trim();

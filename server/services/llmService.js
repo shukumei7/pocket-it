@@ -11,7 +11,7 @@ class LLMService {
     this.ollamaModel = config.ollamaModel || 'llama3.2';
     this.claudeCliModel = config.claudeCliModel || ''; // empty = use default
     this.geminiKey = config.geminiKey || '';
-    this.geminiModel = config.geminiModel || 'gemini-2.0-flash';
+    this.geminiModel = config.geminiModel || 'gemini-2.5-flash-lite';
     this.timeoutMs = config.timeoutMs || 120000; // default 120s
   }
 
@@ -281,7 +281,7 @@ class LLMService {
       openai: 'gpt-4o-mini',
       anthropic: 'claude-sonnet-4-5-20250929',
       'claude-cli': 'default',
-      gemini: 'gemini-2.0-flash',
+      gemini: 'gemini-2.5-flash-lite',
       ollama: 'llama3.2'
     };
     const modelMap = {

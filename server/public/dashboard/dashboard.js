@@ -1653,7 +1653,7 @@
                         <div class="ticket-info">
                             <div class="ticket-title">${escapeHtml(t.title)}</div>
                             <div class="ticket-meta">
-                                Device: <a href="#" class="ticket-device-link" data-device-id="${escapeHtml(t.device_id || '')}" onclick="event.stopPropagation();navigateToDevice('${escapeHtml(t.device_id || '')}');return false;">${escapeHtml(t.hostname || (t.device_id || '').substring(0, 8) + '...')}</a>
+                                Device: <a href="#" class="ticket-device-link" data-device-id="${escapeHtml(t.device_id || '')}">${escapeHtml(t.hostname || (t.device_id || '').substring(0, 8) + '...')}</a>
                                 ${(t.requested_by || t.hostname) ? ` | By: <strong>${escapeHtml(t.requested_by || t.hostname)}</strong>` : ''}
                                 | Created: ${new Date(t.created_at).toLocaleString()}
                             </div>
@@ -1678,7 +1678,7 @@
                 document.getElementById('ticket-detail-title').textContent = ticket.title;
                 document.getElementById('ticket-detail-info').innerHTML = `
                     #${ticket.id} |
-                    Device: <a href="#" onclick="navigateToDevice('${escapeHtml(ticket.device_id || '')}');return false;" style="color:#66c0f4;">${escapeHtml(ticket.hostname || (ticket.device_id || '').substring(0, 12) + '...')}</a>
+                    Device: <a href="#" class="ticket-device-link" data-device-id="${escapeHtml(ticket.device_id || '')}" style="color:#66c0f4;">${escapeHtml(ticket.hostname || (ticket.device_id || '').substring(0, 12) + '...')}</a>
                     ${(ticket.requested_by || ticket.hostname) ? ` | By: <strong>${escapeHtml(ticket.requested_by || ticket.hostname)}</strong>` : ''}
                     | Created: ${new Date(ticket.created_at).toLocaleString()}
                     ${ticket.ai_summary ? ' | <em>AI-generated</em>' : ''}
@@ -1769,7 +1769,7 @@
             const ts = note.created_at ? new Date(note.created_at + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '';
             div.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                 <span style="font-size:12px; color:#8f98a0;">${escapeHtml(note.author)} &mdash; ${escapeHtml(ts)}</span>
-                <button onclick="deleteDeviceNote(${note.id})" style="background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px; padding:0 4px;" title="Delete note">&times;</button>
+                <button data-note-id="${note.id}" style="background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px; padding:0 4px;" title="Delete note">&times;</button>
             </div>
             <div style="font-size:13px; color:#c7d5e0; white-space:pre-wrap; word-break:break-word;">${escapeHtml(note.content)}</div>`;
             if (append) {
@@ -1813,7 +1813,7 @@
                 const ts = f.updated_at ? new Date(f.updated_at + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
                 const source = f.updated_by || 'unknown';
                 return `<div class="stat-card" style="border-left:3px solid #3d5a2e; position:relative;">
-                    <button onclick="deleteCustomField('${escapeHtml(f.field_name).replace(/'/g, "\\'")}')" style="position:absolute; top:4px; right:6px; background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px; padding:0;" title="Delete field">&times;</button>
+                    <button data-field-name="${escapeHtml(f.field_name)}" style="position:absolute; top:4px; right:6px; background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px; padding:0;" title="Delete field">&times;</button>
                     <div class="value" style="font-size:16px;">${escapeHtml(f.field_value || '—')}</div>
                     <div class="label">${escapeHtml(f.field_name)}</div>
                     <div style="font-size:10px; color:#616161; margin-top:2px;">by ${escapeHtml(source)} &middot; ${escapeHtml(ts)}</div>
@@ -1862,7 +1862,7 @@
                     return;
                 }
                 container.innerHTML = tickets.map(t => `
-                    <div class="ticket-item" style="cursor:pointer;padding:8px 4px;" onclick="navigateAndOpenTicket(${t.id})">
+                    <div class="ticket-item device-ticket-item" data-ticket-id="${t.id}" style="cursor:pointer;padding:8px 4px;">
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span class="priority ${t.priority}" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;"></span>
                             <span style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.title)}</span>
@@ -1873,6 +1873,10 @@
                         </div>
                     </div>
                 `).join('');
+                container.addEventListener('click', (e) => {
+                    const item = e.target.closest('[data-ticket-id]');
+                    if (item) openTicket(parseInt(item.dataset.ticketId, 10));
+                });
             } catch (err) {
                 container.innerHTML = '<div style="color:#8f98a0;font-size:13px;">Failed to load tickets.</div>';
             }
@@ -5530,9 +5534,17 @@
             document.getElementById('cf-new-value').addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); saveCustomField(); }
             });
+            document.getElementById('custom-fields-grid').addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-field-name]');
+                if (btn) deleteCustomField(btn.dataset.fieldName);
+            });
 
             // Remove device
             document.getElementById('btn-remove-device').addEventListener('click', removeDevice);
+            document.getElementById('device-notes-list').addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-note-id]');
+                if (btn) deleteDeviceNote(parseInt(btn.dataset.noteId, 10));
+            });
 
             // Device page — "View all tickets" navigates to tickets page filtered by current device
             document.getElementById('btn-device-view-all-tickets').addEventListener('click', () => {
@@ -5548,6 +5560,13 @@
             document.getElementById('new-ticket-device-search').addEventListener('input', filterTicketDevices);
             document.getElementById('new-ticket-device-search').addEventListener('focus', filterTicketDevices);
             document.getElementById('btn-close-ticket').addEventListener('click', closeTicketDetail);
+            document.getElementById('ticket-detail-info').addEventListener('click', (e) => {
+                const deviceLink = e.target.closest('[data-device-id]');
+                if (deviceLink) {
+                    e.preventDefault();
+                    navigateToDevice(deviceLink.dataset.deviceId);
+                }
+            });
             document.getElementById('ticket-status-select').addEventListener('change', function() { updateTicket('status', this.value); });
             document.getElementById('ticket-priority-select').addEventListener('change', function() { updateTicket('priority', this.value); });
             document.getElementById('btn-add-ticket-comment').addEventListener('click', addTicketComment);
@@ -5749,6 +5768,12 @@
 
         // Ticket list — open ticket
         document.getElementById('ticket-list').addEventListener('click', (e) => {
+            const deviceLink = e.target.closest('[data-device-id]');
+            if (deviceLink) {
+                e.stopPropagation();
+                navigateToDevice(deviceLink.dataset.deviceId);
+                return;
+            }
             const item = e.target.closest('[data-ticket-id]');
             if (item) openTicket(parseInt(item.dataset.ticketId, 10));
         });

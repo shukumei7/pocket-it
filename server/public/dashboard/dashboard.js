@@ -1637,9 +1637,10 @@
         }
 
         // ---- Tickets ----
-        async function loadTickets() {
+        async function loadTickets(filters = {}) {
             try {
-                const res = await fetchWithAuth(`${API}/api/tickets`);
+                const qs = filters.device_id ? `?device_id=${encodeURIComponent(filters.device_id)}` : '';
+                const res = await fetchWithAuth(`${API}/api/tickets${qs}`);
                 const tickets = await res.json();
                 const list = document.getElementById('ticket-list');
                 if (tickets.length === 0) {
@@ -5532,6 +5533,12 @@
 
             // Remove device
             document.getElementById('btn-remove-device').addEventListener('click', removeDevice);
+
+            // Device page — "View all tickets" navigates to tickets page filtered by current device
+            document.getElementById('btn-device-view-all-tickets').addEventListener('click', () => {
+                showPage('tickets');
+                loadTickets({ device_id: currentDeviceId });
+            });
 
             // Tickets
             document.getElementById('btn-new-ticket').addEventListener('click', showCreateTicketForm);

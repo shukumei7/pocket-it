@@ -90,6 +90,7 @@ public class ServerConnection : IDisposable
             {
                 new("deviceId", _deviceId),
                 new("hostname", DeviceIdentity.GetHostname()),
+                new("username", Environment.UserName),
                 new("clientVersion", AppVersion.Current),
                 new("exeHash", IntegrityCheck.GetExeHash()),
                 new("lastSeenChat", LastSeenChat)

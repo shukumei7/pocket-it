@@ -75,6 +75,7 @@ function setup(io, app) {
   agentNs.on('connection', (socket) => {
     const deviceId = socket.handshake.query.deviceId;
     const hostname = socket.handshake.query.hostname;
+    const username = socket.handshake.query.username || null;
     const clientVersion = socket.handshake.query.clientVersion;
     const exeHash = socket.handshake.query.exeHash;
     const lastSeenChat = socket.handshake.query.lastSeenChat;
@@ -128,8 +129,8 @@ function setup(io, app) {
 
     // Update device status in DB (device already verified above)
     try {
-      db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\'), hostname = COALESCE(?, hostname), client_version = COALESCE(?, client_version), exe_hash = COALESCE(?, exe_hash) WHERE device_id = ?')
-        .run('online', hostname, clientVersion || null, exeHash || null, deviceId);
+      db.prepare('UPDATE devices SET status = ?, last_seen = datetime(\'now\'), hostname = COALESCE(?, hostname), client_version = COALESCE(?, client_version), exe_hash = COALESCE(?, exe_hash), current_user = ? WHERE device_id = ?')
+        .run('online', hostname, clientVersion || null, exeHash || null, username, deviceId);
 
       // Integrity check: compare device exe_hash against known good hash for its version
       if (exeHash && exeHash !== 'unknown' && clientVersion) {
@@ -533,17 +534,20 @@ function setup(io, app) {
             // ai_summary: the conversational response text (action tag already stripped by parser)
             const aiSummary = response.text || null;
 
-            // Look up logged-in username for requested_by, fall back to hostname
-            let requestedBy = null;
-            try {
-              const deviceRow = db.prepare('SELECT hostname, logged_in_users FROM devices WHERE device_id = ?').get(deviceId);
-              if (deviceRow?.logged_in_users) {
-                const users = JSON.parse(deviceRow.logged_in_users);
-                requestedBy = Array.isArray(users) && users.length > 0 ? users[0] : (deviceRow?.hostname || null);
-              } else {
-                requestedBy = deviceRow?.hostname || null;
-              }
-            } catch (e) { /* ignore */ }
+            // Use the username captured at socket connection time (the Windows user who launched the agent)
+            // Fall back to logged_in_users array, then hostname
+            let requestedBy = username || null;
+            if (!requestedBy) {
+              try {
+                const deviceRow = db.prepare('SELECT hostname, logged_in_users FROM devices WHERE device_id = ?').get(deviceId);
+                if (deviceRow?.logged_in_users) {
+                  const users = JSON.parse(deviceRow.logged_in_users);
+                  requestedBy = Array.isArray(users) && users.length > 0 ? users[0] : (deviceRow?.hostname || null);
+                } else {
+                  requestedBy = deviceRow?.hostname || null;
+                }
+              } catch (e) { /* ignore */ }
+            }
 
             const ticketResult = db.prepare(
               'INSERT INTO tickets (device_id, title, priority, description, ai_summary, requested_by, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'))'

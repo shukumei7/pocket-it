@@ -15,7 +15,8 @@ function initDatabase(dbPath) {
       certificate_fingerprint TEXT,
       device_secret TEXT,
       enrolled_at TEXT,
-      last_seen TEXT
+      last_seen TEXT,
+      current_user TEXT
     );
 
     CREATE TABLE IF NOT EXISTS enrollment_tokens (
@@ -673,6 +674,11 @@ function initDatabase(dbPath) {
   // v0.20.4 — requested_by column for tickets
   try {
     db.prepare('ALTER TABLE tickets ADD COLUMN requested_by TEXT').run();
+  } catch (e) { /* column already exists */ }
+
+  // v0.20.5 — current_user column for devices (active socket session username)
+  try {
+    db.prepare('ALTER TABLE devices ADD COLUMN current_user TEXT').run();
   } catch (e) { /* column already exists */ }
 
   // v0.20.2: Seed "Suspend BitLocker & Reboot" script if missing

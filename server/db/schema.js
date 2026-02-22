@@ -629,6 +629,14 @@ function initDatabase(dbPath) {
         category: 'network',
         requires_elevation: 0,
         timeout_seconds: 15
+      },
+      {
+        name: 'Suspend BitLocker & Reboot',
+        description: 'Suspends BitLocker protection on C: for one reboot cycle, then restarts the system. Use before BIOS updates or hardware changes that would trigger BitLocker recovery.',
+        script_content: 'Suspend-BitLocker -MountPoint "C:" -RebootCount 1; Restart-Computer -Force',
+        category: 'maintenance',
+        requires_elevation: 1,
+        timeout_seconds: 30
       }
     ];
     const insertScript = db.prepare(
@@ -650,6 +658,22 @@ function initDatabase(dbPath) {
   if (defaultClient) {
     db.prepare('UPDATE devices SET client_id = ? WHERE client_id IS NULL').run(defaultClient.id);
     db.prepare('UPDATE enrollment_tokens SET client_id = ? WHERE client_id IS NULL').run(defaultClient.id);
+  }
+
+  // v0.20.2: Seed "Suspend BitLocker & Reboot" script if missing
+  const hasBitlockerScript = db.prepare("SELECT id FROM script_library WHERE name = 'Suspend BitLocker & Reboot'").get();
+  if (!hasBitlockerScript) {
+    db.prepare(
+      'INSERT INTO script_library (name, description, script_content, category, requires_elevation, timeout_seconds) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(
+      'Suspend BitLocker & Reboot',
+      'Suspends BitLocker protection on C: for one reboot cycle, then restarts the system. Use before BIOS updates or hardware changes that would trigger BitLocker recovery.',
+      'Suspend-BitLocker -MountPoint "C:" -RebootCount 1; Restart-Computer -Force',
+      'maintenance',
+      1,
+      30
+    );
+    console.log('[Schema] v0.20.2: Added "Suspend BitLocker & Reboot" script');
   }
 
   // Security migration: hash plaintext device secrets

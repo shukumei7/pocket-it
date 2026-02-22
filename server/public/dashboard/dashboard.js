@@ -5313,6 +5313,33 @@
         }
 
         // ---- Event handler bindings (migrated from inline HTML) ----
+        // ---- AI Script Generation ----
+        async function generateScriptWithAI(contentElId, opts = {}) {
+            const buttonEl = opts.btn || null;
+            const originalText = buttonEl ? buttonEl.textContent : '';
+            if (buttonEl) { buttonEl.disabled = true; buttonEl.textContent = 'Generating...'; }
+
+            const contentEl = document.getElementById(contentElId);
+            const content = contentEl ? contentEl.value : '';
+            const description = opts.descriptionElId ? (document.getElementById(opts.descriptionElId)?.value || '') : '';
+            const name = opts.nameElId ? (document.getElementById(opts.nameElId)?.value || '') : '';
+
+            try {
+                const res = await fetchWithAuth(`${API}/api/llm/generate-script`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, description, name })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Generation failed');
+                if (contentEl) contentEl.value = data.script;
+            } catch (err) {
+                alert('AI generation failed: ' + err.message);
+            } finally {
+                if (buttonEl) { buttonEl.disabled = false; buttonEl.textContent = originalText; }
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             // Login
             document.getElementById('btn-login').addEventListener('click', doLogin);
@@ -5542,6 +5569,17 @@
             document.getElementById('wish-filter-status').addEventListener('change', loadWishes);
             document.getElementById('wish-filter-category').addEventListener('change', loadWishes);
             document.getElementById('btn-refresh-wishes').addEventListener('click', loadWishes);
+
+            // AI Script Generation
+            document.getElementById('btn-generate-script-library')?.addEventListener('click', function() {
+                generateScriptWithAI('script-content', { descriptionElId: 'script-description', nameElId: 'script-name', btn: this });
+            });
+            document.getElementById('btn-generate-script-deploy')?.addEventListener('click', function() {
+                generateScriptWithAI('deploy-script-content', { btn: this });
+            });
+            document.getElementById('btn-generate-script-adhoc')?.addEventListener('click', function() {
+                generateScriptWithAI('adhoc-script', { btn: this });
+            });
 
             // Script Library
             document.getElementById('btn-save-script')?.addEventListener('click', saveScript);

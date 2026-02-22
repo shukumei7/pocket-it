@@ -533,11 +533,16 @@ function setup(io, app) {
             // ai_summary: the conversational response text (action tag already stripped by parser)
             const aiSummary = response.text || null;
 
-            // Look up device hostname for requested_by
+            // Look up logged-in username for requested_by, fall back to hostname
             let requestedBy = null;
             try {
-              const deviceRow = db.prepare('SELECT hostname FROM devices WHERE device_id = ?').get(deviceId);
-              requestedBy = deviceRow?.hostname || null;
+              const deviceRow = db.prepare('SELECT hostname, logged_in_users FROM devices WHERE device_id = ?').get(deviceId);
+              if (deviceRow?.logged_in_users) {
+                const users = JSON.parse(deviceRow.logged_in_users);
+                requestedBy = Array.isArray(users) && users.length > 0 ? users[0] : (deviceRow?.hostname || null);
+              } else {
+                requestedBy = deviceRow?.hostname || null;
+              }
             } catch (e) { /* ignore */ }
 
             const ticketResult = db.prepare(

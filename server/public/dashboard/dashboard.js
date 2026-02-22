@@ -1844,7 +1844,6 @@
         }
 
         window.navigateToDevice = function(deviceId) {
-            showPage('fleet');
             openDevice(deviceId);
         };
 

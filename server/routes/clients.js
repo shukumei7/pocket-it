@@ -299,8 +299,9 @@ router.get('/:id/installer', requireAdmin, async (req, res) => {
     "INSERT INTO enrollment_tokens (token, created_by, expires_at, status, client_id) VALUES (?, ?, ?, 'active', ?)"
   ).run(token, req.user?.username || 'admin', expiresAt, clientId);
 
-  // Determine server URL
-  const serverUrl = process.env.POCKET_IT_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+  // Determine server URL — DB setting takes precedence over env var
+  const dbPublicUrl = db.prepare("SELECT value FROM settings WHERE key = 'server.publicUrl'").get();
+  const serverUrl = (dbPublicUrl && dbPublicUrl.value) || process.env.POCKET_IT_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
 
   // Check if bootstrapper EXE exists — serve with embedded config
   if (fs.existsSync(setupExePath)) {

@@ -33,7 +33,8 @@ Rules:
 - If given a broken or incomplete script, fix and complete it
 - Return ONLY the raw script — no markdown fencing, no explanation, no code blocks
 - Scripts must be safe for production environments
-- Use proper error handling where appropriate`
+- Use proper error handling where appropriate
+- CRITICAL: Never invent or hallucinate cmdlet names. Only use cmdlets and commands that are verified to exist in standard Windows PowerShell or well-known built-in modules. When in doubt, prefer: Get-WmiObject / Get-CimInstance (WMI), native executables (vssadmin.exe, wmic.exe, netsh.exe, sfc.exe, dism.exe, bcdedit.exe), or .NET types via [System.xxx]. Examples: VSS shadow copies → Get-WmiObject Win32_ShadowCopy or vssadmin; BitLocker → Suspend-BitLocker, Get-BitLockerVolume; network → Get-NetAdapter, Get-NetIPAddress; processes → Get-Process, Stop-Process`
         },
         { role: 'user', content: userMessage }
       ]);

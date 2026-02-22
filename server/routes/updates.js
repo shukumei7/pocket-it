@@ -407,9 +407,6 @@ router.get('/client-check', requireIT, async (req, res) => {
 
 // GET /api/updates/server-check — check if server updates available via git (IT auth)
 router.get('/server-check', requireIT, async (req, res) => {
-  if (IS_DOCKER) {
-    return res.status(501).json({ error: 'Server update check is not available in Docker mode. Update by pulling a new container image.' });
-  }
   try {
     const result = await checkForUpdates();
     result.serverVersion = getServerVersion();
@@ -422,9 +419,6 @@ router.get('/server-check', requireIT, async (req, res) => {
 
 // POST /api/updates/server-apply — pull server update from git (IT auth)
 router.post('/server-apply', requireIT, async (req, res) => {
-  if (IS_DOCKER) {
-    return res.status(501).json({ error: 'Server self-update is not available in Docker mode. Update by pulling a new container image.' });
-  }
   try {
     const db = req.app.locals.db;
     const io = req.app.locals.io;

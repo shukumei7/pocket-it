@@ -443,7 +443,7 @@ router.get('/settings', requireAdmin, (req, res) => {
     'llm.anthropic.model': process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
     'llm.claudeCli.model': process.env.POCKET_IT_CLAUDE_CLI_MODEL || '',
     'llm.gemini.apiKey': process.env.POCKET_IT_GEMINI_API_KEY || '',
-    'llm.gemini.model': process.env.POCKET_IT_GEMINI_MODEL || 'gemini-2.0-flash'
+    'llm.gemini.model': process.env.POCKET_IT_GEMINI_MODEL || 'gemini-2.5-flash-lite'
   };
 
   // Fill in defaults for keys not in DB
@@ -544,7 +544,7 @@ router.put('/settings', requireAdmin, (req, res) => {
       anthropicModel: fresh['llm.anthropic.model'] || process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
       claudeCliModel: fresh['llm.claudeCli.model'] || process.env.POCKET_IT_CLAUDE_CLI_MODEL || '',
       geminiKey: fresh['llm.gemini.apiKey'] || process.env.POCKET_IT_GEMINI_API_KEY || '',
-      geminiModel: fresh['llm.gemini.model'] || process.env.POCKET_IT_GEMINI_MODEL || 'gemini-2.0-flash',
+      geminiModel: fresh['llm.gemini.model'] || process.env.POCKET_IT_GEMINI_MODEL || 'gemini-2.5-flash-lite',
       timeoutMs: parseInt(fresh['llm.timeout'], 10) || 120000
     });
   }

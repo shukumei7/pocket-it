@@ -146,7 +146,7 @@ const llmService = new LLMService({
   anthropicModel: process.env.POCKET_IT_ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
   claudeCliModel: process.env.POCKET_IT_CLAUDE_CLI_MODEL || '',
   geminiKey: process.env.POCKET_IT_GEMINI_API_KEY || '',
-  geminiModel: process.env.POCKET_IT_GEMINI_MODEL || 'gemini-2.0-flash',
+  geminiModel: process.env.POCKET_IT_GEMINI_MODEL || 'gemini-2.5-flash-lite',
   ollamaModel: process.env.POCKET_IT_OLLAMA_MODEL || 'llama3.2',
   timeoutMs: 120000
 });

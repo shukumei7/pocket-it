@@ -10,9 +10,13 @@ services:
       - ./data/updates:/app/server/updates
       - ./releases:/app/releases:ro
       - ./installer:/app/installer:ro
+      - .:/app/repo          # git repo for server update check/pull
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker API for self-rebuild
     environment:
       - POCKET_IT_PORT=9100
       - POCKET_IT_DOCKER=true
+      - POCKET_IT_REPO_DIR=/app/repo
+      - POCKET_IT_COMPOSE_SERVICE=pocket-it
       # JWT secret auto-generated on first run and persisted to db/.jwt-secret
       # Override with explicit value if needed:
       # - POCKET_IT_JWT_SECRET=${POCKET_IT_JWT_SECRET}

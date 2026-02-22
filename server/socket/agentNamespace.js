@@ -358,7 +358,7 @@ function setup(io, app) {
         try {
           db.prepare(
             "INSERT INTO chat_messages (device_id, sender, content, message_type) VALUES (?, ?, ?, ?)"
-          ).run(deviceId, 'user', content, 'text');
+          ).run(deviceId, username || 'user', content, 'text');
         } catch (err) {
           console.error('[Agent] Chat save error:', err.message);
         }
@@ -379,7 +379,7 @@ function setup(io, app) {
         const itNs = io.of('/it');
         emitToScoped(itNs, db, deviceId, 'device_chat_update', {
           deviceId,
-          message: { sender: 'user', content }
+          message: { sender: username || 'user', content }
         });
         return;
       }
@@ -604,7 +604,7 @@ function setup(io, app) {
         // Notify IT namespace watchers
         emitToScoped(itNs, db, deviceId, 'device_chat_update', {
           deviceId,
-          message: { sender: 'user', content },
+          message: { sender: username || 'user', content },
           response: { sender: 'ai', text: response.text, action: response.action }
         });
 

@@ -1843,17 +1843,12 @@
             socket.emit('delete_custom_field', { deviceId: currentDeviceId, fieldName });
         }
 
-        function navigateToDevice(deviceId) {
-            // Switch to fleet page and open the device detail
+        window.navigateToDevice = function(deviceId) {
             showPage('fleet');
-            // Allow the fleet page to render, then trigger device selection
-            setTimeout(() => {
-                const deviceEl = document.querySelector(`.device-card[data-device-id="${deviceId}"], [data-device-id="${deviceId}"]`);
-                if (deviceEl) deviceEl.click();
-            }, 150);
-        }
+            openDevice(deviceId);
+        };
 
-        function navigateAndOpenTicket(ticketId) {
+        window.navigateAndOpenTicket = function(ticketId) {
             showPage('tickets');
             setTimeout(() => openTicket(ticketId), 100);
         }

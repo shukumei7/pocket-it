@@ -6099,14 +6099,32 @@
             const container = document.getElementById('device-passwords-list');
             container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">Loading...</div>';
             try {
-                const resp = await fetchWithAuth(`${API}/api/passwords?device_id=${encodeURIComponent(deviceId)}`);
-                const rows = await resp.json();
-                document.getElementById('device-passwords-count').textContent = rows.length ? `(${rows.length})` : '';
-                if (!rows.length) {
-                    container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">No passwords linked to this device.</div>';
+                const clientId = window._currentDeviceClientId;
+                const fetches = [fetchWithAuth(`${API}/api/passwords?device_id=${encodeURIComponent(deviceId)}`)];
+                if (clientId) fetches.push(fetchWithAuth(`${API}/api/passwords?client_id=${encodeURIComponent(clientId)}`));
+                const [devResp, clientResp] = await Promise.all(fetches);
+                const deviceRows = await devResp.json();
+                const clientRows = clientResp ? (await clientResp.json()).filter(r => !r.device_id) : [];
+                const total = deviceRows.length + clientRows.length;
+                document.getElementById('device-passwords-count').textContent = total ? `(${total})` : '';
+                if (!total) {
+                    container.innerHTML = '<div style="color:#8f98a0; font-size:13px;">No passwords linked to this device or client.</div>';
                     return;
                 }
-                renderPasswordsTable(rows, container, true);
+                let html = '';
+                if (deviceRows.length) {
+                    html += '<div style="font-size:11px; color:#8f98a0; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">This Device</div>';
+                    const sub = document.createElement('div');
+                    renderPasswordsTable(deviceRows, sub, true);
+                    html += sub.innerHTML;
+                }
+                if (clientRows.length) {
+                    html += `<div style="font-size:11px; color:#8f98a0; text-transform:uppercase; letter-spacing:0.5px; margin:${deviceRows.length ? '14px' : '0'} 0 6px 0;">Client-Wide</div>`;
+                    const sub = document.createElement('div');
+                    renderPasswordsTable(clientRows, sub, true);
+                    html += sub.innerHTML;
+                }
+                container.innerHTML = html;
             } catch (e) {
                 container.innerHTML = '<div style="color:#ef5350; font-size:13px;">Failed to load passwords.</div>';
             }

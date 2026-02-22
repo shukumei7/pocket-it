@@ -650,6 +650,132 @@ function initDatabase(dbPath) {
     }
   }
 
+  // v0.21.1: Custom fields sample scripts
+  const customFieldScripts = [
+    {
+      name: 'Report Device Health Fields',
+      description: 'Collects key device health indicators and writes them to Pocket IT device custom fields. Run periodically to keep field data current.',
+      category: 'diagnostics',
+      requires_elevation: 0,
+      timeout_seconds: 30,
+      ai_tool: 1,
+      os_type: 'windows',
+      script_content: `# Report device health indicators to Pocket IT custom fields
+$fields = @{}
+
+# Pending reboot check
+$rebootPending = $false
+if (Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired') { $rebootPending = $true }
+if (Test-Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\PendingFileRenameOperations') { $rebootPending = $true }
+$fields['pending_reboot'] = if ($rebootPending) { 'Yes' } else { 'No' }
+
+# Antivirus
+$av = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue | Select-Object -First 1
+$fields['antivirus'] = if ($av) { $av.displayName } else { 'Not detected' }
+
+# Windows activation
+$lic = Get-CimInstance SoftwareLicensingProduct -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*Windows*' -and $_.LicenseStatus -eq 1 } | Select-Object -First 1
+$fields['windows_licensed'] = if ($lic) { 'Yes' } else { 'No' }
+
+# Last boot time
+$boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+$fields['last_boot'] = $boot.ToString('yyyy-MM-dd HH:mm')
+
+# Free disk % on C:
+$disk = Get-PSDrive C -ErrorAction SilentlyContinue
+if ($disk) {
+    $total = $disk.Used + $disk.Free
+    $fields['c_drive_free_pct'] = if ($total -gt 0) { [math]::Round(($disk.Free / $total) * 100, 1).ToString() + '%' } else { 'N/A' }
+}
+
+$fields['fields_updated'] = (Get-Date -Format 'yyyy-MM-dd HH:mm')
+
+Write-Output "POCKET_IT_FIELDS:$($fields | ConvertTo-Json -Compress)"
+Write-Output "Device health fields updated: $($fields.Keys -join ', ')"`,
+    },
+    {
+      name: 'Write Device Custom Field',
+      description: 'Template: write one or more custom fields to this device record. Edit the $fields hashtable with your key/value pairs.',
+      category: 'info',
+      requires_elevation: 0,
+      timeout_seconds: 10,
+      ai_tool: 0,
+      os_type: 'windows',
+      script_content: `# Write custom fields to this device record in Pocket IT
+# Edit the fields below, then run the script
+$fields = @{
+    'example_field'  = 'example_value'
+    # 'support_note' = 'Replaced keyboard 2026-02-22'
+    # 'asset_tag'    = 'IT-00123'
+    # 'warranty_end' = '2027-06-30'
+}
+
+Write-Output "POCKET_IT_FIELDS:$($fields | ConvertTo-Json -Compress)"
+Write-Output "Wrote $($fields.Count) field(s): $($fields.Keys -join ', ')"`,
+    },
+    {
+      name: 'Write Client Custom Field',
+      description: "Template: write one or more custom fields to this device's client/organization record. Edit the $fields hashtable with your key/value pairs.",
+      category: 'info',
+      requires_elevation: 0,
+      timeout_seconds: 10,
+      ai_tool: 0,
+      os_type: 'windows',
+      script_content: `# Write custom fields to the CLIENT (organization) record in Pocket IT
+# Edit the fields below, then run the script on any device belonging to that client
+$fields = @{
+    'example_field'   = 'example_value'
+    # 'contract_end'  = '2027-01-31'
+    # 'support_tier'  = 'Premium'
+    # 'account_owner' = 'Jane Smith'
+    # 'renewal_notes' = 'Auto-renews unless cancelled 60 days prior'
+}
+
+Write-Output "POCKET_IT_CLIENT_FIELDS:$($fields | ConvertTo-Json -Compress)"
+Write-Output "Wrote $($fields.Count) client field(s): $($fields.Keys -join ', ')"`,
+    },
+    {
+      name: 'Report Software Inventory Field',
+      description: "Scans installed software and writes a compact summary to the device's software_inventory custom field.",
+      category: 'info',
+      requires_elevation: 0,
+      timeout_seconds: 60,
+      ai_tool: 1,
+      os_type: 'windows',
+      script_content: `# Collect installed software summary and store as a device custom field
+$software = Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*,
+                              HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* \`
+            -ErrorAction SilentlyContinue |
+    Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne '' } |
+    Select-Object DisplayName, DisplayVersion |
+    Sort-Object DisplayName
+
+$summary = ($software | ForEach-Object { "$($_.DisplayName) $($_.DisplayVersion)".Trim() }) -join '; '
+# Truncate to 1900 chars to stay within field limit
+if ($summary.Length -gt 1900) { $summary = $summary.Substring(0, 1900) + '...' }
+
+$fields = @{
+    'software_inventory' = $summary
+    'software_count'     = $software.Count.ToString()
+    'inventory_date'     = (Get-Date -Format 'yyyy-MM-dd')
+}
+
+Write-Output "POCKET_IT_FIELDS:$($fields | ConvertTo-Json -Compress)"
+Write-Output "Software inventory: $($software.Count) apps recorded"`,
+    },
+  ];
+
+  for (const s of customFieldScripts) {
+    const exists = db.prepare("SELECT id FROM script_library WHERE name = ?").get(s.name);
+    if (!exists) {
+      db.prepare(`
+        INSERT INTO script_library (name, description, script_content, category, requires_elevation, timeout_seconds, ai_tool, os_type, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'system', datetime('now'))
+      `).run(s.name, s.description, s.script_content, s.category, s.requires_elevation, s.timeout_seconds, s.ai_tool, s.os_type);
+      console.log(`[Schema] v0.21.1: Seeded script "${s.name}"`);
+    }
+  }
+
   // v0.10.0: Seed "Default" client and assign orphaned devices/tokens
   const clientCount = db.prepare('SELECT COUNT(*) as count FROM clients').get().count;
   if (clientCount === 0) {

@@ -31,6 +31,17 @@ Rules:
 - For Linux: use bash/sh; prefer POSIX-compatible commands unless a specific distro is indicated
 - If given a plain-English purpose, write a complete script from scratch
 - If given a broken or incomplete script, fix and complete it
+Pocket IT Custom Fields:
+- To write device-level custom fields from a script, output a line starting with POCKET_IT_FIELDS: followed by a compact JSON object:
+  Write-Output "POCKET_IT_FIELDS:$(ConvertTo-Json @{ 'field_name' = 'value' } -Compress)"
+  This stores key/value pairs on the device record, visible in the dashboard under Custom Fields.
+- To write client-level custom fields, use POCKET_IT_CLIENT_FIELDS: prefix instead:
+  Write-Output "POCKET_IT_CLIENT_FIELDS:$(ConvertTo-Json @{ 'field_name' = 'value' } -Compress)"
+  This stores key/value pairs on the client/organization record.
+- Multiple fields can be written in one JSON object: @{ 'key1' = 'val1'; 'key2' = 'val2' }
+- The POCKET_IT_FIELDS: line must be the only content on that line (no leading whitespace)
+- These markers work on all OS types; use equivalent JSON output for bash: echo "POCKET_IT_FIELDS:$(echo '{\"key\":\"val\"}' | jq -c .)"
+- Use these markers whenever the script purpose involves recording, tracking, or storing information about a device or client
 - Return ONLY the raw script — no markdown fencing, no explanation, no code blocks
 - Scripts must be safe for production environments
 - Use proper error handling where appropriate

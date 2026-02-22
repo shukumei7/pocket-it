@@ -1853,6 +1853,11 @@
             }, 150);
         }
 
+        function navigateAndOpenTicket(ticketId) {
+            showPage('tickets');
+            setTimeout(() => openTicket(ticketId), 100);
+        }
+
         async function loadDeviceTickets(deviceId, container) {
             try {
                 container.innerHTML = '<div style="color:#8f98a0;font-size:13px;padding:8px 0;">Loading tickets...</div>';
@@ -1863,14 +1868,14 @@
                     return;
                 }
                 container.innerHTML = tickets.map(t => `
-                    <div class="ticket-item" style="cursor:pointer;padding:8px 0;border-bottom:1px solid #2a475e;" onclick="openTicket(${t.id})">
+                    <div class="ticket-item" style="cursor:pointer;padding:8px 4px;" onclick="navigateAndOpenTicket(${t.id})">
                         <div style="display:flex;align-items:center;gap:8px;">
-                            <span class="priority ${t.priority}" style="width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;"></span>
-                            <span style="font-size:13px;flex:1;">${escapeHtml(t.title)}</span>
-                            <span class="ticket-status ${t.status}" style="font-size:11px;">${t.status}</span>
+                            <span class="priority ${t.priority}" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;"></span>
+                            <span style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.title)}</span>
+                            <span class="ticket-status ${t.status}" style="font-size:11px;flex-shrink:0;">${t.status}</span>
                         </div>
-                        <div style="font-size:11px;color:#8f98a0;margin-top:3px;padding-left:16px;">
-                            ${t.requested_by ? `Requested by: ${escapeHtml(t.requested_by)} · ` : ''}${new Date(t.created_at).toLocaleString()}
+                        <div style="font-size:11px;color:#8f98a0;margin-top:2px;padding-left:16px;">
+                            ${t.requested_by ? `<strong style="color:#c7d5e0;">${escapeHtml(t.requested_by)}</strong> · ` : ''}${new Date(t.created_at).toLocaleString()}
                         </div>
                     </div>
                 `).join('');
@@ -1951,6 +1956,10 @@
 
                 // Set initial AI control state
                 updateAIControlButtons(d.ai_disabled);
+
+                // Show current socket user in chat header
+                const chatUserLabel = document.getElementById('chat-user-label');
+                if (chatUserLabel) chatUserLabel.textContent = d.current_user || '';
 
                 // Clear watchers container
                 const watchersEl = document.getElementById('device-watchers');

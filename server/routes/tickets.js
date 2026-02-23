@@ -181,7 +181,7 @@ router.patch('/:id', requireIT, resolveClientScope, (req, res) => {
 
 router.post('/:id/comments', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
-  const { author, content } = req.body;
+  const { content } = req.body;
 
   if (!content) {
     return res.status(400).json({ error: 'Comment content required' });
@@ -196,10 +196,13 @@ router.post('/:id/comments', requireIT, resolveClientScope, (req, res) => {
     return res.status(403).json({ error: 'Access denied' });
   }
 
+  // Use authenticated identity — never trust caller-supplied author
+  const author = req.user?.username || 'it_staff';
+
   const result = db.prepare(`
     INSERT INTO ticket_comments (ticket_id, author, content)
     VALUES (?, ?, ?)
-  `).run(req.params.id, author || 'anonymous', content);
+  `).run(req.params.id, author, content);
 
   db.prepare(
     "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"

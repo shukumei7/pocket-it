@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { requireIT, requireDevice, isLocalhost } = require('../auth/middleware');
+const { requireIT, requireAdmin, requireDevice, isLocalhost } = require('../auth/middleware');
 const { checkForUpdates, applyUpdate, checkClientRelease, getServerVersion, getCurrentCommit } = require('../services/serverUpdate');
 
 const router = express.Router();
@@ -38,7 +38,7 @@ const upload = multer({
 
 // POST /api/updates/upload — admin uploads an installer
 // Auth: requireIT (admin or localhost)
-router.post('/upload', requireIT, upload.single('installer'), (req, res) => {
+router.post('/upload', requireAdmin, upload.single('installer'), (req, res) => {
   try {
     const { version, release_notes } = req.body;
     if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
@@ -137,7 +137,7 @@ router.get('/', requireIT, (req, res) => {
 });
 
 // DELETE /api/updates/:version — delete an update package (admin)
-router.delete('/:version', requireIT, (req, res) => {
+router.delete('/:version', requireAdmin, (req, res) => {
   const db = req.app.locals.db;
   const { version } = req.params;
 
@@ -169,7 +169,7 @@ router.delete('/:version', requireIT, (req, res) => {
 });
 
 // POST /api/updates/push/:version — notify all outdated online devices (admin)
-router.post('/push/:version', requireIT, (req, res) => {
+router.post('/push/:version', requireAdmin, (req, res) => {
   const db = req.app.locals.db;
   const { version } = req.params;
 
@@ -281,10 +281,8 @@ router.post('/publish-local', async (req, res) => {
   if (IS_DOCKER) {
     return res.status(501).json({ error: 'Local publishing is not available in Docker mode. Upload client builds via the upload endpoint.' });
   }
-  // Localhost only
-  const ip = req.ip || req.connection.remoteAddress || '';
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-  if (!isLocal) {
+  // Localhost only — use socket.remoteAddress to avoid X-Forwarded-For spoofing
+  if (!isLocalhost(req)) {
     return res.status(403).json({ error: 'Localhost only' });
   }
 
@@ -406,7 +404,7 @@ router.get('/client-check', requireIT, async (req, res) => {
 });
 
 // GET /api/updates/server-check — check if server updates available via git (IT auth)
-router.get('/server-check', requireIT, async (req, res) => {
+router.get('/server-check', requireAdmin, async (req, res) => {
   try {
     const result = await checkForUpdates();
     result.serverVersion = getServerVersion();
@@ -418,7 +416,7 @@ router.get('/server-check', requireIT, async (req, res) => {
 });
 
 // POST /api/updates/server-apply — pull server update from git (IT auth)
-router.post('/server-apply', requireIT, async (req, res) => {
+router.post('/server-apply', requireAdmin, async (req, res) => {
   try {
     const db = req.app.locals.db;
     const io = req.app.locals.io;

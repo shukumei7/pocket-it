@@ -310,6 +310,15 @@ function setup(io, app) {
         return;
       }
 
+      if (!content || typeof content !== 'string' || content.length === 0) {
+        socket.emit('error_message', { message: 'Message content is required' });
+        return;
+      }
+      if (content.length > 10000) {
+        socket.emit('error_message', { message: 'Message too long (max 10,000 characters)' });
+        return;
+      }
+
       console.log(`[IT] Chat to device ${deviceId}: ${content.substring(0, 50)}...`);
 
       const db = app.locals.db;
@@ -910,7 +919,7 @@ function setup(io, app) {
         return;
       }
 
-      if (fileData.length > 70_000_000) {
+      if (fileData.length > 52_428_800) {
         socket.emit('error_message', { message: 'File too large (max 50MB)' });
         return;
       }

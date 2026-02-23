@@ -1,8 +1,9 @@
 const express = require('express');
+const { requireAdmin } = require('../auth/middleware');
 const router = express.Router();
 
 module.exports = function createPoliciesRouter(alertService) {
-  router.get('/', (req, res) => {
+  router.get('/', requireAdmin, (req, res) => {
     try {
       const policies = req.app.locals.db.prepare(`
         SELECT p.*, t.check_type, t.field_path, t.operator, t.threshold_value, t.severity
@@ -16,7 +17,7 @@ module.exports = function createPoliciesRouter(alertService) {
     }
   });
 
-  router.post('/', (req, res) => {
+  router.post('/', requireAdmin, (req, res) => {
     const { threshold_id, action_id, parameter, cooldown_minutes, require_consent } = req.body;
     if (!threshold_id || !action_id) {
       return res.status(400).json({ error: 'Missing required fields: threshold_id, action_id' });
@@ -32,7 +33,7 @@ module.exports = function createPoliciesRouter(alertService) {
     }
   });
 
-  router.patch('/:id', (req, res) => {
+  router.patch('/:id', requireAdmin, (req, res) => {
     const { id } = req.params;
     const allowed = ['threshold_id', 'action_id', 'parameter', 'cooldown_minutes', 'require_consent', 'enabled'];
     const updates = [];
@@ -54,7 +55,7 @@ module.exports = function createPoliciesRouter(alertService) {
     }
   });
 
-  router.delete('/:id', (req, res) => {
+  router.delete('/:id', requireAdmin, (req, res) => {
     try {
       req.app.locals.db.prepare('DELETE FROM auto_remediation_policies WHERE id = ?').run(req.params.id);
       res.json({ success: true });

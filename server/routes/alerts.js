@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { requireIT } = require('../auth/middleware');
+const { requireIT, requireAdmin } = require('../auth/middleware');
 const { resolveClientScope } = require('../auth/clientScope');
 
 module.exports = function createAlertsRouter(alertService, notificationService) {
   // ---- Thresholds ----
-  router.get('/thresholds', (req, res) => {
+  router.get('/thresholds', requireIT, (req, res) => {
     try {
       const thresholds = req.app.locals.db.prepare('SELECT * FROM alert_thresholds ORDER BY check_type, severity').all();
       res.json(thresholds);
@@ -14,7 +14,7 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
     }
   });
 
-  router.post('/thresholds', (req, res) => {
+  router.post('/thresholds', requireAdmin, (req, res) => {
     const { check_type, field_path, operator, threshold_value, severity, consecutive_required } = req.body;
     if (!check_type || !field_path || !operator || threshold_value === undefined || !severity) {
       return res.status(400).json({ error: 'Missing required fields: check_type, field_path, operator, threshold_value, severity' });
@@ -30,7 +30,7 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
     }
   });
 
-  router.patch('/thresholds/:id', (req, res) => {
+  router.patch('/thresholds/:id', requireAdmin, (req, res) => {
     const { id } = req.params;
     const allowed = ['check_type', 'field_path', 'operator', 'threshold_value', 'severity', 'consecutive_required', 'enabled'];
     const updates = [];
@@ -52,7 +52,7 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
     }
   });
 
-  router.delete('/thresholds/:id', (req, res) => {
+  router.delete('/thresholds/:id', requireAdmin, (req, res) => {
     try {
       req.app.locals.db.prepare('DELETE FROM alert_thresholds WHERE id = ?').run(req.params.id);
       res.json({ success: true });
@@ -83,27 +83,29 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
     }
   });
 
-  router.post('/:id/acknowledge', (req, res) => {
+  router.post('/:id/acknowledge', requireIT, (req, res) => {
     try {
-      const acknowledgedBy = req.body.acknowledgedBy || 'IT Staff';
+      // Bind to authenticated identity — never trust caller-supplied acknowledgedBy
+      const acknowledgedBy = req.user?.username || 'it_staff';
       const alert = alertService.acknowledgeAlert(req.params.id, acknowledgedBy);
       if (!alert) return res.status(404).json({ error: 'Alert not found' });
       req.app.locals.db.prepare(
         "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-      ).run('it_staff', 'alert_acknowledged', alert.device_id, JSON.stringify({ acknowledgedBy }));
+      ).run(acknowledgedBy, 'alert_acknowledged', alert.device_id, JSON.stringify({ acknowledgedBy }));
       res.json(alert);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  router.post('/:id/resolve', (req, res) => {
+  router.post('/:id/resolve', requireIT, (req, res) => {
     try {
       const alert = alertService.resolveAlert(req.params.id);
       if (!alert) return res.status(404).json({ error: 'Alert not found' });
+      const actor = req.user?.username || 'it_staff';
       req.app.locals.db.prepare(
         "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-      ).run('it_staff', 'alert_resolved', alert.device_id, JSON.stringify({}));
+      ).run(actor, 'alert_resolved', alert.device_id, JSON.stringify({}));
       res.json(alert);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -111,7 +113,7 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
   });
 
   // ---- Notification Channels ----
-  router.get('/channels', (req, res) => {
+  router.get('/channels', requireAdmin, (req, res) => {
     try {
       const channels = req.app.locals.db.prepare('SELECT * FROM notification_channels ORDER BY name').all();
       res.json(channels);
@@ -120,7 +122,7 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
     }
   });
 
-  router.post('/channels', (req, res) => {
+  router.post('/channels', requireAdmin, (req, res) => {
     const { name, channel_type, config } = req.body;
     if (!name || !channel_type || !config) {
       return res.status(400).json({ error: 'Missing required fields: name, channel_type, config' });
@@ -137,7 +139,7 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
     }
   });
 
-  router.patch('/channels/:id', (req, res) => {
+  router.patch('/channels/:id', requireAdmin, (req, res) => {
     const { id } = req.params;
     const allowed = ['name', 'channel_type', 'config', 'enabled'];
     const updates = [];
@@ -161,7 +163,7 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
     }
   });
 
-  router.delete('/channels/:id', (req, res) => {
+  router.delete('/channels/:id', requireAdmin, (req, res) => {
     try {
       req.app.locals.db.prepare('DELETE FROM notification_channels WHERE id = ?').run(req.params.id);
       res.json({ success: true });
@@ -170,7 +172,7 @@ module.exports = function createAlertsRouter(alertService, notificationService) 
     }
   });
 
-  router.post('/channels/:id/test', async (req, res) => {
+  router.post('/channels/:id/test', requireAdmin, async (req, res) => {
     try {
       const result = await notificationService.testChannel(parseInt(req.params.id));
       res.json(result);

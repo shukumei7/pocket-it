@@ -1,6 +1,6 @@
 {
   "name": "pocket-it-server",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "Pocket IT — AI-powered IT helpdesk server",
   "main": "server.js",
   "scripts": {

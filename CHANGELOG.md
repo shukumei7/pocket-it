@@ -4,6 +4,59 @@ All notable changes to Pocket IT will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 
+## [Unreleased]
+
+## [0.21.0] - 2026-02-23
+
+### Added
+- **Google Gemini LLM Provider** — Gemini added as a 5th AI provider alongside Ollama, OpenAI, Anthropic, and Claude CLI; supports chat and vision (screenshot analysis); configurable via dashboard Settings page or `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` environment variables; default model: `gemini-2.0-flash`
+- **Docker Support** — `Dockerfile` (Node 20 Alpine with `better-sqlite3` native build), `docker-compose.yml` with persistent volume mounts for `db/` and `updates/`, `.dockerignore`; `POCKET_IT_DOCKER=true` env var disables git-based features (server self-update, client release check, publish-local) with 501 responses; manual upload and fleet push endpoints remain functional; JWT secret auto-generated on first Docker run and persisted to volume-mounted db/.jwt-secret (env var override still takes priority)
+- **Password Database** — IT staff can store and manage credentials per device and per client; admin page under the Admin dropdown with full CRUD; device detail panel shows device-specific passwords and client-wide passwords in separate groups; passwords stored encrypted at rest
+
+### Changed
+- **Dashboard toggle switches** — All checkbox inputs in settings and script library forms converted to toggle switch UI (`.toggle-switch` / `.toggle-track` CSS pattern)
+- **Dashboard CSS extraction** — Inline `<style>` block (~900 lines) extracted to external `dashboard.css` file
+- **AI script generator awareness** — AI generator in script library now understands `POCKET_IT_FIELDS` output markers and generates scripts that use them; added custom fields sample scripts to the seeded library
+
+### Fixed
+- **Client terminal notifications** — IT-initiated remote terminal sessions no longer show "Terminal session ended" / "Terminal session active" messages in the end-user's chat window; only user-approved terminal sessions display chat notifications
+- **Security vulnerabilities (PR #1)** — 7 security vulnerabilities identified and resolved in a security audit code review
+- **POCKET_IT_CLIENT_FIELDS parser** — Fixed `socket.deviceId` reference in the script result handler that was causing custom field upserts to fail silently
+- **PowerShell string escaping** — Fixed string escaping in seeded sample scripts that caused PowerShell syntax errors
+- **Installer URL priority** — `server.publicUrl` from DB now correctly takes precedence over env var for client installer download URL
+- **Dashboard CSP compliance** — Replaced inline `onclick` handlers with event delegation to comply with `script-src-attr` CSP directive
+- **Device page navigation** — Tickets button on device page now navigates to filtered ticket list; device fleet link navigates to device page correctly
+
+### Technical
+- NEW: `Dockerfile` — Node 20 Alpine, `better-sqlite3` native compilation via `python3 make g++`, production deps only
+- NEW: `docker-compose.yml` — persistent volumes `./data/db` and `./data/updates`, commented LLM provider config with `host.docker.internal` Ollama example
+- NEW: `.dockerignore` — excludes `client/`, `.git`, `node_modules/`, test files, SQLite WAL files
+- EDIT: `server/server.js` — git-based release registration and 24h client check interval wrapped in `POCKET_IT_DOCKER` guard; `pushUpdateToOutdatedDevices` always defined
+- EDIT: `server/routes/updates.js` — `server-check`, `server-apply`, `client-check`, `publish-local` return 501 in Docker mode
+- EDIT: `server/services/serverUpdate.js` — `checkForUpdates`, `applyUpdate`, `checkClientRelease` guarded; `getCurrentCommit` returns `POCKET_IT_VERSION` env or `'docker'`
+- EDIT: `server/services/llmService.js` — `_geminiChat()` method using Gemini REST API with `systemInstruction`, multimodal `inlineData` for images, abort controller timeout; `geminiKey` and `geminiModel` properties; `getModels()` updated
+- EDIT: `server/server.js` — Gemini env vars in LLMService constructor and startup reconfigure
+- EDIT: `server/routes/admin.js` — `llm.gemini.apiKey` and `llm.gemini.model` in defaults, allowedKeys, decrypt/mask/encrypt flows, and PUT reconfigure
+- EDIT: `server/services/diagnosticAI.js` — `'gemini'` added to `supportsVision` provider list (both processScreenshotResult methods)
+- EDIT: `server/public/dashboard/index.html` — "Google Gemini" option in provider dropdown; Gemini settings div with API key and model inputs
+- EDIT: `server/public/dashboard/dashboard.js` — Gemini fields in loadSettings, toggleLLMProvider, saveSettings
+- NEW: `server/public/dashboard/dashboard.css` — All dashboard CSS extracted from inline `<style>` block in `index.html`
+- EDIT: `server/public/dashboard/index.html` — Inline `<style>` replaced with `<link>` to `dashboard.css`; checkbox inputs replaced with toggle switch markup
+- EDIT: `client/PocketIT/TrayApplication.cs` — Removed `terminal_session_ended` and `terminal_session_active` WebView sends from IT-initiated terminal session path
+
+### Security
+- **[C1]** IT Guidance auto-remediate now validates PID range and service whitelist before auto-executing
+- **[C2]** Gemini API key moved from URL query parameter to `x-goog-api-key` request header
+- **[H1]** Encryption salt now configurable via `POCKET_IT_ENCRYPTION_SALT` env var (warns if using default)
+- **[H2]** Device secret plaintext comparison uses `crypto.timingSafeEqual` (prevents timing attacks)
+- **[M1]** System tools `service_action` blocks stop/restart of security-critical services (WinDefend, Sysmon, EventLog, etc.)
+- **[M2]** IT Guidance error responses no longer leak internal error details to clients
+- **[M3]** Removed `file://` from CORS allowed origins
+- **[M4]** Chat messages limited to 10,000 characters to prevent LLM cost abuse
+- **[L3]** Fixed DB size calculation in settings (was returning 0 due to incorrect destructuring)
+
+---
+
 ## [0.20.1] - 2026-02-21
 
 ### Fixed
@@ -40,47 +93,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - EDIT: `server/public/dashboard/index.html` — Client detail panel on Clients Management page; notes list with add/delete; custom fields key-value editor; Scripting Integration Guide section on Script Library page
 
 ---
-
-## [Unreleased]
-
-### Added
-- **Google Gemini LLM Provider** — Gemini added as a 5th AI provider alongside Ollama, OpenAI, Anthropic, and Claude CLI; supports chat and vision (screenshot analysis); configurable via dashboard Settings page or `POCKET_IT_GEMINI_API_KEY` and `POCKET_IT_GEMINI_MODEL` environment variables; default model: `gemini-2.0-flash`
-- **Docker Support** — `Dockerfile` (Node 20 Alpine with `better-sqlite3` native build), `docker-compose.yml` with persistent volume mounts for `db/` and `updates/`, `.dockerignore`; `POCKET_IT_DOCKER=true` env var disables git-based features (server self-update, client release check, publish-local) with 501 responses; manual upload and fleet push endpoints remain functional; JWT secret auto-generated on first Docker run and persisted to volume-mounted db/.jwt-secret (env var override still takes priority)
-
-### Changed
-- **Dashboard toggle switches** — All checkbox inputs in settings and script library forms converted to toggle switch UI (`.toggle-switch` / `.toggle-track` CSS pattern)
-- **Dashboard CSS extraction** — Inline `<style>` block (~900 lines) extracted to external `dashboard.css` file
-
-### Fixed
-- **Client terminal notifications** — IT-initiated remote terminal sessions no longer show "Terminal session ended" / "Terminal session active" messages in the end-user's chat window; only user-approved terminal sessions display chat notifications
-
-### Technical
-- NEW: `Dockerfile` — Node 20 Alpine, `better-sqlite3` native compilation via `python3 make g++`, production deps only
-- NEW: `docker-compose.yml` — persistent volumes `./data/db` and `./data/updates`, commented LLM provider config with `host.docker.internal` Ollama example
-- NEW: `.dockerignore` — excludes `client/`, `.git`, `node_modules/`, test files, SQLite WAL files
-- EDIT: `server/server.js` — git-based release registration and 24h client check interval wrapped in `POCKET_IT_DOCKER` guard; `pushUpdateToOutdatedDevices` always defined
-- EDIT: `server/routes/updates.js` — `server-check`, `server-apply`, `client-check`, `publish-local` return 501 in Docker mode
-- EDIT: `server/services/serverUpdate.js` — `checkForUpdates`, `applyUpdate`, `checkClientRelease` guarded; `getCurrentCommit` returns `POCKET_IT_VERSION` env or `'docker'`
-- EDIT: `server/services/llmService.js` — `_geminiChat()` method using Gemini REST API with `systemInstruction`, multimodal `inlineData` for images, abort controller timeout; `geminiKey` and `geminiModel` properties; `getModels()` updated
-- EDIT: `server/server.js` — Gemini env vars in LLMService constructor and startup reconfigure
-- EDIT: `server/routes/admin.js` — `llm.gemini.apiKey` and `llm.gemini.model` in defaults, allowedKeys, decrypt/mask/encrypt flows, and PUT reconfigure
-- EDIT: `server/services/diagnosticAI.js` — `'gemini'` added to `supportsVision` provider list (both processScreenshotResult methods)
-- EDIT: `server/public/dashboard/index.html` — "Google Gemini" option in provider dropdown; Gemini settings div with API key and model inputs
-- EDIT: `server/public/dashboard/dashboard.js` — Gemini fields in loadSettings, toggleLLMProvider, saveSettings
-- NEW: `server/public/dashboard/dashboard.css` — All dashboard CSS extracted from inline `<style>` block in `index.html`
-- EDIT: `server/public/dashboard/index.html` — Inline `<style>` replaced with `<link>` to `dashboard.css`; checkbox inputs replaced with toggle switch markup
-- EDIT: `client/PocketIT/TrayApplication.cs` — Removed `terminal_session_ended` and `terminal_session_active` WebView sends from IT-initiated terminal session path
-
-### Security
-- **[C1]** IT Guidance auto-remediate now validates PID range and service whitelist before auto-executing
-- **[C2]** Gemini API key moved from URL query parameter to `x-goog-api-key` request header
-- **[H1]** Encryption salt now configurable via `POCKET_IT_ENCRYPTION_SALT` env var (warns if using default)
-- **[H2]** Device secret plaintext comparison uses `crypto.timingSafeEqual` (prevents timing attacks)
-- **[M1]** System tools `service_action` blocks stop/restart of security-critical services (WinDefend, Sysmon, EventLog, etc.)
-- **[M2]** IT Guidance error responses no longer leak internal error details to clients
-- **[M3]** Removed `file://` from CORS allowed origins
-- **[M4]** Chat messages limited to 10,000 characters to prevent LLM cost abuse
-- **[L3]** Fixed DB size calculation in settings (was returning 0 due to incorrect destructuring)
 
 ## [0.18.0] - 2026-02-20
 
@@ -211,6 +223,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - EDIT: `client/PocketIT/Core/ServerConnection.cs` — `screenshot_request` event handler; user approval flow; captures screen at quality=40, scale=0.5f
 - EDIT: `server/routes/admin.js` — `PUT /api/admin/users/:id` (update display_name, role, or password); `DELETE /api/admin/users/:id` (with self-deletion guard and audit log)
 - EDIT: `server/public/dashboard/index.html` — Users management page; Admin dropdown nav; current/previous user display; network adapter deduplication fix; form controls CSS normalization
+- EDIT: `server/public/dashboard/dashboard.js` — Script library CRUD; AI control button state sync; toast system; move device dialog; DB size display; OS version preference; `device_ai_reenabled` listener
+- EDIT: `client/PocketIT/WebUI/chat.js` — `createScriptPrompt()` accepts `aiInitiated` flag; AI-initiated scripts show robot emoji and "AI assistant wants to run" message
 - CLIENT: Version bumped to **v0.12.8**
 
 ## [0.11.0] - 2026-02-17
@@ -529,7 +543,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/1.0.0/).
 - Offline message queueing with IT contact fallback
 - Remote deployment via PowerShell/WinRM
 
-[Unreleased]: https://github.com/example/pocket-it/compare/v0.20.1...HEAD
+[Unreleased]: https://github.com/example/pocket-it/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/example/pocket-it/compare/v0.20.1...v0.21.0
 [0.20.1]: https://github.com/example/pocket-it/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/example/pocket-it/compare/v0.18.0...v0.20.0
 [0.18.0]: https://github.com/example/pocket-it/compare/v0.17.0...v0.18.0

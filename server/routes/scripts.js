@@ -1,8 +1,9 @@
 const express = require('express');
+const { requireIT } = require('../auth/middleware');
 const router = express.Router();
 
 module.exports = function createScriptsRouter() {
-  router.get('/', (req, res) => {
+  router.get('/', requireIT, (req, res) => {
     try {
       const { category } = req.query;
       let scripts;
@@ -17,7 +18,7 @@ module.exports = function createScriptsRouter() {
     }
   });
 
-  router.get('/:id', (req, res) => {
+  router.get('/:id', requireIT, (req, res) => {
     try {
       const script = req.app.locals.db.prepare('SELECT * FROM script_library WHERE id = ?').get(req.params.id);
       if (!script) return res.status(404).json({ error: 'Script not found' });
@@ -27,7 +28,7 @@ module.exports = function createScriptsRouter() {
     }
   });
 
-  router.post('/', (req, res) => {
+  router.post('/', requireIT, (req, res) => {
     const { name, description, script_content, category, requires_elevation, timeout_seconds, ai_tool, os_type = 'windows' } = req.body;
     if (!name || !script_content) {
       return res.status(400).json({ error: 'Missing required fields: name, script_content' });
@@ -43,7 +44,7 @@ module.exports = function createScriptsRouter() {
     }
   });
 
-  router.patch('/:id', (req, res) => {
+  router.patch('/:id', requireIT, (req, res) => {
     const { id } = req.params;
     const allowed = ['name', 'description', 'script_content', 'category', 'requires_elevation', 'timeout_seconds', 'ai_tool', 'os_type'];
     const updates = [];
@@ -65,7 +66,7 @@ module.exports = function createScriptsRouter() {
     }
   });
 
-  router.delete('/:id', (req, res) => {
+  router.delete('/:id', requireIT, (req, res) => {
     try {
       req.app.locals.db.prepare('DELETE FROM script_library WHERE id = ?').run(req.params.id);
       res.json({ success: true });

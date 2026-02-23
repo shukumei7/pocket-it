@@ -5,7 +5,7 @@ function createLLMRouter(llmService) {
   const router = Router();
 
   // GET /api/llm/models — show current LLM configuration
-  router.get('/models', (req, res) => {
+  router.get('/models', requireIT, (req, res) => {
     res.json(llmService.getModels());
   });
 
@@ -58,7 +58,7 @@ Pocket IT Custom Fields:
   });
 
   // POST /api/llm/test — test LLM connectivity
-  router.post('/test', async (req, res) => {
+  router.post('/test', requireIT, async (req, res) => {
     const startTime = Date.now();
     try {
       const result = await llmService.chat([

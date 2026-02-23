@@ -27,6 +27,21 @@ class NotificationService {
 
     if (!config.url) throw new Error('Channel config missing url');
 
+    // SSRF guard — only allow http/https to public hosts
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(config.url);
+    } catch {
+      throw new Error(`Channel '${channel.name}' has an invalid webhook URL`);
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error(`Channel '${channel.name}' webhook URL must use http or https`);
+    }
+    const blockedHosts = /^(localhost|127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|::1|0\.0\.0\.0|169\.254\.)/i;
+    if (blockedHosts.test(parsedUrl.hostname)) {
+      throw new Error(`Channel '${channel.name}' webhook URL targets a private/internal address`);
+    }
+
     let payload;
     const hostname = device?.hostname || alert.device_id?.substring(0, 8) || 'Unknown';
     const severityEmoji = alert.severity === 'critical' ? '\uD83D\uDD34' : '\uD83D\uDFE1';

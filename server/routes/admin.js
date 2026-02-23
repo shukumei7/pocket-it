@@ -299,6 +299,10 @@ router.post('/users', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Username and password required' });
   }
 
+  if (!['admin', 'technician', 'viewer'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role. Must be one of: admin, technician, viewer' });
+  }
+
   const passwordHash = await hashPassword(password);
   const createdAt = new Date().toISOString();
 
@@ -401,7 +405,12 @@ router.post('/auto-login', async (req, res) => {
   let user = db.prepare('SELECT * FROM it_users WHERE username = ?').get('admin');
 
   if (!user) {
-    const passwordHash = await hashPassword('admin');
+    // Generate a strong random password — auto-login is localhost-only so the
+    // password itself is not needed, but it must be secure in case someone
+    // later attempts to authenticate via the normal /login endpoint remotely.
+    const crypto = require('node:crypto');
+    const randomPassword = crypto.randomBytes(32).toString('hex');
+    const passwordHash = await hashPassword(randomPassword);
     db.prepare(
       'INSERT INTO it_users (username, password_hash, display_name, role, created_at) VALUES (?, ?, ?, ?, ?)'
     ).run('admin', passwordHash, 'Administrator', 'admin', new Date().toISOString());
@@ -641,6 +650,10 @@ router.get('/user/profile', requireIT, (req, res) => {
 router.put('/user/profile', requireIT, (req, res) => {
   const db = req.app.locals.db;
   const { display_name } = req.body;
+
+  if (display_name !== undefined && (typeof display_name !== 'string' || display_name.length > 128)) {
+    return res.status(400).json({ error: 'display_name must be a string of at most 128 characters' });
+  }
 
   db.prepare('UPDATE it_users SET display_name = ? WHERE id = ?').run(display_name, req.user.id);
 

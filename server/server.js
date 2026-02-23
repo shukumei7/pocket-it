@@ -37,7 +37,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "https://cdn.jsdelivr.net"],
+      scriptSrc: ["'self'", "https://cdn.jsdelivr.net", "https://static.cloudflareinsights.com"],
       scriptSrcAttr: [],
       // unsafe-inline required for inline style="" attributes across dashboard HTML
       styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],

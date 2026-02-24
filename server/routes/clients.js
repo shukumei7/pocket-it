@@ -267,9 +267,9 @@ router.delete('/:id/custom-fields/:fieldName', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-// Per-client installer download (admin only)
+// Per-client installer download (all IT roles)
 // Serves bootstrapper EXE with embedded config, or falls back to ZIP
-router.get('/:id/installer', requireAdmin, async (req, res) => {
+router.get('/:id/installer', requireIT, resolveClientScope, async (req, res) => {
   const db = req.app.locals.db;
   const clientId = parseInt(req.params.id);
   const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);

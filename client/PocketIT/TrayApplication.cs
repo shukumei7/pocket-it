@@ -395,6 +395,29 @@ public class TrayApplication : ApplicationContext
         UpdateTrayIcon();
     }
 
+    private void NotifyConsentRequired(string actionType)
+    {
+        bool chatVisible = _chatWindow != null
+            && !_chatWindow.IsDisposed
+            && _chatWindow.Visible;
+
+        bool chatFocused = chatVisible && _chatWindow!.ContainsFocus;
+
+        if (!chatVisible)
+        {
+            ShowChatWindow();
+        }
+
+        if (!chatFocused)
+        {
+            _trayIcon.ShowBalloonTip(
+                8000,
+                "Action Required",
+                $"IT Support is requesting {actionType}. Click to review.",
+                ToolTipIcon.Info);
+        }
+    }
+
     private void ShowEnrollmentWindow()
     {
         if (_chatWindow == null || _chatWindow.IsDisposed)
@@ -541,7 +564,11 @@ public class TrayApplication : ApplicationContext
             requestId,
             description = checkType == "all" ? "Full System Diagnostic" : $"{char.ToUpper(checkType[0])}{checkType[1..]} Check"
         });
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
+        _uiContext.Post(_ =>
+        {
+            _chatWindow?.SendToWebView(msg);
+            NotifyConsentRequired("a diagnostic check");
+        }, null);
     }
 
     private void OnServerRemediationRequest(string actionId, string requestId, string? parameter, bool autoApprove)
@@ -582,7 +609,11 @@ public class TrayApplication : ApplicationContext
             description = info2?.Description ?? actionId,
             requiresApproval = true
         });
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
+        _uiContext.Post(_ =>
+        {
+            _chatWindow?.SendToWebView(msg);
+            NotifyConsentRequired("a maintenance action");
+        }, null);
     }
 
     private void OnServerFileBrowseRequest(string requestId, string path, bool itInitiated)
@@ -615,7 +646,11 @@ public class TrayApplication : ApplicationContext
             path,
             requestId
         };
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
+        _uiContext.Post(_ =>
+        {
+            _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData));
+            NotifyConsentRequired("to access your files");
+        }, null);
     }
 
     private void OnServerFileReadRequest(string requestId, string path, bool itInitiated)
@@ -651,7 +686,11 @@ public class TrayApplication : ApplicationContext
             path,
             requestId
         };
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
+        _uiContext.Post(_ =>
+        {
+            _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData));
+            NotifyConsentRequired("to read a file");
+        }, null);
     }
 
     private void OnServerScriptRequest(string requestId, string scriptName, string scriptContent, bool requiresElevation, int timeoutSeconds, bool itInitiated)
@@ -692,7 +731,11 @@ public class TrayApplication : ApplicationContext
             requiresElevation,
             timeoutSeconds
         };
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
+        _uiContext.Post(_ =>
+        {
+            _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData));
+            NotifyConsentRequired("to run a script");
+        }, null);
     }
 
     private void OnServerTerminalStartRequest(string requestId, bool itInitiated)
@@ -728,7 +771,11 @@ public class TrayApplication : ApplicationContext
             type = "terminal_start_request",
             requestId
         };
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData)), null);
+        _uiContext.Post(_ =>
+        {
+            _chatWindow?.SendToWebView(JsonSerializer.Serialize(bridgeData));
+            NotifyConsentRequired("to open a terminal session");
+        }, null);
     }
 
     private void OnServerTerminalInput(string input)
@@ -1044,7 +1091,11 @@ public class TrayApplication : ApplicationContext
             reason,
             requiresApproval = true
         });
-        _uiContext.Post(_ => _chatWindow?.SendToWebView(msg), null);
+        _uiContext.Post(_ =>
+        {
+            _chatWindow?.SendToWebView(msg);
+            NotifyConsentRequired("to take a screenshot");
+        }, null);
     }
 
     private void OnAIStatusChanged(bool enabled, string? reason)

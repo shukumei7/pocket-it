@@ -90,7 +90,7 @@ router.post('/', requireDevice, (req, res) => {
 // IT staff manual ticket creation
 router.post('/manual', requireIT, resolveClientScope, (req, res) => {
   const db = req.app.locals.db;
-  const { device_id, title, description, priority, category } = req.body;
+  const { device_id, title, description, priority, category, requested_by } = req.body;
 
   if (!title || !device_id) {
     return res.status(400).json({ error: 'Title and device are required' });
@@ -111,9 +111,9 @@ router.post('/manual', requireIT, resolveClientScope, (req, res) => {
   const now = new Date().toISOString();
 
   const result = db.prepare(`
-    INSERT INTO tickets (device_id, title, description, priority, category, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(device_id, title, description || null, safePriority, category || null, now, now);
+    INSERT INTO tickets (device_id, title, description, priority, category, requested_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(device_id, title, description || null, safePriority, category || null, requested_by || null, now, now);
 
   db.prepare(
     "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"

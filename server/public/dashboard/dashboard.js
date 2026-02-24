@@ -1602,6 +1602,7 @@
             document.getElementById('new-ticket-title').value = '';
             document.getElementById('new-ticket-description').value = '';
             document.getElementById('new-ticket-category').value = '';
+            document.getElementById('new-ticket-requested-by').value = '';
             document.getElementById('new-ticket-priority').value = 'medium';
             document.getElementById('new-ticket-device').value = '';
             document.getElementById('new-ticket-device-search').value = '';
@@ -1614,6 +1615,7 @@
             const description = document.getElementById('new-ticket-description').value.trim();
             const priority = document.getElementById('new-ticket-priority').value;
             const category = document.getElementById('new-ticket-category').value.trim();
+            const requested_by = document.getElementById('new-ticket-requested-by').value.trim();
 
             if (!title) { alert('Title is required'); return; }
             if (!device_id) { alert('Please select a device'); return; }
@@ -1622,7 +1624,7 @@
                 const res = await fetchWithAuth(`${API}/api/tickets/manual`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title, device_id, description, priority, category: category || null })
+                    body: JSON.stringify({ title, device_id, description, priority, category: category || null, requested_by: requested_by || null })
                 });
                 if (!res.ok) {
                     const err = await res.json();

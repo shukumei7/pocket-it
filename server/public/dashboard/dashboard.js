@@ -4526,11 +4526,13 @@
             try {
                 const res = await fetchWithAuth(`${API}/api/updates/client-check`);
                 const data = await res.json();
-                if (data.updated) {
+                if (res.status === 501) {
+                    alert('Git-based client check is not available in Docker mode.\n\nUpload client builds via the upload button instead.');
+                } else if (data.updated) {
                     alert(`New client v${data.version} found! ${data.notified || 0} device(s) notified.`);
                     loadUpdates();
                 } else {
-                    alert(data.reason || 'No new client release found');
+                    alert(data.reason || data.error || 'No new client release found');
                 }
             } catch (err) {
                 alert('Check failed: ' + err.message);

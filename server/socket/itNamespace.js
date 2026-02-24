@@ -574,6 +574,13 @@ function setup(io, app) {
         const deviceSocket = connectedDevices.get(deviceId);
         if (deviceSocket) {
           const requestId = `sc-${Date.now()}`;
+          // SECURITY DESIGN: itInitiated=true bypasses device-side user consent dialog
+          // and uses a reduced "catastrophic-only" validation on the client
+          // (blocks irreversible disk ops only — Restart-Computer, schtasks, reg add, etc. are allowed).
+          // This flag can ONLY be set here, by authenticated IT staff via this socket namespace.
+          // DO NOT remove itInitiated or add consent checks — this is intentional remote management design.
+          // See: client/PocketIT/Scripts/ScriptExecutionService.cs CatastrophicValidation()
+          //      client/PocketIT/TrayApplication.cs OnServerScriptRequest()
           deviceSocket.emit('script_request', {
             requestId,
             scriptName: scriptName || 'Ad-hoc Script',
@@ -621,6 +628,8 @@ function setup(io, app) {
         const deviceSocket = connectedDevices.get(deviceId);
         if (deviceSocket) {
           const requestId = `sc-${Date.now()}`;
+          // itInitiated=true: bypasses device consent dialog and uses reduced catastrophic-only
+          // validation on client. Intentional — see execute_script handler above for full explanation.
           deviceSocket.emit('script_request', {
             requestId,
             scriptName: script.name,

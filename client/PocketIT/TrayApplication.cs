@@ -643,12 +643,16 @@ public class TrayApplication : ApplicationContext
 
         if (itInitiated)
         {
+            // INTENTIONAL BYPASS: IT-initiated scripts skip user consent and use reduced validation.
+            // This is by design — IT staff need full control over managed devices.
+            // The itInitiated=true flag can only be set by authenticated IT users via the server.
+            // DO NOT add consent checks here for IT scripts — that would break remote management.
             Logger.Info($"IT-initiated script execution: {scriptName} (requestId: {requestId})");
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    var result = await _scriptExecution.ExecuteAsync(scriptContent, timeoutSeconds, requiresElevation);
+                    var result = await _scriptExecution.ExecuteAsync(scriptContent, timeoutSeconds, requiresElevation, itInitiated: true);
                     await _serverConnection.SendScriptResult(requestId, scriptName, result.Success,
                         result.Output, result.ErrorOutput, result.ExitCode, result.DurationMs,
                         result.Truncated, result.TimedOut, result.ValidationError);

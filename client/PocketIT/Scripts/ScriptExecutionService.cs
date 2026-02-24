@@ -56,6 +56,39 @@ public class ScriptExecutionService
         new Regex(@"\bnet\s+user\s+.*\s+/add", RegexOptions.IgnoreCase),
     };
 
+    // Minimal blocklist for IT-initiated scripts. Only blocks truly irreversible
+    // disk-destruction and local account creation — operations with no legitimate
+    // remote-management use case. Everything else (Restart-Computer, Stop-Computer,
+    // schtasks, reg add, Set-ExecutionPolicy, Invoke-WebRequest, curl, wget,
+    // Invoke-Expression, etc.) is intentionally ALLOWED for IT staff.
+    // DO NOT expand this list without a documented security review — the narrow
+    // scope is the design, not an oversight.
+    private static readonly Regex[] CatastrophicPatterns = new[]
+    {
+        new Regex(@"Format-Volume", RegexOptions.IgnoreCase),
+        new Regex(@"Clear-Disk", RegexOptions.IgnoreCase),
+        new Regex(@"Initialize-Disk", RegexOptions.IgnoreCase),
+        new Regex(@"Remove-Partition", RegexOptions.IgnoreCase),
+        new Regex(@"format\s+[A-Z]:", RegexOptions.IgnoreCase),
+        new Regex(@"rd\s+/s\s+/q\s+[A-Z]:\\$", RegexOptions.IgnoreCase),
+        new Regex(@"\bnet\s+user\s+.*\s+/add", RegexOptions.IgnoreCase),
+    };
+
+    // SECURITY DESIGN: Two-tier script validation
+    //
+    // IT-initiated scripts (itInitiated=true from server):
+    //   - Skip consent dialog (see TrayApplication.cs OnServerScriptRequest)
+    //   - Only blocked by CatastrophicValidation (irreversible disk destruction, account creation)
+    //   - IT staff legitimately need Restart-Computer, Stop-Computer, schtasks, reg add, etc.
+    //   - DO NOT add these back to IT validation — this bypass is intentional by design
+    //
+    // User-approved scripts (itInitiated=false, user clicked Approve in chat):
+    //   - Full ValidateScript blocklist applies (27 patterns)
+    //   - Blocks download cradles, persistence, defender tampering, system shutdown, etc.
+    //
+    // The itInitiated flag originates server-side in itNamespace.js execute_script /
+    // execute_library_script handlers and is set to true ONLY for authenticated IT staff.
+    // It cannot be spoofed by the device client or end users.
     public (bool IsValid, string? RejectionReason) ValidateScript(string script)
     {
         if (string.IsNullOrWhiteSpace(script))
@@ -73,11 +106,33 @@ public class ScriptExecutionService
         return (true, null);
     }
 
-    public async Task<ScriptResult> ExecuteAsync(string script, int timeoutSeconds = 60, bool requiresElevation = false)
+    public (bool IsValid, string? RejectionReason) CatastrophicValidation(string script)
+    {
+        if (string.IsNullOrWhiteSpace(script))
+            return (false, "Script content is empty");
+
+        if (script.Length > 50_000)
+            return (false, "Script exceeds maximum length of 50,000 characters");
+
+        foreach (var pattern in CatastrophicPatterns)
+        {
+            if (pattern.IsMatch(script))
+                return (false, $"Script contains catastrophic blocked command: {pattern}");
+        }
+
+        return (true, null);
+    }
+
+    public async Task<ScriptResult> ExecuteAsync(string script, int timeoutSeconds = 60, bool requiresElevation = false, bool itInitiated = false)
     {
         timeoutSeconds = Math.Clamp(timeoutSeconds, 5, 300);
 
-        var (isValid, rejectionReason) = ValidateScript(script);
+        // IT-initiated scripts use the minimal catastrophic blocklist only.
+        // User-approved scripts use the full strict validation.
+        // See the SECURITY DESIGN comment above ValidateScript for rationale.
+        var (isValid, rejectionReason) = itInitiated
+            ? CatastrophicValidation(script)
+            : ValidateScript(script);
         if (!isValid)
         {
             return new ScriptResult

@@ -50,11 +50,12 @@
 
         // ---- Auth ----
         async function fetchWithAuth(url, options = {}) {
-            if (authToken) {
-                options.headers = { ...options.headers, 'Authorization': 'Bearer ' + authToken };
-            }
+            // No token — session expired or not yet logged in. Don't make the request.
+            // This stops polling intervals from hammering the server after expiry.
+            if (!authToken) return new Response(null, { status: 401 });
+            options.headers = { ...options.headers, 'Authorization': 'Bearer ' + authToken };
             const res = await fetch(url, options);
-            if (res.status === 401 && authToken) {
+            if (res.status === 401) {
                 sessionStorage.removeItem('pocket_it_token');
                 authToken = '';
                 showLogin();

@@ -8,8 +8,8 @@
     <ApplicationIcon>Resources\tray-icon.ico</ApplicationIcon>
     <RootNamespace>PocketIT</RootNamespace>
     <AssemblyName>PocketIT</AssemblyName>
-    <Version>0.17.1</Version>
-    <InformationalVersion>0.17.1</InformationalVersion>
+    <Version>0.17.2</Version>
+    <InformationalVersion>0.17.2</InformationalVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>

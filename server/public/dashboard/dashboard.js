@@ -64,6 +64,8 @@
         }
 
         function showLogin() {
+            // Disconnect socket so its events stop triggering API calls after expiry.
+            if (typeof socket !== 'undefined' && socket) socket.disconnect();
             resetLoginOverlay();
             document.getElementById('login-overlay').style.display = 'flex';
         }
@@ -1393,6 +1395,8 @@
                     fetchWithAuth(`${API}/api/devices${selectedClientId ? '?client_id=' + selectedClientId : ''}`),
                     fetchWithAuth(`${API}/api/devices/unread-counts`).catch(() => ({ json: () => ({}) }))
                 ]);
+                // fetchWithAuth returns synthetic 401 (null body) on expiry — bail before .json()
+                if (!statsRes.ok || !devicesRes.ok) return;
                 const stats = await statsRes.json();
                 const devices = await devicesRes.json();
                 try { window._unreadCounts = await unreadRes.json(); } catch(e) { window._unreadCounts = {}; }

@@ -1,6 +1,9 @@
 using Microsoft.Win32;
 using System;
 using System.Diagnostics;
+using System.IO;
+using System.Security.Principal;
+using System.Text;
 
 namespace PocketIT.Core
 {
@@ -28,14 +31,57 @@ namespace PocketIT.Core
             try
             {
                 var exePath = Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
-                var result = RunSchtasks($"/Create /TN \"{TaskName}\" /TR \"\\\"{exePath}\\\"\" /SC ONLOGON /RL HIGHEST /F");
-                if (result.ExitCode == 0)
+                var currentUser = WindowsIdentity.GetCurrent().Name;
+
+                // XML-escape the exe path (handles & in paths)
+                var escapedExe = exePath.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+                // Task XML with RestartOnFailure — schtasks /Create CLI cannot set this, XML import can.
+                // RestartOnFailure: restart up to 3 times with 1-minute intervals after any crash/non-zero exit.
+                var xml = $@"<?xml version=""1.0"" encoding=""UTF-16""?>
+<Task version=""1.4"" xmlns=""http://schemas.microsoft.com/windows/2004/02/mit/task"">
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>{currentUser}</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id=""Author"">
+      <UserId>{currentUser}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>3</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context=""Author"">
+    <Exec>
+      <Command>{escapedExe}</Command>
+    </Exec>
+  </Actions>
+</Task>";
+
+                var tempFile = Path.Combine(Path.GetTempPath(), "PocketIT-task.xml");
+                File.WriteAllText(tempFile, xml, Encoding.Unicode);
+                try
                 {
-                    Logger.Info($"Registered for Windows startup via Task Scheduler: {exePath}");
+                    var result = RunSchtasks($"/Create /TN \"{TaskName}\" /XML \"{tempFile}\" /F");
+                    if (result.ExitCode == 0)
+                        Logger.Info($"Registered for Windows startup with crash recovery: {exePath}");
+                    else
+                        Logger.Error($"Failed to register startup task (exit {result.ExitCode}): {result.StdErr}");
                 }
-                else
+                finally
                 {
-                    Logger.Error($"Failed to register startup task (exit {result.ExitCode}): {result.StdErr}");
+                    try { File.Delete(tempFile); } catch { }
                 }
 
                 // One-time migration: clean up old registry Run key if present

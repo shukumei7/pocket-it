@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Windows.Forms;
+using PocketIT.Core;
 
 namespace PocketIT;
 
@@ -9,6 +10,11 @@ static class Program
     [STAThread]
     static void Main()
     {
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (s, e) => HandleCrash(e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            HandleCrash(e.ExceptionObject as Exception ?? new Exception(e.ExceptionObject?.ToString()));
+
         using var mutex = new Mutex(true, "PocketIT_SingleInstance", out bool createdNew);
         if (!createdNew)
         {
@@ -29,5 +35,11 @@ static class Program
 
         ApplicationConfiguration.Initialize();
         Application.Run(new TrayApplication(enrollToken));
+    }
+
+    private static void HandleCrash(Exception ex)
+    {
+        try { Logger.Error("Unhandled exception — Task Scheduler will restart the app", ex); } catch { }
+        Environment.Exit(1); // Non-zero exit triggers Task Scheduler RestartOnFailure
     }
 }

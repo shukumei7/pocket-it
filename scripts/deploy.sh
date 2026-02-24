@@ -91,7 +91,7 @@ fi
 
 # ── 2. Deploy server (git pull + docker rebuild) ─────────────────────────────
 echo "[2/3] Deploying to remote (git pull + docker rebuild)..."
-ssh "$REMOTE" "cd $REMOTE_DIR && git pull && docker compose up --build -d"
+ssh "$REMOTE" "cd $REMOTE_DIR && PATH=\"\$HOME/.local/bin:\$PATH\" git pull && PATH=\"\$HOME/.local/bin:\$PATH\" git lfs pull && docker compose up --build -d"
 echo "      Container restarted"
 
 # ── 3. Health check ───────────────────────────────────────────────────────────

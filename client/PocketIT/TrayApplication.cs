@@ -45,6 +45,10 @@ public class TrayApplication : ApplicationContext
     private Icon? _unreadIcon;
     private bool _hasUnreadMessages;
     private bool _remoteDesktopActive;
+    // Private mode: when enabled by the user, all IT-initiated actions route through
+    // the normal user-consent flow regardless of the itInitiated flag from the server.
+    // Persisted to local DB under "privacy_mode". Default: off.
+    private bool _privacyMode;
 
     public TrayApplication(string? cliEnrollToken = null)
     {
@@ -73,6 +77,7 @@ public class TrayApplication : ApplicationContext
 
         var dbPath = Path.Combine(AppContext.BaseDirectory, _config["Database:Path"] ?? "pocket-it.db");
         _localDb = new LocalDatabase(dbPath);
+        _privacyMode = _localDb.GetSetting("privacy_mode") == "true";
 
         // Create components
         _enrollmentFlow = new EnrollmentFlow(serverUrl);
@@ -143,6 +148,18 @@ public class TrayApplication : ApplicationContext
             startupItem.Checked = StartupManager.IsRegistered();
         };
         contextMenu.Items.Add(startupItem);
+        var privacyItem = new ToolStripMenuItem("Private Mode")
+        {
+            Checked = _privacyMode,
+            CheckOnClick = true
+        };
+        privacyItem.Click += (s, e) =>
+        {
+            _privacyMode = privacyItem.Checked;
+            _localDb.SetSetting("privacy_mode", _privacyMode ? "true" : "false");
+            Logger.Info($"Private mode {(_privacyMode ? "enabled" : "disabled")}");
+        };
+        contextMenu.Items.Add(privacyItem);
         contextMenu.Items.Add("Exit", null, OnExit);
 
         _trayIcon = new NotifyIcon
@@ -487,7 +504,7 @@ public class TrayApplication : ApplicationContext
 
     private void OnServerDiagnosticRequest(string checkType, string requestId, bool itInitiated)
     {
-        if (itInitiated)
+        if (itInitiated && !_privacyMode)
         {
             Logger.Info($"IT-initiated diagnostic: {checkType} (requestId: {requestId})");
             _ = Task.Run(async () =>
@@ -530,7 +547,7 @@ public class TrayApplication : ApplicationContext
     private void OnServerRemediationRequest(string actionId, string requestId, string? parameter, bool autoApprove)
     {
         // v0.5.0: Auto-approve for low-risk actions when policy allows
-        if (autoApprove)
+        if (autoApprove && !_privacyMode)
         {
             var info = _remediationEngine.GetActionInfo(actionId);
             if (info != null && info.CanAutoApprove)
@@ -572,7 +589,7 @@ public class TrayApplication : ApplicationContext
     {
         Logger.Info($"File browse request: {path}");
 
-        if (itInitiated)
+        if (itInitiated && !_privacyMode)
         {
             Logger.Info($"IT-initiated file browse: {path} (requestId: {requestId})");
             _ = Task.Run(async () =>
@@ -605,7 +622,7 @@ public class TrayApplication : ApplicationContext
     {
         Logger.Info($"File read request: {path}");
 
-        if (itInitiated)
+        if (itInitiated && !_privacyMode)
         {
             Logger.Info($"IT-initiated file read: {path} (requestId: {requestId})");
             _ = Task.Run(async () =>
@@ -641,7 +658,7 @@ public class TrayApplication : ApplicationContext
     {
         Logger.Info($"Script request: {scriptName} (elevation: {requiresElevation})");
 
-        if (itInitiated)
+        if (itInitiated && !_privacyMode)
         {
             // INTENTIONAL BYPASS: IT-initiated scripts skip user consent and use reduced validation.
             // This is by design — IT staff need full control over managed devices.
@@ -682,7 +699,7 @@ public class TrayApplication : ApplicationContext
     {
         Logger.Info($"Terminal start request: {requestId}");
 
-        if (itInitiated)
+        if (itInitiated && !_privacyMode)
         {
             Logger.Info($"IT-initiated terminal start (requestId: {requestId})");
             _remoteTerminal?.Dispose();
@@ -735,7 +752,7 @@ public class TrayApplication : ApplicationContext
     {
         Logger.Info($"Desktop start request: {requestId}");
 
-        if (itInitiated)
+        if (itInitiated && !_privacyMode)
         {
             Logger.Info($"IT-initiated desktop session (requestId: {requestId})");
             _remoteDesktop?.Dispose();

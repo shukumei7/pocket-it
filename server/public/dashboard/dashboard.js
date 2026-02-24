@@ -3022,7 +3022,7 @@
         }
 
         function showScriptRunning() {
-            document.getElementById('script-output-area').innerHTML = '<div style="font-size:13px; color:#8f98a0; margin-top:8px;"><span class="script-spinner"></span>Waiting for user approval and execution...</div>';
+            document.getElementById('script-output-area').innerHTML = '<div style="font-size:13px; color:#8f98a0; margin-top:8px;"><span class="script-spinner"></span>Script sent — waiting for result...</div>';
         }
 
         function renderScriptResult(data) {

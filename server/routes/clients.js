@@ -300,7 +300,7 @@ router.get('/:id/installer', requireIT, resolveClientScope, async (req, res) => 
   ).run(token, req.user?.username || 'admin', expiresAt, clientId);
 
   // Determine server URL — DB setting takes precedence over env var
-  const dbPublicUrl = db.prepare("SELECT value FROM settings WHERE key = 'server.publicUrl'").get();
+  const dbPublicUrl = db.prepare("SELECT value FROM server_settings WHERE key = 'server.publicUrl'").get();
   const serverUrl = (dbPublicUrl && dbPublicUrl.value) || process.env.POCKET_IT_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
 
   // Check if bootstrapper EXE exists — serve with embedded config

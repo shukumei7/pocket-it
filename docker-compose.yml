@@ -33,4 +33,4 @@ services:
       # - POCKET_IT_ENCRYPTION_SALT=${POCKET_IT_ENCRYPTION_SALT}
       - POCKET_IT_CORS_ORIGINS=https://pocket-it.app,https://www.pocket-it.app
       # Public URL for installer downloads (clients connect to this):
-      # - POCKET_IT_PUBLIC_URL=http://your-server-ip:9100
+      - POCKET_IT_PUBLIC_URL=https://pocket-it.app

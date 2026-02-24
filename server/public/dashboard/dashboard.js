@@ -3836,15 +3836,12 @@
             sessionStorage.setItem('pocket_it_selected_client', val);
             // Show/hide fleet installer button
             updateFleetInstallerBtn();
-            // Reload current page data
-            const activePage = document.querySelector('.nav-link.active');
-            if (activePage) {
-                const page = activePage.dataset.page;
-                if (page === 'fleet') loadFleet();
-                else if (page === 'tickets') loadTickets();
-                else if (page === 'alerts') loadAlerts();
-                else if (page === 'reports') loadReports();
-            }
+            // Clear stale device grid before navigating so old client's devices
+            // are never visible while the new client's data is loading.
+            const grid = document.getElementById('device-grid');
+            if (grid) grid.innerHTML = '<div class="loading">Loading...</div>';
+            // Always redirect to fleet — showPage calls loadFleet() with the new selectedClientId
+            navigateTo('fleet');
         }
 
         // ---- Client Management (admin) ----

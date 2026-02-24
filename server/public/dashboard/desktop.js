@@ -145,6 +145,15 @@
         // --- Socket connection ---
 
         async function init() {
+            // Prefer sessionStorage token inherited from parent tab (window.open shares sessionStorage).
+            // This is the normal path when popping out from the dashboard.
+            const storedToken = sessionStorage.getItem('pocket_it_token');
+            if (storedToken) {
+                connectSocket(storedToken);
+                return;
+            }
+
+            // Fallback: auto-login for localhost/network-auth environments.
             try {
                 const resp = await fetch('/api/admin/auto-login', { method: 'POST' });
                 if (resp.ok) {

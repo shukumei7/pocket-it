@@ -16,7 +16,7 @@
 #
 # Prerequisites:
 #   - SSH access to remote (key-based recommended)
-#   - dotnet SDK installed locally (for bootstrapper build)
+#   - Docker installed locally (used to cross-compile bootstrapper on Linux/Mac/Windows)
 #   - Remote has docker + docker-compose and ~/pocket-it/ checked out with git lfs installed
 
 set -e
@@ -52,12 +52,18 @@ COMMITTED=false
 # ── 1. Build + commit bootstrapper EXE ───────────────────────────────────────
 if [ "$BUILD_BOOTSTRAPPER" = true ]; then
   if [ -f "$BOOTSTRAPPER_CSPROJ" ]; then
-    echo "[1/3] Building online installer bootstrapper..."
-    dotnet publish "$BOOTSTRAPPER_CSPROJ" \
-      -c Release -r win-x64 --self-contained \
-      -p:PublishSingleFile=true \
-      -p:IncludeNativeLibrariesForSelfExtract=true \
-      --nologo -v quiet
+    echo "[1/3] Building online installer bootstrapper (Docker cross-compile)..."
+    docker run --rm \
+      -v "$PROJECT_ROOT:/src" \
+      -v "$HOME/.nuget/packages:/root/.nuget/packages" \
+      -e NUGET_PACKAGES=/root/.nuget/packages \
+      mcr.microsoft.com/dotnet/sdk:8.0 \
+      dotnet publish /src/installer/online/PocketIT.Setup/PocketIT.Setup.csproj \
+        -c Release -r win-x64 --self-contained \
+        -p:PublishSingleFile=true \
+        -p:IncludeNativeLibrariesForSelfExtract=true \
+        -o /src/installer/online/PocketIT.Setup/bin/Release/net8.0-windows/win-x64/publish/ \
+        --nologo -v quiet
     cp "$BOOTSTRAPPER_BUILD" "$BOOTSTRAPPER_DEST"
     SIZE=$(python3 -c "import os; s=os.path.getsize('$BOOTSTRAPPER_DEST'); print(f'{s//1024//1024} MB')" 2>/dev/null || echo "?")
     echo "      Built ($SIZE) → installer/PocketIT.Setup.exe"

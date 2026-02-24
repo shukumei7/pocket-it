@@ -327,16 +327,18 @@ function pushUpdateToOutdatedDevices(version) {
 }
 app.locals.pushUpdateToOutdatedDevices = pushUpdateToOutdatedDevices;
 
+// Auto-register release ZIP on startup — works in Docker too (./releases is mounted at /app/releases)
+const { registerReleaseZip } = require('./services/serverUpdate');
+registerReleaseZip(db).then(result => {
+  if (result.registered) {
+    console.log(`[Updates] Registered release v${result.version}`);
+  }
+}).catch(err => {
+  console.error('[Updates] Release registration error:', err.message);
+});
+
 if (process.env.POCKET_IT_DOCKER !== 'true') {
-  // Auto-register release ZIP from git (if present)
-  const { registerReleaseZip, checkClientRelease } = require('./services/serverUpdate');
-  registerReleaseZip(db).then(result => {
-    if (result.registered) {
-      console.log(`[Updates] Registered release v${result.version} from git`);
-    }
-  }).catch(err => {
-    console.error('[Updates] Release registration error:', err.message);
-  });
+  const { checkClientRelease } = require('./services/serverUpdate');
   // Auto-check git for new client builds every 24 hours
   setInterval(async () => {
     try {
@@ -347,7 +349,7 @@ if (process.env.POCKET_IT_DOCKER !== 'true') {
     } catch (err) { /* silent */ }
   }, 24 * 60 * 60 * 1000);
 } else {
-  console.log('[Docker] Git-based update features disabled');
+  console.log('[Docker] Git-based update polling disabled');
 }
 
 // Scheduler needs access to connected devices map

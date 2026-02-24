@@ -61,11 +61,20 @@ const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const { isLocalhost, getJwtSecret } = require('./auth/middleware');
 
+// Key generator: use CF-Connecting-IP when behind Cloudflare tunnel (real client IP),
+// otherwise fall back to socket address. CF-Connecting-IP cannot be spoofed from the
+// internet — Cloudflare strips any client-sent value before forwarding.
+// Do NOT use req.ip or trust X-Forwarded-For globally (spoofable without verified proxy).
+function getRateLimitKey(req) {
+  return req.headers['cf-connecting-ip'] || req.socket?.remoteAddress || 'unknown';
+}
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit unauthenticated requests per IP
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: getRateLimitKey,
   skip: (req) => {
     if (isLocalhost(req)) return true;
     // Skip for authenticated IT users — dashboard makes many legitimate requests
@@ -86,6 +95,7 @@ const authLimiter = rateLimit({
   max: 10, // stricter for auth endpoints
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: getRateLimitKey,
   skip: (req) => isLocalhost(req),
   message: { error: 'Too many authentication attempts' }
 });

@@ -77,6 +77,7 @@ class DiagnosticAI {
     try {
       // Call LLM
       const rawResponse = await this.llm.chat(llmMessages);
+      console.log(`[AI] Raw response (${rawResponse?.length || 0} chars): ${(rawResponse || '').substring(0, 300)}`);
 
       // Parse for actions
       const parsed = parseResponse(rawResponse);
@@ -94,6 +95,7 @@ class DiagnosticAI {
         agentName: ctx.agentName
       };
     } catch (err) {
+      ctx.messages.pop(); // undo the user message push to prevent cascade failures
       console.error('DiagnosticAI error:', err.message);
       return {
         text: `I'm having trouble connecting to my brain right now. Let me try again in a moment, or you can describe your issue again.`,
@@ -120,6 +122,7 @@ class DiagnosticAI {
 
     try {
       const rawResponse = await this.llm.chat(llmMessages);
+      console.log(`[AI] Raw response (${rawResponse?.length || 0} chars): ${(rawResponse || '').substring(0, 300)}`);
       const parsed = parseResponse(rawResponse);
       ctx.messages.push({ role: 'assistant', content: rawResponse });
       this._saveMessage(deviceId, 'ai', parsed.text, parsed.action);
@@ -130,6 +133,7 @@ class DiagnosticAI {
         agentName: ctx.agentName
       };
     } catch (err) {
+      ctx.messages.pop(); // undo the user message push to prevent cascade failures
       console.error('DiagnosticAI processDiagnosticResult error:', err.message);
       return {
         text: 'I received the diagnostic results but had trouble analyzing them. Could you describe what you\'re experiencing?',
@@ -182,6 +186,7 @@ class DiagnosticAI {
         agentName: ctx.agentName
       };
     } catch (err) {
+      ctx.messages.pop(); // undo the user message push to prevent cascade failures
       console.error('DiagnosticAI processScreenshotResult error:', err.message);
       return {
         text: 'I received the screenshot but had trouble analyzing it. Could you describe what you see on your screen?',
@@ -211,6 +216,7 @@ class DiagnosticAI {
 
     try {
       const rawResponse = await this.llm.chat(llmMessages);
+      console.log(`[AI] Raw response (${rawResponse?.length || 0} chars): ${(rawResponse || '').substring(0, 300)}`);
       const parsed = parseResponse(rawResponse);
       ctx.messages.push({ role: 'assistant', content: rawResponse });
       this._saveMessage(deviceId, 'ai', parsed.text, parsed.action);
@@ -221,6 +227,7 @@ class DiagnosticAI {
         agentName: ctx.agentName
       };
     } catch (err) {
+      ctx.messages.pop(); // undo the user message push to prevent cascade failures
       console.error('DiagnosticAI processScriptResult error:', err.message);
       return {
         text: 'I received the script results but had trouble analyzing them. Could you describe what you\'re experiencing?',
@@ -272,6 +279,7 @@ class DiagnosticAI {
         agentName: ctx.agentName
       };
     } catch (err) {
+      ctx.messages.pop(); // undo the user message push to prevent cascade failures
       console.error('DiagnosticAI processITGuidanceScreenshotResult error:', err.message);
       return {
         text: 'I received the screenshot but had trouble analyzing it. Could you describe what you see instead?',
@@ -328,6 +336,7 @@ class DiagnosticAI {
         agentName: ctx.agentName
       };
     } catch (err) {
+      ctx.messages.pop(); // undo the user message push to prevent cascade failures
       console.error('DiagnosticAI IT guidance error:', err.message);
       return {
         text: 'Error processing guidance request. Check LLM connectivity.',
@@ -362,6 +371,7 @@ class DiagnosticAI {
         agentName: ctx.agentName
       };
     } catch (err) {
+      ctx.messages.pop(); // undo the user message push to prevent cascade failures
       console.error('DiagnosticAI IT guidance diagnostic error:', err.message);
       return {
         text: 'Error analyzing diagnostic results.',

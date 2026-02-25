@@ -106,7 +106,7 @@ class LLMService {
 
     const body = {
       model: this.anthropicModel,
-      max_tokens: 1024,
+      max_tokens: 4096,
       messages: chatMessages
     };
     if (systemMsg) {
@@ -149,12 +149,13 @@ class LLMService {
           parts.push({ inlineData: { mimeType: img.mediaType || 'image/jpeg', data: img.data } });
         }
       }
+      if (parts.length === 0) parts.push({ text: '[empty]' });
       return { role: m.role === 'assistant' ? 'model' : 'user', parts };
     });
 
     const body = {
       contents: chatMessages,
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
     };
     if (systemMsg && typeof systemMsg.content === 'string' && systemMsg.content.length > 0) {
       body.systemInstruction = { parts: [{ text: systemMsg.content }] };

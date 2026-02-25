@@ -7,7 +7,7 @@ function parseResponse(responseText) {
   };
 
   // Check for wish action FIRST (extract it separately since it can coexist with other actions)
-  const wishMatch = result.text.match(/\[ACTION:WISH:(\w+):(.+?)\]/);
+  const wishMatch = result.text.match(/\[ACTION:WISH:(\w+):(.+?)\]/i);
   if (wishMatch) {
     result.wish = {
       type: 'wish',
@@ -18,7 +18,7 @@ function parseResponse(responseText) {
   }
 
   // Then check for other actions (existing logic unchanged)
-  const diagnoseMatch = result.text.match(/\[ACTION:DIAGNOSE:(\w+)\]/);
+  const diagnoseMatch = result.text.match(/\[ACTION:DIAGNOSE:(\w+)\]/i);
   if (diagnoseMatch) {
     result.action = {
       type: 'diagnose',
@@ -28,7 +28,7 @@ function parseResponse(responseText) {
     return result;
   }
 
-  const remediateMatch = result.text.match(/\[ACTION:REMEDIATE:(\w+)(?::(.+?))?\]/);
+  const remediateMatch = result.text.match(/\[ACTION:REMEDIATE:(\w+)(?::(.+?))?\]/i);
   if (remediateMatch) {
     result.action = {
       type: 'remediate',
@@ -39,7 +39,7 @@ function parseResponse(responseText) {
     return result;
   }
 
-  const runScriptMatch = result.text.match(/\[ACTION:RUN_SCRIPT:(\d+)\]/);
+  const runScriptMatch = result.text.match(/\[ACTION:RUN_SCRIPT:(\d+)\]/i);
   if (runScriptMatch) {
     result.action = {
       type: 'run_script',
@@ -49,14 +49,14 @@ function parseResponse(responseText) {
     return result;
   }
 
-  const screenshotMatch = result.text.match(/\[ACTION:SCREENSHOT\]/);
+  const screenshotMatch = result.text.match(/\[ACTION:SCREENSHOT\]/i);
   if (screenshotMatch) {
     result.action = { type: 'screenshot' };
     result.text = result.text.replace(screenshotMatch[0], '').trim();
     return result;
   }
 
-  const ticketMatch = result.text.match(/\[ACTION:TICKET:(\w+):([^|\]]+)(?:\|([^\]]*))?\]/);
+  const ticketMatch = result.text.match(/\[ACTION:TICKET:(\w+):([^|\]]+)(?:\|([^\]]*))?\]/i);
   if (ticketMatch) {
     result.action = {
       type: 'ticket',

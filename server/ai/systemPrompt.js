@@ -128,7 +128,7 @@ Exception: if the user says "just log it", "don't ask questions", or "create the
 
 To create a ticket, include exactly: [ACTION:TICKET:priority:Brief title|Structured description for IT]
 
-The description (after the `|`) should be formatted for IT staff — not a conversational chat reply. Include:
+The description (after the "|") should be formatted for IT staff — not a conversational chat reply. Include:
 - **User request**: What the user asked for or reported, in one sentence
 - **Device**: Hostname and OS (already in your context above)
 - **Current metrics**: Any relevant diagnostic data you gathered (RAM usage %, disk usage, etc.)

@@ -5702,6 +5702,11 @@
 
             // Account page
             document.getElementById('btn-save-profile')?.addEventListener('click', saveProfile);
+            document.getElementById('btn-logout')?.addEventListener('click', () => {
+                sessionStorage.removeItem('pocket_it_token');
+                authToken = '';
+                showLogin();
+            });
             document.getElementById('btn-change-password')?.addEventListener('click', changePassword);
             document.getElementById('btn-regen-backup')?.addEventListener('click', regenOwnBackupCodes);
             document.getElementById('btn-reset-own-2fa')?.addEventListener('click', resetOwnMFA);

@@ -156,7 +156,7 @@ class LLMService {
       contents: chatMessages,
       generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
     };
-    if (systemMsg) {
+    if (systemMsg && typeof systemMsg.content === 'string' && systemMsg.content.length > 0) {
       body.systemInstruction = { parts: [{ text: systemMsg.content }] };
     }
 

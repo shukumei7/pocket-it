@@ -358,7 +358,7 @@ function setup(io, app) {
         try {
           db.prepare(
             "INSERT INTO chat_messages (device_id, sender, content, message_type) VALUES (?, ?, ?, ?)"
-          ).run(deviceId, username || 'user', content, 'text');
+          ).run(deviceId, 'user', content, 'text');
         } catch (err) {
           console.error('[Agent] Chat save error:', err.message);
         }

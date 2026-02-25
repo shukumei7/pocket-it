@@ -19,7 +19,7 @@ services:
       - POCKET_IT_COMPOSE_SERVICE=pocket-it
       # JWT secret auto-generated on first run and persisted to db/.jwt-secret
       # Override with explicit value if needed:
-      # - POCKET_IT_JWT_SECRET=${POCKET_IT_JWT_SECRET}
+      - POCKET_IT_JWT_SECRET=${POCKET_IT_JWT_SECRET}
       # LLM provider config — uncomment the provider you use:
       # - POCKET_IT_LLM_PROVIDER=ollama
       # - POCKET_IT_OLLAMA_URL=http://host.docker.internal:11434

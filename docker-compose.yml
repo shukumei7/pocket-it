@@ -6,8 +6,8 @@ services:
     ports:
       - "9100:9100"
     volumes:
-      - ./data:/app/data
-      - ./data/updates:/app/server/updates
+      - ${DATA_DIR:-./data}:/app/data
+      - ${DATA_DIR:-./data}/updates:/app/server/updates
       - ./releases:/app/releases:ro
       - ./installer:/app/installer:ro
       - .:/app/repo          # git repo for server update check/pull

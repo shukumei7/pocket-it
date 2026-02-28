@@ -174,11 +174,8 @@ public class TrayApplication : ApplicationContext
         _trayIcon.MouseClick += OnTrayMouseClick;
         _trayIcon.BalloonTipClicked += OnBalloonTipClicked;
 
-        // Auto-register for Windows startup on first run
-        if (!StartupManager.IsRegistered())
-        {
-            StartupManager.Register();
-        }
+        // Always re-register to keep task settings current (idempotent, uses /F to overwrite)
+        StartupManager.Register();
 
         if (!ValidateConfig()) return;
 

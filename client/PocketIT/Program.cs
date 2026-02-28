@@ -15,7 +15,12 @@ static class Program
         AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             HandleCrash(e.ExceptionObject as Exception ?? new Exception(e.ExceptionObject?.ToString()));
 
-        using var mutex = new Mutex(true, "PocketIT_SingleInstance", out bool createdNew);
+#if DEBUG
+        const string MutexName = "PocketIT_Dev_SingleInstance";
+#else
+        const string MutexName = "PocketIT_SingleInstance";
+#endif
+        using var mutex = new Mutex(true, MutexName, out bool createdNew);
         if (!createdNew)
         {
             MessageBox.Show("Pocket IT is already running.", "Pocket IT", MessageBoxButtons.OK, MessageBoxIcon.Information);

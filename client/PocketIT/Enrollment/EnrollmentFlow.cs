@@ -84,7 +84,7 @@ public class EnrollmentFlow
         }
     }
 
-    public async Task<bool> CheckEnrolledAsync(string deviceSecret = "")
+    public async Task<(bool Enrolled, bool Transient)> CheckEnrolledAsync(string deviceSecret = "")
     {
         var deviceId = DeviceIdentity.GetMachineId();
         try
@@ -95,11 +95,11 @@ public class EnrollmentFlow
                 request.Headers.Add("x-device-secret", deviceSecret);
             }
             var response = await _http.SendAsync(request);
-            return response.IsSuccessStatusCode;
+            return (response.IsSuccessStatusCode, false); // Got a response = not transient
         }
         catch
         {
-            return false;
+            return (false, true); // Exception = server unreachable = transient
         }
     }
 }

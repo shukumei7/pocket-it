@@ -37,7 +37,9 @@ namespace PocketIT.Core
                 var escapedExe = exePath.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
                 // Task XML with RestartOnFailure — schtasks /Create CLI cannot set this, XML import can.
-                // RestartOnFailure: restart up to 3 times with 1-minute intervals after any crash/non-zero exit.
+                // RestartOnFailure: restart up to 999 times with 1-minute intervals after any crash/non-zero exit.
+                // Hourly watchdog trigger: catches cases where Task Scheduler gave up — MultipleInstancesPolicy
+                // ensures a second instance is never launched if one is already running.
                 var xml = $@"<?xml version=""1.0"" encoding=""UTF-16""?>
 <Task version=""1.4"" xmlns=""http://schemas.microsoft.com/windows/2004/02/mit/task"">
   <Triggers>
@@ -45,6 +47,14 @@ namespace PocketIT.Core
       <Enabled>true</Enabled>
       <UserId>{currentUser}</UserId>
     </LogonTrigger>
+    <TimeTrigger>
+      <Repetition>
+        <Interval>PT1H</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <StartBoundary>2000-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
   </Triggers>
   <Principals>
     <Principal id=""Author"">
@@ -57,9 +67,10 @@ namespace PocketIT.Core
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <RestartOnFailure>
       <Interval>PT1M</Interval>
-      <Count>3</Count>
+      <Count>999</Count>
     </RestartOnFailure>
   </Settings>
   <Actions Context=""Author"">

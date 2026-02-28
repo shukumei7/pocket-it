@@ -41,6 +41,8 @@ public class TrayApplication : ApplicationContext
     private string? _cliEnrollToken;
     private bool _isEnrolled;
     private bool _wasConnected;
+    private int _initRetryCount = 0;
+    private const int MaxInitRetries = 20; // 20 * 30s = ~10 min retry window
     private Icon? _remoteActiveIcon;
     private Icon? _unreadIcon;
     private bool _hasUnreadMessages;
@@ -269,7 +271,7 @@ public class TrayApplication : ApplicationContext
             // Check enrollment
             var deviceSecret = _localDb.GetSetting("device_secret") ?? "";
             Logger.Info($"Enrollment check: secret={(!string.IsNullOrEmpty(deviceSecret) ? "present" : "empty")}");
-            var isEnrolled = await _enrollmentFlow.CheckEnrolledAsync(deviceSecret);
+            var (isEnrolled, enrollCheckTransient) = await _enrollmentFlow.CheckEnrolledAsync(deviceSecret);
             Logger.Info($"Enrollment status: {isEnrolled}");
             var enrollmentToken = _cliEnrollToken ?? _config["Enrollment:Token"] ?? "";
 
@@ -288,22 +290,40 @@ public class TrayApplication : ApplicationContext
                 }
                 else if (!result.Success)
                 {
-                    _uiContext.Post(_ => _trayIcon.ShowBalloonTip(5000, "Pocket IT",
-                        $"Enrollment failed: {result.Message}", ToolTipIcon.Warning), null);
-                    // If device exists but local secret is lost, show enrollment UI
-                    _uiContext.Post(_ => ShowEnrollmentWindow(), null);
+                    bool isTransient = result.Message?.Contains("Connection error") == true
+                                    || result.Message?.Contains("refused") == true
+                                    || result.Message?.Contains("unreachable") == true;
+                    if (isTransient)
+                    {
+                        Logger.Warn($"Enrollment failed (transient, server unreachable): {result.Message}. Will retry.");
+                        _ = RetryInitializeAsync(30_000);
+                    }
+                    else
+                    {
+                        _uiContext.Post(_ => _trayIcon.ShowBalloonTip(5000, "Pocket IT",
+                            $"Enrollment failed: {result.Message}", ToolTipIcon.Warning), null);
+                        _uiContext.Post(_ => ShowEnrollmentWindow(), null);
+                    }
                     return;
                 }
             }
 
             if (!isEnrolled && string.IsNullOrEmpty(enrollmentToken))
             {
-                // No token in config, not enrolled — show enrollment UI
+                // If transient failure during check and we have a secret, retry silently
+                if (enrollCheckTransient && !string.IsNullOrEmpty(deviceSecret))
+                {
+                    Logger.Warn("Enrollment check failed (server unreachable) — retrying.");
+                    _ = RetryInitializeAsync(30_000);
+                    return;
+                }
+                // No token, no secret or permanent failure — show enrollment UI
                 _uiContext.Post(_ => ShowEnrollmentWindow(), null);
                 return;
             }
 
             _isEnrolled = true;
+            _initRetryCount = 0; // Reset retry counter on successful initialization
             Logger.Info("Device enrolled, connecting to server");
 
             // Connect to server
@@ -336,6 +356,21 @@ public class TrayApplication : ApplicationContext
             _uiContext.Post(_ => _trayIcon.ShowBalloonTip(5000, "Pocket IT",
                 $"Connection error: {ex.Message}", ToolTipIcon.Error), null);
         }
+    }
+
+    private async Task RetryInitializeAsync(int delayMs)
+    {
+        if (_initRetryCount >= MaxInitRetries)
+        {
+            Logger.Warn($"Enrollment retry limit reached ({MaxInitRetries}). Showing enrollment UI.");
+            _uiContext.Post(_ => ShowEnrollmentWindow(), null);
+            _initRetryCount = 0;
+            return;
+        }
+        _initRetryCount++;
+        Logger.Info($"Server unreachable — retrying initialization in {delayMs / 1000}s (attempt {_initRetryCount}/{MaxInitRetries})");
+        await Task.Delay(delayMs);
+        await InitializeAsync();
     }
 
     private void ShowChatWindow()

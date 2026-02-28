@@ -594,7 +594,7 @@ public class TrayApplication : ApplicationContext
             type = "diagnostic_request",
             checkType,
             requestId,
-            description = checkType == "all" ? "Full System Diagnostic" : $"{char.ToUpper(checkType[0])}{checkType[1..]} Check"
+            description = checkType == "all" ? "Full System Diagnostic" : (checkType.Length > 0 ? $"{char.ToUpper(checkType[0])}{checkType[1..]} Check" : "Unknown Check")
         });
         _uiContext.Post(_ =>
         {
@@ -1257,7 +1257,9 @@ public class TrayApplication : ApplicationContext
                 {
                     var actionId = root.GetProperty("actionId").GetString() ?? "";
                     var requestId = root.GetProperty("requestId").GetString() ?? "";
-                    var parameter = root.TryGetProperty("parameter", out var paramProp) ? paramProp.GetString() : null;
+                    var parameter = root.TryGetProperty("parameter", out var paramProp)
+                        ? (paramProp.ValueKind == JsonValueKind.String ? paramProp.GetString() : paramProp.GetRawText())
+                        : null;
                     var result = await _remediationEngine.ExecuteAsync(actionId, parameter);
                     await _serverConnection.SendRemediationResult(requestId, result.Success, result.Message);
                     break;
@@ -1534,7 +1536,7 @@ public class TrayApplication : ApplicationContext
                 type = "chat_response",
                 text = "Manual diagnostics complete. Results have been sent to the server.",
                 sender = "ai",
-                diagnosticResults = results.Select(r => new { r.CheckType, r.Status, label = r.Label, value = r.Value })
+                diagnosticResults = results.Select(r => new { checkType = r.CheckType, status = r.Status, label = r.Label, value = r.Value })
             });
             _uiContext.Post(_ => _chatWindow?.SendToWebView(resultsMsg), null);
         }

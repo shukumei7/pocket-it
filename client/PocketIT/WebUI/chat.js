@@ -215,7 +215,7 @@
             const msgType = action.type === 'diagnostic' ? 'approve_diagnostic' : 'approve_remediation';
             const payload = action.type === 'diagnostic'
                 ? { checkType: action.checkType, requestId: action.requestId }
-                : { actionId: action.actionId, requestId: action.requestId, parameter: action.parameter || null };
+                : { actionId: action.actionId, requestId: action.requestId, parameter: action.parameter != null ? String(action.parameter) : null };
             sendBridgeMessage(msgType, payload);
             container.textContent = '';
             const span = document.createElement('span');
@@ -524,7 +524,13 @@
     // Listen for messages from C# bridge
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.addEventListener('message', (event) => {
-            const data = JSON.parse(event.data);
+            let data;
+            try {
+                data = JSON.parse(event.data);
+            } catch (e) {
+                console.error('Bridge message parse error:', e, event.data);
+                return;
+            }
 
             switch (data.type) {
                 case 'chat_response':
@@ -694,7 +700,7 @@
             const msgType = isDialognostic ? 'approve_diagnostic' : 'approve_remediation';
             const payload = isDialognostic
                 ? { checkType: action.checkType, requestId: action.requestId }
-                : { actionId: action.actionId, requestId: action.requestId, parameter: action.parameter || null };
+                : { actionId: action.actionId, requestId: action.requestId, parameter: action.parameter != null ? String(action.parameter) : null };
             sendBridgeMessage(msgType, payload);
             actions.innerHTML = '';
             const result = document.createElement('div');

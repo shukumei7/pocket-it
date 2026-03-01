@@ -20,6 +20,8 @@
         let active = false;
         let itInputEnabled = true;
         let currentMonitor = 0;
+        let _mouseButtonDown = null;  // tracks which button is currently pressed on canvas
+        let lastMousePos = { x: 0.5, y: 0.5 };  // last known canvas mouse coords (0-1)
 
         // --- Sidebar functions ---
 
@@ -274,6 +276,7 @@
             viewer.focus();
             const pos = getCanvasCoords(e);
             const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+            _mouseButtonDown = btn;
             socket.emit('desktop_mouse', { deviceId, x: pos.x, y: pos.y, button: btn, action: 'down' });
         });
 
@@ -281,6 +284,7 @@
             if (!active || !socket) return;
             if (!itInputEnabled) return;
             e.preventDefault();
+            _mouseButtonDown = null;
             const pos = getCanvasCoords(e);
             const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
             socket.emit('desktop_mouse', { deviceId, x: pos.x, y: pos.y, button: btn, action: 'up' });
@@ -294,6 +298,7 @@
             if (now - lastMove < 33) return;
             lastMove = now;
             const pos = getCanvasCoords(e);
+            lastMousePos = pos;  // track last known position
             socket.emit('desktop_mouse', { deviceId, x: pos.x, y: pos.y, button: 'left', action: 'move' });
         });
 
@@ -306,6 +311,15 @@
         }, { passive: false });
 
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // Catch mouseup that fires outside the canvas (cursor left canvas while button was held down)
+        document.addEventListener('mouseup', (e) => {
+            if (!active || !socket || !_mouseButtonDown) return;
+            const btn = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
+            if (btn !== _mouseButtonDown) return;
+            _mouseButtonDown = null;
+            socket.emit('desktop_mouse', { deviceId, x: lastMousePos.x, y: lastMousePos.y, button: btn, action: 'up' });
+        });
 
         viewer.addEventListener('keydown', (e) => {
             if (!active || !socket) return;

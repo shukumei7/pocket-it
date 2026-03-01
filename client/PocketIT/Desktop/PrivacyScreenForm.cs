@@ -1,11 +1,16 @@
 using System;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace PocketIT.Desktop;
 
 public class PrivacyScreenForm : Form
 {
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint dwAffinity);
+    private const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011; // Windows 10 2004+
+
     public PrivacyScreenForm()
     {
         FormBorderStyle = FormBorderStyle.None;
@@ -39,6 +44,15 @@ public class PrivacyScreenForm : Form
             if (e.Alt && e.KeyCode == Keys.F4)
                 e.Handled = true;
         };
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // Exclude this window from screen captures (GDI BitBlt, CopyFromScreen).
+        // Local display shows the black overlay normally (local user can't see the screen),
+        // but screen capture APIs see through it to the real desktop (IT operator can work).
+        SetWindowDisplayAffinity(Handle, WDA_EXCLUDEFROMCAPTURE);
     }
 
     // Override to prevent closing via window messages

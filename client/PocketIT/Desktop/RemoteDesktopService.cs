@@ -34,6 +34,10 @@ public class RemoteDesktopService : IDisposable
         if (_running) return;
         _running = true;
 
+        // Safety: clear any stuck BlockInput state from a previous session
+        InputInjectionService.BlockUserInput(false);
+        _userInputBlocked = false;
+
         _idleTimer = new System.Threading.Timer(_ => StopSession(), null, IdleTimeoutMs, Timeout.Infinite);
 
         // Start perf data collection every 2 seconds

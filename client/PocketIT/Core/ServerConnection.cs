@@ -63,7 +63,11 @@ public class ServerConnection : IDisposable
         _deviceId = deviceId;
         _deviceSecret = deviceSecret;
         _heartbeatTimer = new System.Timers.Timer(30000);
-        _heartbeatTimer.Elapsed += async (_, _) => await SendHeartbeat();
+        _heartbeatTimer.Elapsed += async (_, _) =>
+        {
+            try { await SendHeartbeat(); }
+            catch (Exception ex) { Logger.Error("Heartbeat error", ex); }
+        };
     }
 
     /// <summary>

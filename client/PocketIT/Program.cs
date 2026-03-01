@@ -23,8 +23,7 @@ static class Program
         using var mutex = new Mutex(true, MutexName, out bool createdNew);
         if (!createdNew)
         {
-            MessageBox.Show("Pocket IT is already running.", "Pocket IT", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            return; // Already running — silent exit (no dialog; Task Scheduler RestartOnFailure uses exit code, not dialog)
         }
 
         string? enrollToken = null;

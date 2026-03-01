@@ -146,7 +146,7 @@ function setup(io, app) {
         console.log(`[IT] ${socket.id} watching device ${deviceId}`);
 
         // Track IT presence for this device
-        const username = decoded?.username || decoded?.display_name || 'Admin';
+        const username = decoded?.display_name || decoded?.username || 'Admin';
         if (!deviceWatchers.has(deviceId)) deviceWatchers.set(deviceId, new Map());
         deviceWatchers.get(deviceId).set(socket.id, { username });
 
@@ -304,6 +304,7 @@ function setup(io, app) {
     // IT tech sends chat message to device user
     socket.on('chat_to_device', (data) => {
       const { deviceId, content } = data;
+      const itTechName = decoded?.display_name || decoded?.username || 'Admin';
 
       if (!checkDeviceScope(deviceId)) {
         socket.emit('error_message', { message: 'Device not in your scope' });
@@ -326,8 +327,8 @@ function setup(io, app) {
       // Save to DB
       try {
         db.prepare(
-          'INSERT INTO chat_messages (device_id, sender, content, message_type) VALUES (?, ?, ?, ?)'
-        ).run(deviceId, 'it_tech', content, 'text');
+          'INSERT INTO chat_messages (device_id, sender, content, message_type, sender_name) VALUES (?, ?, ?, ?, ?)'
+        ).run(deviceId, 'it_tech', content, 'text', itTechName);
       } catch (err) {
         console.error('[IT] Chat save error:', err.message);
       }
@@ -340,6 +341,7 @@ function setup(io, app) {
           deviceSocket.emit('chat_response', {
             text: content,
             sender: 'it_tech',
+            senderName: itTechName,
             action: null
           });
         }
@@ -348,7 +350,7 @@ function setup(io, app) {
       // Notify IT dashboard watchers so the sent message appears in Live Chat
       emitToScoped(itNs, db, deviceId, 'device_chat_update', {
         deviceId,
-        message: { sender: 'it_tech', content }
+        message: { sender: 'it_tech', content, sender_name: itTechName }
       });
 
       // Set transient auto-disable: AI pauses while IT is actively chatting
@@ -1507,6 +1509,7 @@ function setup(io, app) {
 
       console.log(`[IT] Guidance message for ${deviceId}: ${content.substring(0, 50)}...`);
 
+      const itTechName = decoded?.display_name || decoded?.username || 'Admin';
       const diagnosticAI = app.locals.diagnosticAI;
       if (!diagnosticAI) {
         socket.emit('it_guidance_response', { deviceId, text: 'AI service not available.', action: null });
@@ -1521,7 +1524,7 @@ function setup(io, app) {
           totalDiskGB: device.total_disk_gb, processorCount: device.processor_count
         } : { deviceId };
 
-        const response = await diagnosticAI.processITGuidanceMessage(deviceId, content, deviceInfo);
+        const response = await diagnosticAI.processITGuidanceMessage(deviceId, content, deviceInfo, itTechName);
 
         // Emit response to the requesting IT socket
         socket.emit('it_guidance_response', {
@@ -1534,7 +1537,7 @@ function setup(io, app) {
         // Also emit to other IT watchers of this device (exclude sender to avoid duplicates)
         emitToScoped(itNs, db, deviceId, 'it_guidance_update', {
           deviceId,
-          message: { sender: 'it_tech', content },
+          message: { sender: 'it_tech', content, sender_name: itTechName },
           response: { sender: 'ai', text: response.text, action: response.action }
         }, socket.id);
 

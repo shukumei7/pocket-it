@@ -76,6 +76,7 @@ function setup(io, app) {
     const deviceId = socket.handshake.query.deviceId;
     const hostname = socket.handshake.query.hostname;
     const username = socket.handshake.query.username || null;
+    const senderName = username || hostname || null;
     const clientVersion = socket.handshake.query.clientVersion;
     const exeHash = socket.handshake.query.exeHash;
     const lastSeenChat = socket.handshake.query.lastSeenChat;
@@ -357,8 +358,8 @@ function setup(io, app) {
         // Still save user message
         try {
           db.prepare(
-            "INSERT INTO chat_messages (device_id, sender, content, message_type) VALUES (?, ?, ?, ?)"
-          ).run(deviceId, 'user', content, 'text');
+            "INSERT INTO chat_messages (device_id, sender, content, message_type, sender_name) VALUES (?, ?, ?, ?, ?)"
+          ).run(deviceId, 'user', content, 'text', senderName);
         } catch (err) {
           console.error('[Agent] Chat save error:', err.message);
         }
@@ -379,7 +380,7 @@ function setup(io, app) {
         const itNs = io.of('/it');
         emitToScoped(itNs, db, deviceId, 'device_chat_update', {
           deviceId,
-          message: { sender: username || 'user', content }
+          message: { sender: 'user', content, sender_name: senderName }
         });
         return;
       }
@@ -393,7 +394,7 @@ function setup(io, app) {
           totalDiskGB: device.total_disk_gb, processorCount: device.processor_count
         } : { deviceId };
 
-        const response = await diagnosticAI.processMessage(deviceId, content, deviceInfo);
+        const response = await diagnosticAI.processMessage(deviceId, content, deviceInfo, senderName);
 
         socket.emit('chat_response', {
           text: response.text,
@@ -604,7 +605,7 @@ function setup(io, app) {
         // Notify IT namespace watchers
         emitToScoped(itNs, db, deviceId, 'device_chat_update', {
           deviceId,
-          message: { sender: username || 'user', content },
+          message: { sender: 'user', content, sender_name: senderName },
           response: { sender: 'ai', text: response.text, action: response.action }
         });
 

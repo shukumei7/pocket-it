@@ -813,6 +813,11 @@ Write-Output ('Software inventory: ' + $software.Count + ' apps recorded')`,
     db.prepare('ALTER TABLE devices ADD COLUMN current_user TEXT').run();
   } catch (e) { /* column already exists */ }
 
+  // v0.20.6 — sender_name column for chat_messages
+  try {
+    db.prepare('ALTER TABLE chat_messages ADD COLUMN sender_name TEXT').run();
+  } catch (e) { /* column already exists */ }
+
   // v0.20.2: Seed "Suspend BitLocker & Reboot" script if missing
   const hasBitlockerScript = db.prepare("SELECT id FROM script_library WHERE name = 'Suspend BitLocker & Reboot'").get();
   if (!hasBitlockerScript) {

@@ -456,9 +456,9 @@
 
             socket.on('device_chat_update', (data) => {
                 if (data.deviceId === currentDeviceId) {
-                    appendChatMessage(data.message.sender, data.message.content);
+                    appendChatMessage(data.message.sender, data.message.content, data.message.sender_name);
                     if (data.response) {
-                        appendChatMessage(data.response.sender, data.response.text);
+                        appendChatMessage(data.response.sender, data.response.text, data.response.sender_name);
                     }
                 } else if (data.message && data.message.sender === 'user') {
                     // Increment unread count for non-active device
@@ -512,7 +512,7 @@
                 if (data.deviceId === currentDeviceId) {
                     const chatEl = document.getElementById('detail-chat');
                     chatEl.innerHTML = '';
-                    data.messages.forEach(m => appendChatMessage(m.sender, m.content));
+                    data.messages.forEach(m => appendChatMessage(m.sender, m.content, m.sender_name));
                 }
             });
 
@@ -630,14 +630,14 @@
                 if (data.deviceId === currentDeviceId) {
                     const chatEl = document.getElementById('guidance-chat');
                     chatEl.innerHTML = '';
-                    data.messages.forEach(m => appendGuidanceMessage(m.sender, m.content));
+                    data.messages.forEach(m => appendGuidanceMessage(m.sender, m.content, m.sender_name));
                 }
             });
 
             socket.on('it_guidance_update', (data) => {
                 if (data.deviceId === currentDeviceId) {
-                    if (data.message) appendGuidanceMessage(data.message.sender, data.message.content);
-                    if (data.response) appendGuidanceMessage(data.response.sender, data.response.text);
+                    if (data.message) appendGuidanceMessage(data.message.sender, data.message.content, data.message.sender_name);
+                    if (data.response) appendGuidanceMessage(data.response.sender, data.response.text, data.response.sender_name);
                 }
             });
 
@@ -2231,11 +2231,12 @@
             });
         }
 
-        function appendChatMessage(sender, content) {
+        function appendChatMessage(sender, content, senderName) {
             const chatEl = document.getElementById('detail-chat');
             const msg = document.createElement('div');
             msg.className = 'msg';
-            msg.innerHTML = `<span class="sender-tag ${escapeHtml(sender)}">${escapeHtml(sender)}:</span> ${escapeHtml(content)}`;
+            const displayName = senderName || (sender === 'user' ? 'User' : sender === 'it_tech' ? 'IT Support' : sender === 'ai' ? 'AI' : escapeHtml(sender));
+            msg.innerHTML = `<span class="sender-tag ${escapeHtml(sender)}">${escapeHtml(displayName)}:</span> ${escapeHtml(content)}`;
             chatEl.appendChild(msg);
             chatEl.scrollTop = chatEl.scrollHeight;
         }
@@ -5268,17 +5269,18 @@
             if (!content || !currentDeviceId) return;
             input.value = '';
 
-            appendGuidanceMessage('it_tech', content);
+            const myName = currentUser?.username || currentUser?.display_name || null;
+            appendGuidanceMessage('it_tech', content, myName);
             document.getElementById('guidance-status').textContent = 'AI is thinking...';
             socket.emit('it_guidance_message', { deviceId: currentDeviceId, content });
         }
 
-        function appendGuidanceMessage(sender, content) {
+        function appendGuidanceMessage(sender, content, senderName) {
             const chatEl = document.getElementById('guidance-chat');
             const div = document.createElement('div');
             div.style.cssText = 'margin-bottom:8px; font-size:13px;';
 
-            const senderLabel = sender === 'it_tech' ? 'IT' : sender === 'ai' ? 'AI' : sender;
+            const senderLabel = senderName || (sender === 'it_tech' ? 'IT' : sender === 'ai' ? 'AI' : sender);
             const senderColor = sender === 'it_tech' ? '#e65100' : sender === 'ai' ? '#66c0f4' : '#8f98a0';
 
             div.innerHTML = `<span style="font-weight:600; color:${senderColor}; font-size:11px;">${escapeHtml(senderLabel)}</span><br><span style="color:#c7d5e0;">${escapeHtml(content || '')}</span>`;

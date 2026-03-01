@@ -17,7 +17,7 @@
         if (sender !== 'system') {
             const senderLabel = document.createElement('div');
             senderLabel.className = 'sender';
-            senderLabel.textContent = sender === 'user' ? 'You' : sender === 'ai' ? agentName : 'IT Support';
+            senderLabel.textContent = sender === 'user' ? 'You' : sender === 'ai' ? agentName : (options.senderName || 'IT Support');
             div.appendChild(senderLabel);
         }
 
@@ -538,7 +538,8 @@
                     if (data.agentName) agentName = data.agentName;
                     addMessage(data.text || data.content, data.ai_disabled ? 'system' : (data.sender || 'ai'), {
                         action: data.action,
-                        diagnosticResults: data.diagnosticResults
+                        diagnosticResults: data.diagnosticResults,
+                        senderName: data.senderName
                     });
                     break;
 

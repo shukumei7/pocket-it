@@ -47,7 +47,7 @@ class DiagnosticAI {
     return this.contexts.get(deviceId);
   }
 
-  async processMessage(deviceId, userMessage, deviceInfo) {
+  async processMessage(deviceId, userMessage, deviceInfo, senderName) {
     const ctx = this.getOrCreateContext(deviceId, deviceInfo);
 
     // Add user message to context
@@ -86,7 +86,7 @@ class DiagnosticAI {
       ctx.messages.push({ role: 'assistant', content: rawResponse });
 
       // Save to database
-      this._saveMessage(deviceId, 'user', userMessage);
+      this._saveMessage(deviceId, 'user', userMessage, null, null, senderName);
       this._saveMessage(deviceId, 'ai', parsed.text, parsed.action);
 
       return {
@@ -303,7 +303,7 @@ class DiagnosticAI {
     return this.itGuidanceContexts.get(deviceId);
   }
 
-  async processITGuidanceMessage(deviceId, itMessage, deviceInfo) {
+  async processITGuidanceMessage(deviceId, itMessage, deviceInfo, senderName) {
     const ctx = this.getOrCreateITGuidanceContext(deviceId, deviceInfo);
 
     // Update device info if provided
@@ -327,7 +327,7 @@ class DiagnosticAI {
       ctx.messages.push({ role: 'assistant', content: rawResponse });
 
       // Save to DB with channel = 'it_guidance'
-      this._saveMessage(deviceId, 'it_tech', itMessage, null, 'it_guidance');
+      this._saveMessage(deviceId, 'it_tech', itMessage, null, 'it_guidance', senderName);
       this._saveMessage(deviceId, 'ai', parsed.text, parsed.action, 'it_guidance');
 
       return {
@@ -385,13 +385,13 @@ class DiagnosticAI {
     this.itGuidanceContexts.delete(deviceId);
   }
 
-  _saveMessage(deviceId, sender, content, action, channel) {
+  _saveMessage(deviceId, sender, content, action, channel, senderName) {
     try {
       const metadata = action ? JSON.stringify(action) : null;
       const messageType = action ? action.type : 'text';
       this.db.prepare(
-        'INSERT INTO chat_messages (device_id, sender, content, message_type, metadata, channel) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(deviceId, sender, content, messageType, metadata, channel || 'user');
+        'INSERT INTO chat_messages (device_id, sender, content, message_type, metadata, channel, sender_name) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(deviceId, sender, content, messageType, metadata, channel || 'user', senderName || null);
     } catch (err) {
       console.error('Failed to save message:', err.message);
     }

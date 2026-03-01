@@ -50,15 +50,20 @@
 
         // ---- Auth ----
         async function fetchWithAuth(url, options = {}) {
-            // No token — session expired or not yet logged in. Don't make the request.
-            // This stops polling intervals from hammering the server after expiry.
+            // No token — already logged out or polling after expiry. Return synthetic 401
+            // without making a request (stops intervals from hammering the server).
             if (!authToken) return new Response(null, { status: 401 });
             options.headers = { ...options.headers, 'Authorization': 'Bearer ' + authToken };
             const res = await fetch(url, options);
             if (res.status === 401) {
+                // Had a valid token but server rejected it — session expired.
+                // Clear token then reload so JS state is fully reset; login overlay
+                // will appear automatically (no token in sessionStorage after reload).
+                // NOTE: this path is NOT reached by login-form failures (those go through
+                // their own submit handler) or by the !authToken early-return above.
                 sessionStorage.removeItem('pocket_it_token');
                 authToken = '';
-                showLogin();
+                location.reload();
             }
             return res;
         }

@@ -438,6 +438,48 @@ function setup(io, app) {
       }
     });
 
+    // IT-initiated screenshot request
+    socket.on('request_screenshot', (data) => {
+      const { deviceId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      console.log(`[IT] Requesting screenshot from ${deviceId}`);
+
+      // Rate limit: 10/min
+      if (!checkOpRateLimit(socket.id, 'screenshot', 10)) {
+        socket.emit('error_message', { message: 'Too many screenshot requests' });
+        return;
+      }
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run('it_staff', 'screenshot_requested', deviceId, JSON.stringify({ requestedBy: 'it_staff' }));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `it-ss-${Date.now()}`;
+          deviceSocket.emit('screenshot_request', {
+            requestId,
+            reason: 'IT staff requested a screenshot of your screen'
+          });
+          socket.emit('screenshot_requested', { deviceId, requestId });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
     // v0.5.0: File access requests from IT dashboard
     socket.on('request_file_browse', (data) => {
       const { deviceId, path: browsePath } = data;

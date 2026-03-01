@@ -185,6 +185,23 @@
                 <div id="detail-diagnostics"></div>
               </div>
 
+              <!-- Screenshots Section -->
+              <h2 class="section-title" style="margin-top:20px;">Screenshots</h2>
+              <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                  <button class="diag-btn" id="btn-take-screenshot">Take Screenshot</button>
+                  <span id="screenshot-status" style="font-size:11px; color:#8f98a0;"></span>
+                </div>
+                <div id="device-screenshot-panel" style="display:none;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                    <span style="font-size:11px; color:#8f98a0;">Last captured</span>
+                    <span id="screenshot-timestamp" style="font-size:11px; color:#6b7a8d;"></span>
+                  </div>
+                  <img id="device-screenshot-img" style="max-width:100%; border-radius:4px; border:1px solid #2a475e; display:block;" alt="Device screenshot" />
+                </div>
+                <div id="screenshot-denied-msg" style="display:none; font-size:12px; color:#e65100;">User denied the screenshot request.</div>
+              </div>
+
               <h2 class="section-title" id="sys-tools-heading" style="cursor:pointer; user-select:none;" title="Click to expand/collapse">System Tools <span id="sys-tools-toggle" style="font-size:14px; color:#8f98a0;">&#x25BC;</span></h2>
               <input type="hidden" id="sys-tools-section-loaded" value="" />
               <div style="background:#1b2838; border:1px solid #2a475e; border-radius:8px; padding:16px; margin-bottom:20px;">

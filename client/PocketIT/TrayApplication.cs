@@ -1115,7 +1115,32 @@ public class TrayApplication : ApplicationContext
     {
         Logger.Info($"Screenshot requested: {requestId} - {reason}");
 
-        // Send approval request to chat window
+        // IT-initiated and AI guidance screenshots bypass consent unless private mode is on
+        bool isITOrGuidance = requestId.StartsWith("it-ss-") || requestId.StartsWith("itg-ss-");
+        if (isITOrGuidance && !_privacyMode)
+        {
+            Logger.Info($"Auto-capturing screenshot (private mode off): {requestId}");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var captureService = new PocketIT.Desktop.ScreenCaptureService();
+                    captureService.Quality = 40;
+                    captureService.Scale = 0.5f;
+                    var (base64, w, h) = captureService.CaptureScreen();
+                    await _serverConnection.SendScreenshotResult(requestId, true, base64, w, h);
+                    Logger.Info($"Auto screenshot sent: {w}x{h}");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Auto screenshot capture failed", ex);
+                    await _serverConnection.SendScreenshotResult(requestId, false);
+                }
+            });
+            return;
+        }
+
+        // Send approval request to chat window (existing behavior)
         var msg = JsonSerializer.Serialize(new
         {
             type = "screenshot_request",

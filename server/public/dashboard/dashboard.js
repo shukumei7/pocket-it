@@ -647,6 +647,24 @@
                 }
             });
 
+            socket.on('device_screenshot_update', (data) => {
+                if (data.deviceId !== currentDeviceId) return;
+
+                const btn = document.getElementById('btn-take-screenshot');
+                if (btn) { btn.disabled = false; btn.textContent = 'Take Screenshot'; }
+                document.getElementById('screenshot-status').textContent = '';
+
+                if (data.approved && data.imageData) {
+                    document.getElementById('device-screenshot-panel').style.display = 'block';
+                    document.getElementById('device-screenshot-img').src = 'data:image/jpeg;base64,' + data.imageData;
+                    document.getElementById('screenshot-timestamp').textContent = new Date().toLocaleTimeString();
+                    document.getElementById('screenshot-denied-msg').style.display = 'none';
+                } else if (data.approved === false) {
+                    document.getElementById('device-screenshot-panel').style.display = 'none';
+                    document.getElementById('screenshot-denied-msg').style.display = 'block';
+                }
+            });
+
             socket.on('installer_result', (data) => {
                 if (data.deviceId === currentDeviceId) {
                     console.log('[Installer] Result:', data);
@@ -1911,6 +1929,11 @@
             document.getElementById('detail-device-id').textContent = '';
             document.getElementById('detail-chat').innerHTML = '';
             document.getElementById('detail-diagnostics').innerHTML = '';
+            document.getElementById('device-screenshot-panel').style.display = 'none';
+            document.getElementById('screenshot-denied-msg').style.display = 'none';
+            document.getElementById('screenshot-status').textContent = '';
+            const ssBtn = document.getElementById('btn-take-screenshot');
+            if (ssBtn) { ssBtn.disabled = false; ssBtn.textContent = 'Take Screenshot'; }
 
             fetchWithAuth(`${API}/api/devices/${deviceId}`).then(r => r.json()).then(d => {
                 document.getElementById('detail-hostname').textContent = d.hostname || deviceId;
@@ -5445,6 +5468,16 @@
             document.getElementById('diag-actions').addEventListener('click', (e) => {
                 const btn = e.target.closest('[data-diag]');
                 if (btn) requestDiag(btn.dataset.diag);
+            });
+
+            // Screenshots — take screenshot button
+            document.getElementById('btn-take-screenshot').addEventListener('click', () => {
+                if (!currentDeviceId || !socket) return;
+                socket.emit('request_screenshot', { deviceId: currentDeviceId });
+                document.getElementById('btn-take-screenshot').disabled = true;
+                document.getElementById('btn-take-screenshot').textContent = 'Requesting...';
+                document.getElementById('screenshot-status').textContent = 'Waiting for user approval...';
+                document.getElementById('screenshot-denied-msg').style.display = 'none';
             });
 
             // System tools heading collapse

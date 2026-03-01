@@ -872,6 +872,21 @@ function setup(io, app) {
             }
           }
 
+          // Handle screenshot action from diagnostic follow-up
+          if (response.action && response.action.type === 'screenshot') {
+            const requestId = `ss-${Date.now()}`;
+            try {
+              db.prepare("INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
+                .run('ai', 'screenshot_requested', deviceId, JSON.stringify({ requestId, source: 'diagnostic' }));
+            } catch (err) {
+              console.error('[Agent] Audit log error:', err.message);
+            }
+            socket.emit('screenshot_request', {
+              requestId,
+              reason: response.action.reason || 'AI needs to see your screen to help diagnose the issue'
+            });
+          }
+
           // Handle feature wish from diagnostic follow-up (no user message available)
           if (response.wish) {
             const VALID_CATEGORIES = ['software', 'network', 'security', 'hardware', 'account', 'automation', 'other'];
@@ -949,6 +964,12 @@ function setup(io, app) {
         deviceId, approved, width, height,
         imageData: approved ? imageData : null
       });
+
+      // IT-initiated screenshot (no AI analysis needed)
+      if (requestId && requestId.startsWith('it-ss-')) {
+        // device_screenshot_update already emitted above for all types
+        return;
+      }
 
       // Check if this is an IT guidance screenshot
       if (requestId && requestId.startsWith('itg-ss-')) {

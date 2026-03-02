@@ -119,6 +119,8 @@ function setup(io, app) {
       socket.userScope = { isAdmin: false, clientIds: [] }; // fallback: no access (localhost handled above)
     }
 
+    const itActor = decoded?.display_name || decoded?.username || 'Admin';
+
     console.log(`[IT] Dashboard connected: ${socket.id}`);
     watchers.set(socket.id, new Set());
 
@@ -304,7 +306,6 @@ function setup(io, app) {
     // IT tech sends chat message to device user
     socket.on('chat_to_device', (data) => {
       const { deviceId, content } = data;
-      const itTechName = decoded?.display_name || decoded?.username || 'Admin';
 
       if (!checkDeviceScope(deviceId)) {
         socket.emit('error_message', { message: 'Device not in your scope' });
@@ -328,7 +329,7 @@ function setup(io, app) {
       try {
         db.prepare(
           'INSERT INTO chat_messages (device_id, sender, content, message_type, sender_name) VALUES (?, ?, ?, ?, ?)'
-        ).run(deviceId, 'it_tech', content, 'text', itTechName);
+        ).run(deviceId, 'it_tech', content, 'text', itActor);
       } catch (err) {
         console.error('[IT] Chat save error:', err.message);
       }
@@ -341,7 +342,7 @@ function setup(io, app) {
           deviceSocket.emit('chat_response', {
             text: content,
             sender: 'it_tech',
-            senderName: itTechName,
+            senderName: itActor,
             action: null
           });
         }
@@ -350,7 +351,7 @@ function setup(io, app) {
       // Notify IT dashboard watchers so the sent message appears in Live Chat
       emitToScoped(itNs, db, deviceId, 'device_chat_update', {
         deviceId,
-        message: { sender: 'it_tech', content, sender_name: itTechName }
+        message: { sender: 'it_tech', content, sender_name: itActor }
       });
 
       // Set transient auto-disable: AI pauses while IT is actively chatting
@@ -419,7 +420,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'diagnostic_requested', deviceId, JSON.stringify({ checkType }));
+        ).run(itActor,'diagnostic_requested', deviceId, JSON.stringify({ checkType }));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -461,7 +462,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'screenshot_requested', deviceId, JSON.stringify({ requestedBy: 'it_staff' }));
+        ).run(itActor, 'screenshot_requested', deviceId, JSON.stringify({ requestedBy: itActor }));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -504,7 +505,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'file_browse_requested', deviceId, JSON.stringify({ path: browsePath }));
+        ).run(itActor,'file_browse_requested', deviceId, JSON.stringify({ path: browsePath }));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -546,7 +547,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'file_read_requested', deviceId, JSON.stringify({ path: filePath }));
+        ).run(itActor,'file_read_requested', deviceId, JSON.stringify({ path: filePath }));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -604,7 +605,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'script_requested', deviceId, JSON.stringify({
+        ).run(itActor,'script_requested', deviceId, JSON.stringify({
           scriptName: scriptName || 'ad-hoc',
           scriptLength: scriptContent.length,
           requiresElevation: !!requiresElevation
@@ -660,7 +661,7 @@ function setup(io, app) {
       try {
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'script_requested', deviceId, JSON.stringify({
+        ).run(itActor,'script_requested', deviceId, JSON.stringify({
           scriptId, scriptName: script.name, requiresElevation: !!script.requires_elevation
         }));
       } catch (err) {
@@ -704,7 +705,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'terminal_requested', deviceId, JSON.stringify({}));
+        ).run(itActor,'terminal_requested', deviceId, JSON.stringify({}));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -755,7 +756,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'terminal_stop_requested', deviceId, JSON.stringify({}));
+        ).run(itActor,'terminal_stop_requested', deviceId, JSON.stringify({}));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -788,7 +789,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'desktop_requested', deviceId, JSON.stringify({}));
+        ).run(itActor,'desktop_requested', deviceId, JSON.stringify({}));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -871,7 +872,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'desktop_stop_requested', deviceId, JSON.stringify({}));
+        ).run(itActor,'desktop_stop_requested', deviceId, JSON.stringify({}));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -1045,7 +1046,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'system_tool_requested', deviceId, JSON.stringify({ tool, requestId }));
+        ).run(itActor,'system_tool_requested', deviceId, JSON.stringify({ tool, requestId }));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -1091,7 +1092,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'file_delete_requested', deviceId, JSON.stringify({ paths }));
+        ).run(itActor,'file_delete_requested', deviceId, JSON.stringify({ paths }));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -1159,7 +1160,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'file_paste_requested', deviceId, JSON.stringify({ operation, paths, destination }));
+        ).run(itActor,'file_paste_requested', deviceId, JSON.stringify({ operation, paths, destination }));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -1195,7 +1196,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'file_download_requested', deviceId, JSON.stringify({ path: filePath }));
+        ).run(itActor,'file_download_requested', deviceId, JSON.stringify({ path: filePath }));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -1242,7 +1243,7 @@ function setup(io, app) {
         const db = app.locals.db;
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'file_upload_requested', deviceId, JSON.stringify({ filename, destinationPath, size }));
+        ).run(itActor,'file_upload_requested', deviceId, JSON.stringify({ filename, destinationPath, size }));
       } catch (err) {
         console.error('[IT] Audit log error:', err.message);
       }
@@ -1351,7 +1352,7 @@ function setup(io, app) {
           requiresElevation ? 1 : 0,
           JSON.stringify(targetDeviceIds),
           scheduledAt || null,
-          'it_staff'
+          itActor
         );
 
         const deploymentId = result.lastInsertRowid;
@@ -1368,7 +1369,7 @@ function setup(io, app) {
         // Audit log
         db.prepare(
           "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
-        ).run('it_staff', 'deployment_created', String(deploymentId), JSON.stringify({
+        ).run(itActor,'deployment_created', String(deploymentId), JSON.stringify({
           name, type, targetCount: targetDeviceIds.length, scheduled: !!scheduledAt
         }));
 
@@ -1509,7 +1510,7 @@ function setup(io, app) {
 
       console.log(`[IT] Guidance message for ${deviceId}: ${content.substring(0, 50)}...`);
 
-      const itTechName = decoded?.display_name || decoded?.username || 'Admin';
+      const itActor = decoded?.display_name || decoded?.username || 'Admin';
       const diagnosticAI = app.locals.diagnosticAI;
       if (!diagnosticAI) {
         socket.emit('it_guidance_response', { deviceId, text: 'AI service not available.', action: null });
@@ -1524,7 +1525,7 @@ function setup(io, app) {
           totalDiskGB: device.total_disk_gb, processorCount: device.processor_count
         } : { deviceId };
 
-        const response = await diagnosticAI.processITGuidanceMessage(deviceId, content, deviceInfo, itTechName);
+        const response = await diagnosticAI.processITGuidanceMessage(deviceId, content, deviceInfo, itActor);
 
         // Emit response to the requesting IT socket
         socket.emit('it_guidance_response', {
@@ -1537,7 +1538,7 @@ function setup(io, app) {
         // Also emit to other IT watchers of this device (exclude sender to avoid duplicates)
         emitToScoped(itNs, db, deviceId, 'it_guidance_update', {
           deviceId,
-          message: { sender: 'it_tech', content, sender_name: itTechName },
+          message: { sender: 'it_tech', content, sender_name: itActor },
           response: { sender: 'ai', text: response.text, action: response.action }
         }, socket.id);
 

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using PocketIT.Core;
 using PocketIT.Pipe;
+using PocketIT.Service.Desktop;
 using PocketIT.Service.Pipe;
 using System.Text.Json;
 
@@ -14,6 +15,7 @@ public class AgentWorker : BackgroundService
     private readonly IConfiguration _config;
     private ServerConnection? _serverConnection;
     private PipeServer? _pipeServer;
+    private DesktopSessionManager? _desktopSessionManager;
     private LocalDatabase? _localDb;
     private string? _deviceId;
 
@@ -43,6 +45,7 @@ public class AgentWorker : BackgroundService
         }
         finally
         {
+            _desktopSessionManager?.Dispose();
             _serverConnection?.Dispose();
             _pipeServer?.Stop();
         }
@@ -62,6 +65,10 @@ public class AgentWorker : BackgroundService
         var serverUrl = _config["Server:Url"] ?? "http://localhost:9100";
 
         _serverConnection = new ServerConnection(serverUrl, _deviceId, deviceSecret);
+
+        // Desktop session manager handles service-level remote desktop via session helper
+        _desktopSessionManager = new DesktopSessionManager(_logger, _serverConnection);
+
         WireServerEvents();
 
         // Start pipe server so tray app can connect
@@ -84,53 +91,34 @@ public class AgentWorker : BackgroundService
         _serverConnection.OnChatHistory += json =>
             _pipeServer?.Send(new PipeMessage { Type = PipeMessageType.ChatHistory, Payload = json });
 
+        // Desktop events: handled directly by DesktopSessionManager (service-level remote desktop).
+        // IT authority: service-level access bypasses user privacy mode on enrolled managed devices.
         _serverConnection.OnDesktopStartRequest += (requestId, itInitiated) =>
-            _pipeServer?.Send(new PipeMessage
-            {
-                Type = PipeMessageType.DesktopStartRequest,
-                RequestId = requestId,
-                Payload = JsonSerializer.Serialize(new { itInitiated })
-            });
+            _desktopSessionManager?.StartSession(requestId);
 
         _serverConnection.OnDesktopMouseInput += (x, y, button, action) =>
-            _pipeServer?.Send(new PipeMessage
-            {
-                Type = PipeMessageType.DesktopMouseInput,
-                Payload = JsonSerializer.Serialize(new { x, y, button, action })
-            });
+            _desktopSessionManager?.SendMouseInput(x, y, button, action);
 
         _serverConnection.OnDesktopKeyboardInput += (vkCode, action) =>
-            _pipeServer?.Send(new PipeMessage
-            {
-                Type = PipeMessageType.DesktopKeyboardInput,
-                Payload = JsonSerializer.Serialize(new { vkCode, action })
-            });
+            _desktopSessionManager?.SendKeyboardInput(vkCode, action);
 
         _serverConnection.OnDesktopStopRequest += requestId =>
-            _pipeServer?.Send(new PipeMessage { Type = PipeMessageType.DesktopStopRequest, RequestId = requestId });
+            _desktopSessionManager?.StopSession(requestId);
 
         _serverConnection.OnDesktopQualityUpdate += (quality, fps, scale) =>
-            _pipeServer?.Send(new PipeMessage
-            {
-                Type = PipeMessageType.DesktopQualityUpdate,
-                Payload = JsonSerializer.Serialize(new { quality, fps, scale })
-            });
+            _desktopSessionManager?.SendQualityUpdate(quality, fps, scale);
 
         _serverConnection.OnDesktopSwitchMonitor += idx =>
-            _pipeServer?.Send(new PipeMessage { Type = PipeMessageType.DesktopSwitchMonitor, Payload = idx.ToString() });
+            _desktopSessionManager?.SendSwitchMonitor(idx);
 
         _serverConnection.OnDesktopPasteText += text =>
-            _pipeServer?.Send(new PipeMessage { Type = PipeMessageType.DesktopPasteText, Payload = text });
+            _desktopSessionManager?.SendPasteText(text);
 
         _serverConnection.OnDesktopCtrlAltDel += () =>
-            _pipeServer?.Send(new PipeMessage { Type = PipeMessageType.DesktopCtrlAltDel });
+            _desktopSessionManager?.SendCtrlAltDel();
 
         _serverConnection.OnDesktopToggle += (name, enabled) =>
-            _pipeServer?.Send(new PipeMessage
-            {
-                Type = PipeMessageType.DesktopToggle,
-                Payload = JsonSerializer.Serialize(new { name, enabled })
-            });
+            _desktopSessionManager?.SendToggle(name, enabled);
 
         _serverConnection.OnAIStatusChanged += (enabled, reason) =>
             _pipeServer?.Send(new PipeMessage

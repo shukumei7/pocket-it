@@ -81,6 +81,7 @@ public class DesktopSessionManager : IDisposable
 
     private readonly ILogger _logger;
     private readonly ServerConnection _serverConnection;
+    private readonly LocalDatabase _localDb;
 
     private string? _activeRequestId;
     private IntPtr _helperProcess = IntPtr.Zero;
@@ -93,16 +94,30 @@ public class DesktopSessionManager : IDisposable
 
     public bool IsActive => _activeRequestId != null;
 
-    public DesktopSessionManager(ILogger logger, ServerConnection serverConnection)
+    public DesktopSessionManager(ILogger logger, ServerConnection serverConnection, LocalDatabase localDb)
     {
         _logger = logger;
         _serverConnection = serverConnection;
+        _localDb = localDb;
     }
 
     // ── Public API ─────────────────────────────────────────────────────────────
 
-    public void StartSession(string requestId)
+    public void StartSession(string requestId, bool forceOverride = false)
     {
+        // Check privacy mode — only bypass if IT explicitly forced the session
+        // IT authority: forceOverride=true bypasses privacy mode by design (admin role required on server)
+        if (!forceOverride)
+        {
+            var privacyMode = _localDb.GetSetting("privacy_mode");
+            if (privacyMode == "true")
+            {
+                _logger.LogInformation("Desktop denied: privacy mode is enabled and session was not force-initiated");
+                _ = _serverConnection.SendDesktopDenied(requestId);
+                return;
+            }
+        }
+
         if (IsActive)
         {
             _logger.LogWarning("Desktop session already active, ignoring start request {RequestId}", requestId);

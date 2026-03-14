@@ -657,7 +657,7 @@
                 if (data.approved && data.imageData) {
                     document.getElementById('device-screenshot-panel').style.display = 'block';
                     document.getElementById('device-screenshot-img').src = 'data:image/jpeg;base64,' + data.imageData;
-                    document.getElementById('screenshot-timestamp').textContent = new Date().toLocaleTimeString();
+                    document.getElementById('screenshot-timestamp').textContent = formatTSTime(new Date());
                     document.getElementById('screenshot-denied-msg').style.display = 'none';
                 } else if (data.approved === false) {
                     document.getElementById('device-screenshot-panel').style.display = 'none';
@@ -983,8 +983,8 @@
                                 ? `<span style="color:#66bb6a;">Enabled</span> <span style="color:${u.backup_code_count === 0 ? '#ef5350' : '#8f98a0'}; font-size:11px;">(${u.backup_code_count} codes)</span>`
                                 : '<span style="color:#8f98a0;">Not set up</span>'}
                         </td>
-                        <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
-                        <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.created_at ? new Date(u.created_at).toLocaleString() : '-'}</td>
+                        <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.last_login ? formatTS(u.last_login) : 'Never'}</td>
+                        <td style="padding:8px 12px; color:#8f98a0; font-size:12px;">${u.created_at ? formatTS(u.created_at) : '-'}</td>
                         <td style="padding:8px 12px;">
                             ${u.totp_enabled ? `<button class="diag-btn" data-action="user-regen-codes" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; margin-right:4px;">Regen Codes</button><button class="diag-btn" data-action="user-reset-2fa" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; margin-right:4px;">Reset 2FA</button>` : ''}
                             <button class="diag-btn" data-action="user-reset-pw" data-id="${u.id}" data-username="${escapeHtml(u.username)}" style="font-size:11px; padding:3px 8px; margin-right:4px;">Reset PW</button>
@@ -1129,7 +1129,7 @@
                 document.getElementById('account-display-name').value = profile.display_name || '';
                 document.getElementById('account-role').textContent = profile.role;
                 document.getElementById('account-last-login').textContent = profile.last_login
-                    ? new Date(profile.last_login).toLocaleString() : 'Never';
+                    ? formatTS(profile.last_login) : 'Never';
 
                 // 2FA status
                 const statusEl = document.getElementById('account-2fa-status');
@@ -1156,6 +1156,7 @@
                     if (prefs.defaultPage) document.getElementById('pref-default-page').value = prefs.defaultPage;
                     if (prefs.itemsPerPage) document.getElementById('pref-items-per-page').value = prefs.itemsPerPage;
                     if (prefs.dateFormat) document.getElementById('pref-date-format').value = prefs.dateFormat;
+                    document.getElementById('pref-timezone').value = prefs.timezone || '';
                 }
             } catch (err) {
                 console.error('Failed to load account page:', err);
@@ -1340,7 +1341,8 @@
                 theme: document.getElementById('pref-theme').value,
                 defaultPage: document.getElementById('pref-default-page').value,
                 itemsPerPage: document.getElementById('pref-items-per-page').value,
-                dateFormat: document.getElementById('pref-date-format').value
+                dateFormat: document.getElementById('pref-date-format').value,
+                timezone: document.getElementById('pref-timezone').value
             };
             const msgEl = document.getElementById('account-pref-msg');
             try {
@@ -1403,7 +1405,7 @@
                     <span class="status-dot ${d.status || 'offline'}"></span>
                 </div>
                 <div class="device-id">${escapeHtml(d.device_id.substring(0, 8))}...</div>
-                <div class="last-seen">Last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'Never'}</div>
+                <div class="last-seen">Last seen: ${d.last_seen ? formatTS(d.last_seen) : 'Never'}</div>
                 <div class="health-bar"><div class="fill ${healthClass}" style="width: ${hs !== null && hs !== undefined ? hs : 0}%"></div></div>
                 <div style="font-size: 11px; color: #8f98a0; margin-top: 4px;">Health: ${healthLabel}</div>
                 <div style="font-size: 11px; margin-top: 4px; ${d.client_version ? 'color: #8f98a0;' : 'color: #ef5350;'}">${d.client_version ? 'v' + escapeHtml(d.client_version) : 'No version'}</div>
@@ -1686,7 +1688,7 @@
                             <div class="ticket-meta">
                                 Device: <a href="#" class="ticket-device-link" data-device-id="${escapeHtml(t.device_id || '')}">${escapeHtml(t.hostname || (t.device_id || '').substring(0, 8) + '...')}</a>
                                 ${(t.requested_by || t.hostname) ? ` | By: <strong>${escapeHtml(t.requested_by || t.hostname)}</strong>` : ''}
-                                | Created: ${new Date(t.created_at).toLocaleString()}
+                                | Created: ${formatTS(t.created_at)}
                             </div>
                         </div>
                         <span class="ticket-status ${t.status}">${t.status}</span>
@@ -1711,7 +1713,7 @@
                     #${ticket.id} |
                     Device: <a href="#" class="ticket-device-link" data-device-id="${escapeHtml(ticket.device_id || '')}" style="color:#66c0f4;">${escapeHtml(ticket.hostname || (ticket.device_id || '').substring(0, 12) + '...')}</a>
                     ${(ticket.requested_by || ticket.hostname) ? ` | By: <strong>${escapeHtml(ticket.requested_by || ticket.hostname)}</strong>` : ''}
-                    | Created: ${new Date(ticket.created_at).toLocaleString()}
+                    | Created: ${formatTS(ticket.created_at)}
                     ${ticket.ai_summary ? ' | <em>AI-generated</em>' : ''}
                 `;
                 document.getElementById('ticket-detail-description').textContent =
@@ -1725,7 +1727,7 @@
                 if (ticket.comments && ticket.comments.length > 0) {
                     commentsEl.innerHTML = ticket.comments.map(c => `
                         <div style="background:#0f1923; border:1px solid #2a475e; border-radius:6px; padding:10px; margin-bottom:8px;">
-                            <div style="font-size:12px; color:#8f98a0;">${escapeHtml(c.author)} &mdash; ${new Date(c.created_at).toLocaleString()}</div>
+                            <div style="font-size:12px; color:#8f98a0;">${escapeHtml(c.author)} &mdash; ${formatTS(c.created_at)}</div>
                             <div style="font-size:13px; margin-top:4px;">${escapeHtml(c.content)}</div>
                         </div>
                     `).join('');
@@ -1797,7 +1799,7 @@
             const div = document.createElement('div');
             div.id = 'note-' + note.id;
             div.style.cssText = 'background:#0e1621; border:1px solid #2a475e; border-left:3px solid #3d5a2e; border-radius:4px; padding:10px 12px; margin-bottom:8px;';
-            const ts = note.created_at ? new Date(note.created_at + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+            const ts = note.created_at ? formatTS(note.created_at + 'Z', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '';
             div.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                 <span style="font-size:12px; color:#8f98a0;">${escapeHtml(note.author)} &mdash; ${escapeHtml(ts)}</span>
                 <button data-note-id="${note.id}" style="background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px; padding:0 4px;" title="Delete note">&times;</button>
@@ -1841,7 +1843,7 @@
                 return;
             }
             grid.innerHTML = fields.map(f => {
-                const ts = f.updated_at ? new Date(f.updated_at + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
+                const ts = f.updated_at ? formatTS(f.updated_at + 'Z', { month: 'short', day: 'numeric' }) : '';
                 const source = f.updated_by || 'unknown';
                 return `<div class="stat-card" style="border-left:3px solid #3d5a2e; position:relative;">
                     <button data-field-name="${escapeHtml(f.field_name)}" style="position:absolute; top:4px; right:6px; background:none; border:none; color:#ef5350; cursor:pointer; font-size:14px; padding:0;" title="Delete field">&times;</button>
@@ -1900,7 +1902,7 @@
                             <span class="ticket-status ${t.status}" style="font-size:11px;flex-shrink:0;">${t.status}</span>
                         </div>
                         <div style="font-size:11px;color:#8f98a0;margin-top:2px;padding-left:16px;">
-                            ${(t.requested_by || t.hostname) ? `<strong style="color:#c7d5e0;">${escapeHtml(t.requested_by || t.hostname)}</strong> · ` : ''}${new Date(t.created_at).toLocaleString()}
+                            ${(t.requested_by || t.hostname) ? `<strong style="color:#c7d5e0;">${escapeHtml(t.requested_by || t.hostname)}</strong> · ` : ''}${formatTS(t.created_at)}
                         </div>
                     </div>
                 `).join('');
@@ -2135,6 +2137,15 @@
             socket.emit('start_desktop', { deviceId: desktopDeviceId });
         }
 
+        function forceDesktop() {
+            if (!currentDeviceId || !socket) return;
+            desktopDeviceId = currentDeviceId;
+            const statusEl = document.getElementById('desktop-status');
+            statusEl.textContent = 'Connecting (forced)...';
+            statusEl.style.color = '#ce93d8';
+            socket.emit('force_desktop_request', { deviceId: desktopDeviceId });
+        }
+
         function stopDesktop() {
             if (!desktopDeviceId || !socket) return;
             socket.emit('stop_desktop', { deviceId: desktopDeviceId });
@@ -2261,7 +2272,7 @@
         function showDiagnosticResults(data) {
             const el = document.getElementById('detail-diagnostics');
             el.innerHTML = `<div style="font-size: 13px; color: #8f98a0;">
-                Results for ${data.checkType} (${new Date().toLocaleTimeString()}):</div>
+                Results for ${data.checkType} (${formatTSTime(new Date())}):</div>
                 <pre style="background: #0f1923; padding: 12px; border-radius: 6px; margin-top: 8px; font-size: 12px; overflow: auto;">${JSON.stringify(data.results, null, 2)}</pre>`;
         }
 
@@ -2324,9 +2335,9 @@
                             <div class="alert-meta">
                                 Device: ${escapeHtml(a.hostname || (a.device_id || '').substring(0, 8))} |
                                 Check: ${escapeHtml(a.check_type)} |
-                                ${a.triggered_at ? new Date(a.triggered_at).toLocaleString() : ''}
+                                ${a.triggered_at ? formatTS(a.triggered_at) : ''}
                                 ${a.status === 'acknowledged' ? ' | Acknowledged by ' + escapeHtml(a.acknowledged_by || 'staff') : ''}
-                                ${a.status === 'resolved' ? ' | Resolved ' + (a.resolved_at ? new Date(a.resolved_at).toLocaleString() : '') : ''}
+                                ${a.status === 'resolved' ? ' | Resolved ' + (a.resolved_at ? formatTS(a.resolved_at) : '') : ''}
                             </div>
                         </div>
                         <div class="alert-actions">
@@ -2698,7 +2709,7 @@
 
                 let modStr = '';
                 if (modified) {
-                    try { modStr = new Date(modified).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e) {}
+                    try { modStr = formatTS(modified, { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e) {}
                 }
 
                 html += `<tr class="file-row" data-action="${rowAction}" data-path="${fullPath.replace(/"/g, '&quot;')}"
@@ -2906,7 +2917,7 @@
                 let display = v;
                 if (k === 'size') display = formatFileSize(Number(v));
                 else if (k === 'created' || k === 'modified' || k === 'accessed') {
-                    try { display = new Date(v).toLocaleString(); } catch(e) {}
+                    try { display = formatTS(v); } catch(e) {}
                 }
                 return `<div style="display:flex; gap:8px; padding:2px 0;"><span style="color:#8f98a0; min-width:120px;">${escapeHtml(k)}:</span><span>${escapeHtml(String(display))}</span></div>`;
             }).join('');
@@ -3507,7 +3518,7 @@
                   <span style="color:#c7d5e0;">${h.schedule_name || 'On-demand'}</span>
                   <span style="color:#8f98a0; font-size:12px; margin-left:8px;">${h.report_type} &middot; ${h.format.toUpperCase()}</span>
                 </div>
-                <span style="color:#8f98a0; font-size:12px;">${new Date(h.created_at).toLocaleString()}</span>
+                <span style="color:#8f98a0; font-size:12px;">${formatTS(h.created_at)}</span>
               </div>
             `).join('');
           } catch (err) { console.error('Load history error:', err); }
@@ -3760,7 +3771,7 @@
             </tr></thead><tbody>`;
             sorted.forEach(e => {
                 const lvlClass = e.level === 'Error' ? 'evt-level-error' : e.level === 'Warning' ? 'evt-level-warning' : 'evt-level-information';
-                const time = new Date(e.time).toLocaleString();
+                const time = formatTS(e.time);
                 const msg = (e.message || '').substring(0, 150);
                 html += `<tr>
                     <td style="white-space:nowrap; font-size:12px;">${time}</td>
@@ -3824,6 +3835,10 @@
                 document.getElementById('nav-admin-dropdown').style.display = '';
             }
 
+            // Show Force Remote button for admin/superadmin only
+            const forceBtn = document.getElementById('btn-force-desktop');
+            if (forceBtn) forceBtn.style.display = (currentUserRole === 'admin' || currentUserRole === 'superadmin') ? '' : 'none';
+
             // Show fleet installer button if a client is selected
             updateFleetInstallerBtn();
         }
@@ -3860,6 +3875,7 @@
             // Items per page & date format stored as globals for table rendering
             window.pocketItemsPerPage = parseInt(userPreferences.itemsPerPage) || 25;
             window.pocketDateFormat = userPreferences.dateFormat || 'MM/DD/YYYY';
+            window.pocketTimezone = userPreferences.timezone || '';
         }
 
         function onClientChange() {
@@ -3895,7 +3911,7 @@
                         <td><strong>${escapeHtml(c.name)}</strong><br><span style="font-size:11px;color:#8f98a0;">${escapeHtml(c.slug)}</span></td>
                         <td>${counts[c.id] || 0}</td>
                         <td>${escapeHtml(c.contact_name || '')}${c.contact_email ? '<br><span style="font-size:11px;color:#8f98a0;">' + escapeHtml(c.contact_email) + '</span>' : ''}</td>
-                        <td style="font-size:12px;color:#8f98a0;">${c.created_at ? new Date(c.created_at).toLocaleDateString() : ''}</td>
+                        <td style="font-size:12px;color:#8f98a0;">${c.created_at ? formatTSDate(c.created_at) : ''}</td>
                         <td>
                             <button class="diag-btn" data-action="client-detail" data-id="${c.id}" data-name="${escapeHtml(c.name)}" style="font-size:11px;padding:4px 8px;">Details</button>
                             <button class="diag-btn" data-action="client-devices" data-id="${c.id}" style="font-size:11px;padding:4px 8px;">Devices</button>
@@ -4065,7 +4081,7 @@
                             <div>
                                 <div style="font-size:15px; font-weight:600; color:#c7d5e0;">${escapeHtml(f.field_value || '')}</div>
                                 <div style="font-size:11px; color:#8f98a0; margin-top:2px;">${escapeHtml(f.field_name)}</div>
-                                <div style="font-size:10px; color:#556b7a; margin-top:2px;">by ${escapeHtml(f.updated_by)} &middot; ${f.updated_at ? new Date(f.updated_at + 'Z').toLocaleString() : ''}</div>
+                                <div style="font-size:10px; color:#556b7a; margin-top:2px;">by ${escapeHtml(f.updated_by)} &middot; ${f.updated_at ? formatTS(f.updated_at + 'Z') : ''}</div>
                             </div>
                             <button class="diag-btn" data-action="delete-client-field" data-field="${escapeHtml(f.field_name)}" style="font-size:10px; padding:2px 6px; background:#5c2020; color:#ef5350;">&times;</button>
                         </div>
@@ -4128,7 +4144,7 @@
                         <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:4px;">
                             <span style="font-size:12px; color:#66c0f4; font-weight:600;">${escapeHtml(n.author)}</span>
                             <div style="display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:11px; color:#556b7a;">${n.created_at ? new Date(n.created_at + 'Z').toLocaleString() : ''}</span>
+                                <span style="font-size:11px; color:#556b7a;">${n.created_at ? formatTS(n.created_at + 'Z') : ''}</span>
                                 <button class="diag-btn" data-action="delete-client-note" data-note-id="${n.id}" style="font-size:10px; padding:2px 6px; background:#5c2020; color:#ef5350;">&times;</button>
                             </div>
                         </div>
@@ -4287,10 +4303,38 @@
             'custom_field_deleted':      { label: 'Field Deleted',           color: '#6b7280' },
         };
 
+        function formatTS(ts, opts = {}) {
+            if (!ts) return '—';
+            const d = (ts instanceof Date) ? ts : new Date(ts);
+            if (isNaN(d)) return '—';
+            const tz = window.pocketTimezone;
+            const options = tz ? { timeZone: tz, ...opts } : opts;
+            return d.toLocaleString(undefined, options);
+        }
+
+        function formatTSDate(ts) {
+            if (!ts) return '—';
+            const d = (ts instanceof Date) ? ts : new Date(ts);
+            if (isNaN(d)) return '—';
+            const tz = window.pocketTimezone;
+            return tz
+                ? d.toLocaleDateString(undefined, { timeZone: tz })
+                : d.toLocaleDateString();
+        }
+
+        function formatTSTime(ts) {
+            if (!ts) return '—';
+            const d = (ts instanceof Date) ? ts : new Date(ts);
+            if (isNaN(d)) return '—';
+            const tz = window.pocketTimezone;
+            return tz
+                ? d.toLocaleTimeString(undefined, { timeZone: tz })
+                : d.toLocaleTimeString();
+        }
+
         function formatActivityTimestamp(ts) {
             if (!ts) return '—';
-            const d = new Date(ts);
-            return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+            return formatTS(ts, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
         }
 
         function formatActivityDetails(action, detailsJson) {
@@ -4498,7 +4542,7 @@
                         <td><strong>v${escapeHtml(p.version)}</strong>${p.release_notes ? '<br><span style="font-size:11px;color:#8f98a0;">' + escapeHtml(p.release_notes).substring(0, 100) + '</span>' : ''}</td>
                         <td>${formatFileSize(p.file_size)}</td>
                         <td style="font-size:11px; font-family:monospace; color:#8f98a0;">${p.sha256.substring(0, 16)}...</td>
-                        <td style="font-size:12px;color:#8f98a0;">${p.uploaded_by || ''}<br>${p.created_at ? new Date(p.created_at).toLocaleString() : ''}</td>
+                        <td style="font-size:12px;color:#8f98a0;">${p.uploaded_by || ''}<br>${p.created_at ? formatTS(p.created_at) : ''}</td>
                         <td>
                             ${i === 0 ? `<button class="diag-btn" data-action="update-push" data-version="${escapeHtml(p.version)}" style="font-size:11px;padding:4px 8px;">Push to Fleet</button>` : ''}
                             <button class="diag-btn" data-action="update-delete" data-version="${escapeHtml(p.version)}" style="font-size:11px;padding:4px 8px;${i === 0 ? 'margin-left:4px;' : ''}background:#5c2020;">Delete</button>
@@ -4589,7 +4633,7 @@
                 document.getElementById('srv-update-version').textContent = data.serverVersion || '—';
                 document.getElementById('srv-update-commit').textContent = data.currentCommit || '—';
                 _lastUpdateCheck = new Date();
-                document.getElementById('srv-update-checked').textContent = _lastUpdateCheck.toLocaleTimeString();
+                document.getElementById('srv-update-checked').textContent = formatTSTime(_lastUpdateCheck);
 
                 const resultDiv = document.getElementById('srv-update-result');
                 const statusEl = document.getElementById('srv-update-status');
@@ -4883,7 +4927,7 @@
             const preview = document.getElementById('deploy-schedule-preview');
             if (dateVal && timeVal) {
                 const dt = new Date(dateVal + 'T' + timeVal);
-                preview.textContent = dt.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                preview.textContent = formatTS(dt, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
             } else {
                 preview.textContent = '';
             }
@@ -5079,7 +5123,7 @@
                     const done = d.results ? d.results.filter(r => ['success', 'failed', 'skipped'].includes(r.status)).length : 0;
                     const succeeded = d.results ? d.results.filter(r => r.status === 'success').length : 0;
                     const statusColor = d.status === 'completed' ? '#4caf50' : d.status === 'running' ? '#ff9800' : d.status === 'cancelled' ? '#ef5350' : '#8f98a0';
-                    const scheduledInfo = d.scheduled_at ? `<div class="dh-meta">Scheduled: ${new Date(d.scheduled_at).toLocaleString()}</div>` : '';
+                    const scheduledInfo = d.scheduled_at ? `<div class="dh-meta">Scheduled: ${formatTS(d.scheduled_at)}</div>` : '';
 
                     const resultsHtml = d.results ? d.results.map(r => {
                         const rColor = r.status === 'success' ? '#4caf50' : r.status === 'failed' ? '#ef5350' : r.status === 'running' ? '#ff9800' : '#8f98a0';
@@ -5104,7 +5148,7 @@
                             </div>
                         </div>
                         ${scheduledInfo}
-                        <div class="dh-meta">Created: ${new Date(d.created_at).toLocaleString()}</div>
+                        <div class="dh-meta">Created: ${formatTS(d.created_at)}</div>
                         <details style="margin-top:4px;">
                             <summary style="cursor:pointer; font-size:12px; color:#66c0f4;">Per-device results (${done}/${totalTargets} complete)</summary>
                             <div style="margin-top:8px; background:#0f1923; border-radius:6px; max-height:220px; overflow-y:auto;">${resultsHtml || '<div style="padding:10px; color:#8f98a0; text-align:center;">No results yet.</div>'}</div>
@@ -5160,7 +5204,7 @@
                             </div>
                         </div>
                         <div class="dh-meta">${details.map(d => escapeHtml(d)).join(' &middot; ')}</div>
-                        <div class="dh-meta">Created: ${new Date(t.created_at).toLocaleString()} by ${escapeHtml(t.created_by || 'unknown')}</div>
+                        <div class="dh-meta">Created: ${formatTS(t.created_at)} by ${escapeHtml(t.created_by || 'unknown')}</div>
                     </div>`;
                 }).join('');
             });
@@ -5549,6 +5593,7 @@
 
             // Remote desktop controls
             document.getElementById('btn-start-desktop').addEventListener('click', startDesktop);
+            document.getElementById('btn-force-desktop')?.addEventListener('click', forceDesktop);
             document.getElementById('btn-stop-desktop').addEventListener('click', stopDesktop);
             document.getElementById('btn-popout-desktop').addEventListener('click', popOutDesktop);
             document.getElementById('desktop-quality').addEventListener('change', updateDesktopQuality);
@@ -6095,7 +6140,7 @@
                 } else {
                     html += `<div class="stats-row" style="margin-bottom:0;">`;
                     html += fields.map(f => {
-                        const ts = f.updated_at ? new Date(f.updated_at + 'Z').toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
+                        const ts = f.updated_at ? formatTS(f.updated_at + 'Z', { month: 'short', day: 'numeric' }) : '';
                         return `<div class="stat-card" style="border-left:3px solid #2a6496;">
                     <div class="value" style="font-size:16px;">${escapeHtml(f.field_value || '—')}</div>
                     <div class="label">${escapeHtml(f.field_name)}</div>

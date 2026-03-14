@@ -67,7 +67,7 @@ public class AgentWorker : BackgroundService
         _serverConnection = new ServerConnection(serverUrl, _deviceId, deviceSecret);
 
         // Desktop session manager handles service-level remote desktop via session helper
-        _desktopSessionManager = new DesktopSessionManager(_logger, _serverConnection);
+        _desktopSessionManager = new DesktopSessionManager(_logger, _serverConnection, _localDb);
 
         WireServerEvents();
 
@@ -93,8 +93,8 @@ public class AgentWorker : BackgroundService
 
         // Desktop events: handled directly by DesktopSessionManager (service-level remote desktop).
         // IT authority: service-level access bypasses user privacy mode on enrolled managed devices.
-        _serverConnection.OnDesktopStartRequest += (requestId, itInitiated) =>
-            _desktopSessionManager?.StartSession(requestId);
+        _serverConnection.OnDesktopStartRequest += (requestId, itInitiated, forceOverride) =>
+            _desktopSessionManager?.StartSession(requestId, forceOverride);
 
         _serverConnection.OnDesktopMouseInput += (x, y, button, action) =>
             _desktopSessionManager?.SendMouseInput(x, y, button, action);

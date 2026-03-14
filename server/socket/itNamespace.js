@@ -832,7 +832,44 @@ function setup(io, app) {
         const deviceSocket = connectedDevices.get(deviceId);
         if (deviceSocket) {
           const requestId = `desk-${Date.now()}`;
-          deviceSocket.emit('desktop_start_request', { requestId, itInitiated: true, it_username: decoded?.username || decoded?.display_name || 'IT Support' });
+          deviceSocket.emit('desktop_start_request', { requestId, itInitiated: true, it_username: decoded?.username || decoded?.display_name || 'IT Support', forceOverride: false });
+          socket.emit('desktop_requested', { deviceId, requestId });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
+    socket.on('force_desktop_request', (data) => {
+      const { deviceId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      if (decoded?.role !== 'admin' && decoded?.role !== 'superadmin') {
+        socket.emit('error_message', { message: 'Insufficient permissions for force remote desktop' });
+        return;
+      }
+
+      console.log(`[IT] Force desktop start request for ${deviceId}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(itActor, 'desktop_force_started', deviceId, JSON.stringify({}));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `desk-${Date.now()}`;
+          deviceSocket.emit('desktop_start_request', { requestId, itInitiated: true, it_username: decoded?.username || decoded?.display_name || 'IT Support', forceOverride: true });
           socket.emit('desktop_requested', { deviceId, requestId });
         } else {
           socket.emit('error_message', { message: 'Device is not connected' });

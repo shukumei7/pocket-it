@@ -56,6 +56,7 @@ public class ServerConnection : IDisposable
     public event Action<string, string, string, string?, int>? OnInstallerRequest; // requestId, filename, fileData(base64), silentArgs, timeoutSeconds
     public event Action<string, string>? OnScreenshotRequest; // requestId, reason
     public event Action<string>? OnServerUrlChanged; // newUrl
+    public event Action<string>? OnSettingsRequest; // requestId
 
     public ServerConnection(string serverUrl, string deviceId, string deviceSecret = "")
     {
@@ -416,6 +417,13 @@ public class ServerConnection : IDisposable
             OnAIStatusChanged?.Invoke(enabled, reason);
         });
 
+        _socket.On("settings_request", response =>
+        {
+            var data = response.GetValue<JsonElement>();
+            var requestId = data.TryGetProperty("requestId", out var rid) ? rid.GetString() ?? "" : "";
+            OnSettingsRequest?.Invoke(requestId);
+        });
+
         try
         {
             await _socket.ConnectAsync();
@@ -486,6 +494,19 @@ public class ServerConnection : IDisposable
         else
         {
             _offlineQueue.Enqueue(new { type = "system_profile", data = profile });
+        }
+    }
+
+    public async Task SendSettings(Dictionary<string, object> settings)
+    {
+        var payload = new { deviceId = _deviceId, settings };
+        if (_isConnected && _socket != null)
+        {
+            await _socket.EmitAsync("settings_result", payload);
+        }
+        else
+        {
+            _offlineQueue.Enqueue(new { type = "settings_result", data = payload });
         }
     }
 

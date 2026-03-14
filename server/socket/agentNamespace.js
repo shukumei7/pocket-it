@@ -281,6 +281,9 @@ function setup(io, app) {
 
       // Notify IT dashboard
       emitToScoped(itNs, db, deviceId, 'device_status_changed', { deviceId, status: 'online' });
+
+      // Request fresh client settings on every connect
+      socket.emit('settings_request', { requestId: `settings-${Date.now()}` });
     });
 
     // v0.19.0: Device-reported custom fields
@@ -304,6 +307,20 @@ function setup(io, app) {
         emitToScoped(itNs, db, deviceId, 'custom_fields_updated', { deviceId, fields: allFields });
       } catch (err) {
         console.error('[Agent] report_custom_fields error:', err.message);
+      }
+    });
+
+    // Client settings result
+    socket.on('settings_result', (data) => {
+      const { settings } = data || {};
+      if (!settings || typeof settings !== 'object') return;
+
+      try {
+        db.prepare('UPDATE devices SET client_settings = ? WHERE device_id = ?')
+          .run(JSON.stringify(settings), deviceId);
+        emitToScoped(itNs, db, deviceId, 'device_settings_updated', { deviceId, settings });
+      } catch (err) {
+        console.error('[Agent] Settings result save error:', err.message);
       }
     });
 

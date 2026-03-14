@@ -441,6 +441,39 @@ function setup(io, app) {
       }
     });
 
+    // Request client settings from device
+    socket.on('get_device_settings', (data) => {
+      const { deviceId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      console.log(`[IT] Requesting settings from ${deviceId}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(itActor, 'settings_requested', deviceId, JSON.stringify({}));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `settings-${Date.now()}`;
+          deviceSocket.emit('settings_request', { requestId });
+          socket.emit('settings_requested', { deviceId, requestId });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
     // IT-initiated screenshot request
     socket.on('request_screenshot', (data) => {
       const { deviceId } = data;

@@ -5,8 +5,11 @@ const { resolveClientScope, scopeSQL, isDeviceInScope } = require('../auth/clien
 const router = express.Router();
 
 // Strip sensitive fields from device records before sending to clients
-function sanitizeDevice({ device_secret, certificate_fingerprint, ...rest }) {
-  return rest;
+function sanitizeDevice({ device_secret, certificate_fingerprint, client_settings, ...rest }) {
+  return {
+    ...rest,
+    client_settings: client_settings ? (() => { try { return JSON.parse(client_settings); } catch { return null; } })() : null,
+  };
 }
 
 router.get('/', requireIT, resolveClientScope, (req, res) => {

@@ -78,6 +78,19 @@ public class LocalDatabase : IDisposable
         return cmd.ExecuteScalar() as string;
     }
 
+    public Dictionary<string, string> GetAllSettings()
+    {
+        var result = new Dictionary<string, string>();
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "SELECT key, value FROM settings";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            result[reader.GetString(0)] = reader.GetString(1);
+        }
+        return result;
+    }
+
     public void SetProtectedSetting(string key, string value)
     {
         var plainBytes = System.Text.Encoding.UTF8.GetBytes(value);

@@ -131,6 +131,7 @@ public class TrayApplication : ApplicationContext
         _serverConnection.OnScreenshotRequest += OnServerScreenshotRequest;
         _serverConnection.OnServerUrlChanged += OnServerUrlChanged;
         _serverConnection.OnAIStatusChanged += OnAIStatusChanged;
+        _serverConnection.OnSettingsRequest += OnServerSettingsRequest;
 
         var contextMenu = new ContextMenuStrip();
         contextMenu.Items.Add("Open Chat", null, OnOpenChat);
@@ -1239,6 +1240,9 @@ public class TrayApplication : ApplicationContext
             var profile = await DeviceIdentity.GetSystemProfileAsync();
             await _serverConnection.SendSystemProfile(profile);
 
+            // Send client settings
+            await SendClientSettings();
+
             // Run diagnostics silently on connect (no chat UI, just collect data)
             _ = Task.Run(async () =>
             {
@@ -1260,6 +1264,33 @@ public class TrayApplication : ApplicationContext
         catch (Exception ex)
         {
             Logger.Error("Auto-diagnostics on connect failed", ex);
+        }
+    }
+
+    private async Task SendClientSettings()
+    {
+        var rawSettings = _localDb.GetAllSettings();
+        var settings = new System.Collections.Generic.Dictionary<string, object>();
+        foreach (var kv in rawSettings)
+        {
+            // Skip sensitive keys
+            if (kv.Key == "device_secret") continue;
+            settings[kv.Key] = kv.Value;
+        }
+        // Ensure privacy_mode is always present as a bool
+        settings["privacy_mode"] = _privacyMode;
+        await _serverConnection.SendSettings(settings);
+    }
+
+    private async void OnServerSettingsRequest(string requestId)
+    {
+        try
+        {
+            await SendClientSettings();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Settings request handler failed", ex);
         }
     }
 

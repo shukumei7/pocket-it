@@ -490,6 +490,13 @@ function initDatabase(dbPath) {
     // Column already exists
   }
 
+  // v0.18.1: Client-reported settings snapshot
+  try {
+    db.prepare('ALTER TABLE devices ADD COLUMN client_settings TEXT').run();
+  } catch (err) {
+    // Column already exists
+  }
+
   // v0.13.0: Feature wishlist — AI logs capability gaps
   db.exec(`
     CREATE TABLE IF NOT EXISTS feature_wishes (

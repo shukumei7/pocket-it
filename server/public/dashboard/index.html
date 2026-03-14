@@ -170,7 +170,7 @@
           </div>
 
           <!-- Two-column layout: tools + chat -->
-          <div style="display:grid; grid-template-columns:1fr 400px; gap:20px;">
+          <div class="device-detail-grid" style="display:grid; grid-template-columns:1fr 400px; gap:20px;">
             <!-- Left column: Diagnostics, File Browser, Scripts -->
             <div>
               <h2 class="section-title">Diagnostics</h2>
@@ -1617,6 +1617,80 @@ Write-Host "POCKET_IT_CLIENT_FIELDS:{`"Domain`":`"$domain`"}"
                             <option value="MM/DD/YYYY">MM/DD/YYYY</option>
                             <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                             <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                        </select>
+                    </div>
+                    <div class="pref-group">
+                        <label for="pref-timezone">Timezone</label>
+                        <select id="pref-timezone">
+                            <option value="">System Default</option>
+                            <optgroup label="UTC">
+                                <option value="UTC">UTC</option>
+                            </optgroup>
+                            <optgroup label="Americas">
+                                <option value="America/New_York">Eastern (New York)</option>
+                                <option value="America/Chicago">Central (Chicago)</option>
+                                <option value="America/Denver">Mountain (Denver)</option>
+                                <option value="America/Los_Angeles">Pacific (Los Angeles)</option>
+                                <option value="America/Anchorage">Alaska (Anchorage)</option>
+                                <option value="Pacific/Honolulu">Hawaii (Honolulu)</option>
+                                <option value="America/Toronto">Toronto</option>
+                                <option value="America/Vancouver">Vancouver</option>
+                                <option value="America/Mexico_City">Mexico City</option>
+                                <option value="America/Sao_Paulo">São Paulo</option>
+                                <option value="America/Argentina/Buenos_Aires">Buenos Aires</option>
+                            </optgroup>
+                            <optgroup label="Europe">
+                                <option value="Europe/London">London</option>
+                                <option value="Europe/Dublin">Dublin</option>
+                                <option value="Europe/Lisbon">Lisbon</option>
+                                <option value="Europe/Paris">Paris</option>
+                                <option value="Europe/Berlin">Berlin</option>
+                                <option value="Europe/Rome">Rome</option>
+                                <option value="Europe/Madrid">Madrid</option>
+                                <option value="Europe/Amsterdam">Amsterdam</option>
+                                <option value="Europe/Brussels">Brussels</option>
+                                <option value="Europe/Vienna">Vienna</option>
+                                <option value="Europe/Warsaw">Warsaw</option>
+                                <option value="Europe/Prague">Prague</option>
+                                <option value="Europe/Budapest">Budapest</option>
+                                <option value="Europe/Bucharest">Bucharest</option>
+                                <option value="Europe/Athens">Athens</option>
+                                <option value="Europe/Helsinki">Helsinki</option>
+                                <option value="Europe/Stockholm">Stockholm</option>
+                                <option value="Europe/Oslo">Oslo</option>
+                                <option value="Europe/Copenhagen">Copenhagen</option>
+                                <option value="Europe/Zurich">Zurich</option>
+                                <option value="Europe/Kiev">Kyiv</option>
+                                <option value="Europe/Moscow">Moscow</option>
+                            </optgroup>
+                            <optgroup label="Africa / Middle East">
+                                <option value="Africa/Cairo">Cairo</option>
+                                <option value="Africa/Johannesburg">Johannesburg</option>
+                                <option value="Africa/Lagos">Lagos</option>
+                                <option value="Africa/Nairobi">Nairobi</option>
+                                <option value="Asia/Dubai">Dubai</option>
+                            </optgroup>
+                            <optgroup label="Asia / Pacific">
+                                <option value="Asia/Karachi">Karachi</option>
+                                <option value="Asia/Kolkata">Kolkata</option>
+                                <option value="Asia/Dhaka">Dhaka</option>
+                                <option value="Asia/Bangkok">Bangkok</option>
+                                <option value="Asia/Singapore">Singapore</option>
+                                <option value="Asia/Hong_Kong">Hong Kong</option>
+                                <option value="Asia/Shanghai">Shanghai</option>
+                                <option value="Asia/Tokyo">Tokyo</option>
+                                <option value="Asia/Seoul">Seoul</option>
+                                <option value="Asia/Taipei">Taipei</option>
+                                <option value="Asia/Jakarta">Jakarta</option>
+                                <option value="Asia/Manila">Manila</option>
+                                <option value="Asia/Kuala_Lumpur">Kuala Lumpur</option>
+                                <option value="Pacific/Auckland">Auckland</option>
+                                <option value="Pacific/Sydney">Sydney</option>
+                                <option value="Pacific/Melbourne">Melbourne (AEDT/AEST)</option>
+                                <option value="Pacific/Brisbane">Brisbane</option>
+                                <option value="Pacific/Adelaide">Adelaide</option>
+                                <option value="Pacific/Guam">Guam</option>
+                            </optgroup>
                         </select>
                     </div>
                     <div id="account-pref-msg" style="display:none; padding:6px 10px; border-radius:6px; font-size:12px; margin-bottom:8px;"></div>

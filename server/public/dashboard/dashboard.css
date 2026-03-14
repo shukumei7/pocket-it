@@ -926,3 +926,292 @@
         .toggle-switch input:checked + .toggle-track:before { transform: translateX(16px); background: #fff; }
         .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #c7d5e0; }
         .toggle-label .toggle-desc { font-size: 11px; color: #8f98a0; font-weight: normal; }
+
+        /* =============================================================
+           RESPONSIVE / MOBILE STYLES
+           Breakpoints: 1024px (small desktop/large tablet)
+                         768px (tablet)
+                         640px (mobile)
+           ============================================================= */
+
+        /* ---- 1024px: Small desktop / large tablet ---- */
+        @media (max-width: 1024px) {
+            .container { padding: 16px; }
+
+            /* Stats cards: max 3 per row */
+            .stats-row {
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            }
+
+            /* Device grid: tighter minimum */
+            .device-grid {
+                grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            }
+
+            /* Deploy form row: stack sooner */
+            .deploy-form-row {
+                flex-direction: column;
+            }
+            .deploy-form-row > .deploy-section {
+                min-width: unset;
+                width: 100%;
+            }
+
+            /* Deploy device grid: 3 cols */
+            .deploy-device-grid {
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            }
+        }
+
+        /* ---- 768px: Tablet ---- */
+        @media (max-width: 768px) {
+            /* Nav: horizontal scrollable top bar */
+            nav {
+                padding: 0 12px;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                height: auto;
+                min-height: 48px;
+                gap: 0;
+            }
+            nav .logo {
+                font-size: 15px;
+                margin-right: 12px;
+                flex-shrink: 0;
+                white-space: nowrap;
+            }
+            nav a {
+                padding: 12px 10px;
+                font-size: 13px;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+            nav .client-selector {
+                flex-shrink: 0;
+                margin-left: 8px;
+                margin-right: 8px;
+            }
+            nav .status-badge {
+                flex-shrink: 0;
+                white-space: nowrap;
+            }
+            nav .user-avatar {
+                flex-shrink: 0;
+            }
+            /* Spacer should not push everything — let the bar scroll */
+            nav .spacer {
+                display: none;
+            }
+
+            /* Container */
+            .container { padding: 12px; }
+
+            /* Stats cards: 2 columns */
+            .stats-row {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+
+            /* Device grid: 1 or 2 columns */
+            .device-grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                gap: 10px;
+            }
+
+            /* Device detail two-column → single column */
+            .device-detail-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            /* Tables: horizontal scroll */
+            .client-table,
+            .activity-table,
+            .wish-table,
+            .sys-table,
+            .policy-table,
+            .threshold-table,
+            .channel-table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            /* System tools tabs: allow wrapping, smaller font */
+            .sys-tools-tabs {
+                flex-wrap: wrap;
+            }
+            .sys-tools-tab {
+                font-size: 12px;
+                padding: 6px 10px;
+            }
+
+            /* Alert items: wrap action buttons */
+            .alert-item {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            .alert-item .alert-actions {
+                flex-wrap: wrap;
+            }
+
+            /* Alert filter row: wrap */
+            .alert-filter-row {
+                flex-wrap: wrap;
+            }
+
+            /* Diag actions: wrap */
+            .diag-actions {
+                flex-wrap: wrap;
+            }
+
+            /* Deploy form row: single column */
+            .deploy-form-row {
+                flex-direction: column;
+            }
+            .deploy-form-row > .deploy-section {
+                min-width: unset;
+                width: 100%;
+            }
+
+            /* Deploy device grid: 2 columns */
+            .deploy-device-grid {
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            }
+
+            /* Deploy tabs: wrap */
+            .deploy-tabs {
+                flex-wrap: wrap;
+            }
+
+            /* Wish stats bar: 2 columns */
+            .wish-stats-bar {
+                gap: 8px;
+            }
+            .wish-stat {
+                min-width: 120px;
+            }
+
+            /* Chat area: shorter on tablet */
+            .chat-area { height: 200px; }
+
+            /* Ticket detail panel: full width on tablet */
+            #ticket-detail {
+                width: 100%;
+                right: -100%;
+            }
+            #ticket-detail.active {
+                right: 0;
+            }
+
+            /* Reports: alert chart pair → single column */
+            #page-reports > div[style*="grid-template-columns:1fr 1fr"] {
+                display: block !important;
+            }
+
+            /* Filter bars: wrap */
+            .activity-filter-bar,
+            .sys-filter-bar,
+            .wish-filter-row {
+                flex-wrap: wrap;
+            }
+
+            /* Font size / padding tweaks */
+            .stat-card { padding: 14px; }
+            .stat-card .value { font-size: 26px; }
+            .section-title { font-size: 16px; }
+        }
+
+        /* ---- 640px: Mobile ---- */
+        @media (max-width: 640px) {
+            /* Container: tighter */
+            .container { padding: 8px; }
+
+            /* Stats cards: 2 columns (tight) */
+            .stats-row {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+
+            /* Device grid: full width cards */
+            .device-grid {
+                grid-template-columns: 1fr;
+            }
+
+            /* Deploy device grid: 1 column */
+            .deploy-device-grid {
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            }
+
+            /* Stat cards: compact */
+            .stat-card { padding: 12px; }
+            .stat-card .value { font-size: 22px; }
+            .stat-card .label { font-size: 11px; }
+
+            /* Nav: smaller logo */
+            nav .logo { font-size: 13px; margin-right: 8px; }
+            nav a { padding: 10px 8px; font-size: 12px; }
+
+            /* Section titles */
+            .section-title { font-size: 15px; margin-bottom: 12px; }
+
+            /* Device card hostname */
+            .device-card .hostname { font-size: 14px; }
+
+            /* Diag buttons: smaller */
+            .diag-btn { font-size: 12px; padding: 5px 10px; }
+
+            /* Chat input row: stack on very small */
+            .chat-input-row { flex-wrap: wrap; }
+            .chat-input-row input { min-width: 0; }
+
+            /* Ticket items: vertical layout */
+            .ticket-item {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            /* Wish stats: 1 column */
+            .wish-stats-bar {
+                flex-direction: column;
+            }
+            .wish-stat { min-width: unset; }
+
+            /* Script select: stack */
+            .script-select { flex-direction: column; }
+            .script-select select,
+            .script-select button { width: 100%; }
+
+            /* Empty state: less padding */
+            .empty-state { padding: 24px 16px; }
+
+            /* Ticket detail: full screen drawer */
+            #ticket-detail {
+                width: 100%;
+                right: -100%;
+            }
+
+            /* Toast: smaller bottom margin */
+            #toast-container { bottom: 12px; right: 12px; left: 12px; }
+            .toast-message { font-size: 12px; }
+
+            /* Client form: full width */
+            .client-form { padding: 14px; }
+
+            /* Nav dropdown: full-width positioning */
+            .nav-dropdown-menu {
+                min-width: 140px;
+            }
+
+            /* Activity filter: compact inputs */
+            .activity-filter-bar input[type="date"] { width: 130px; }
+
+            /* Button/action flex rows: allow wrap */
+            .deploy-btn-row,
+            .deploy-radio-group,
+            .wish-actions,
+            .wish-filter-row {
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+        }

@@ -68,6 +68,7 @@ public static class InputInjectionService
     private const ushort VK_SHIFT = 0x10;
     private const ushort VK_CONTROL = 0x11;
     private const ushort VK_MENU = 0x12; // Alt
+    private const ushort VK_DELETE = 0x2E;
     private const ushort VK_RETURN = 0x0D;
     private const ushort VK_TAB = 0x09;
     private const uint KEYEVENTF_UNICODE = 0x0004;
@@ -216,7 +217,17 @@ public static class InputInjectionService
         }
         catch (DllNotFoundException)
         {
-            PocketIT.Core.Logger.Warn("sas.dll not available — SendCtrlAltDel requires Windows SAS library");
+            PocketIT.Core.Logger.Info("sas.dll unavailable, falling back to raw VK_CONTROL+VK_MENU+VK_DELETE injection");
+            var inputs = new INPUT[6];
+            // Press: Ctrl, Alt, Delete
+            inputs[0].type = INPUT_KEYBOARD; inputs[0].u.ki.wVk = VK_CONTROL; inputs[0].u.ki.dwFlags = 0;
+            inputs[1].type = INPUT_KEYBOARD; inputs[1].u.ki.wVk = VK_MENU;    inputs[1].u.ki.dwFlags = 0;
+            inputs[2].type = INPUT_KEYBOARD; inputs[2].u.ki.wVk = VK_DELETE;  inputs[2].u.ki.dwFlags = 0;
+            // Release: Delete, Alt, Ctrl
+            inputs[3].type = INPUT_KEYBOARD; inputs[3].u.ki.wVk = VK_DELETE;  inputs[3].u.ki.dwFlags = KEYEVENTF_KEYUP;
+            inputs[4].type = INPUT_KEYBOARD; inputs[4].u.ki.wVk = VK_MENU;    inputs[4].u.ki.dwFlags = KEYEVENTF_KEYUP;
+            inputs[5].type = INPUT_KEYBOARD; inputs[5].u.ki.wVk = VK_CONTROL; inputs[5].u.ki.dwFlags = KEYEVENTF_KEYUP;
+            SendInput(6, inputs, Marshal.SizeOf<INPUT>());
         }
         catch (Exception ex)
         {

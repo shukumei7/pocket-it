@@ -108,16 +108,25 @@ public static class DeviceIdentity
         profile["totalDiskGB"] = totalDiskGB;
 
         // v0.9.0: Enhanced system profile
-        // OS Edition from registry
+        // OS Edition + build-aware Windows 11 detection from registry
         try
         {
             using var osKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
-            profile["osEdition"] = osKey?.GetValue("ProductName")?.ToString() ?? "Unknown";
+            var productName = osKey?.GetValue("ProductName")?.ToString() ?? "Unknown";
+            var currentBuildStr = osKey?.GetValue("CurrentBuild")?.ToString() ?? "0";
+            int.TryParse(currentBuildStr, out int currentBuild);
+            // Windows 11 starts at build 22000; manifest compatibility causes Environment.OSVersion
+            // to still report 10.0.x, so we use the registry build number as the authoritative source.
+            if (currentBuild >= 22000 && productName.Contains("Windows 10"))
+                productName = productName.Replace("Windows 10", "Windows 11");
+            profile["osEdition"] = productName;
+            profile["_currentBuild"] = currentBuild; // stash for osName composition
         }
         catch (Exception ex)
         {
             Logger.Warn($"System profile: OS edition query failed: {ex.Message}");
             profile["osEdition"] = "Unknown";
+            profile["_currentBuild"] = 0;
         }
 
         // Display version (e.g., "23H2", "24H2")
@@ -151,14 +160,15 @@ public static class DeviceIdentity
             profile["osInstallDate"] = "Unknown";
         }
 
-        // OS Build (Build.UBR format)
+        // OS Build (Build.UBR format) — use registry CurrentBuild (not Environment.OSVersion which
+        // returns a compatibility-shim value on Windows 11 due to app manifest).
         try
         {
-            var build = Environment.OSVersion.Version.Build;
-            int ubr = 0;
             using var verKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            var currentBuildStr = verKey?.GetValue("CurrentBuild")?.ToString() ?? "0";
+            int ubr = 0;
             if (verKey?.GetValue("UBR") is int ubrVal) ubr = ubrVal;
-            profile["osBuild"] = $"{build}.{ubr}";
+            profile["osBuild"] = $"{currentBuildStr}.{ubr}";
         }
         catch (Exception ex)
         {

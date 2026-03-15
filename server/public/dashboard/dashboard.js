@@ -5329,7 +5329,25 @@
             const senderLabel = senderName || (sender === 'it_tech' ? 'IT' : sender === 'ai' ? 'AI' : sender);
             const senderColor = sender === 'it_tech' ? '#e65100' : sender === 'ai' ? '#66c0f4' : '#8f98a0';
 
-            div.innerHTML = `<span style="font-weight:600; color:${senderColor}; font-size:11px;">${escapeHtml(senderLabel)}</span><br><span style="color:#c7d5e0;">${escapeHtml(content || '')}</span>`;
+            const contentEl = document.createElement('span');
+            contentEl.style.color = '#c7d5e0';
+
+            if (sender === 'ai' && typeof marked !== 'undefined') {
+                // Render AI responses as markdown (code blocks, lists, bold, etc.)
+                contentEl.innerHTML = marked.parse(content || '', { breaks: true });
+                // Style code blocks to match the dark theme
+                contentEl.querySelectorAll('pre').forEach(pre => {
+                    pre.style.cssText = 'background:#0f1923;padding:8px 12px;border-radius:4px;overflow:auto;font-size:11px;margin:4px 0;';
+                });
+                contentEl.querySelectorAll('code:not(pre code)').forEach(code => {
+                    code.style.cssText = 'background:#0f1923;padding:1px 4px;border-radius:3px;font-size:11px;';
+                });
+            } else {
+                contentEl.textContent = content || '';
+            }
+
+            div.innerHTML = `<span style="font-weight:600; color:${senderColor}; font-size:11px;">${escapeHtml(senderLabel)}</span><br>`;
+            div.appendChild(contentEl);
             chatEl.appendChild(div);
             chatEl.scrollTop = chatEl.scrollHeight;
         }

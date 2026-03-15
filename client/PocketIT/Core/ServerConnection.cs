@@ -32,7 +32,7 @@ public class ServerConnection : IDisposable
     public event Action<string, string, bool>? OnFileBrowseRequest; // requestId, path, itInitiated
     public event Action<string, string, bool>? OnFileReadRequest; // requestId, path, itInitiated
     public event Action<string, string, string, bool, int, bool>? OnScriptRequest; // requestId, scriptName, scriptContent, requiresElevation, timeoutSeconds, itInitiated
-    public event Action<string, bool>? OnTerminalStartRequest;  // requestId, itInitiated
+    public event Action<string, bool, bool>? OnTerminalStartRequest;  // requestId, itInitiated, elevated
     public event Action<string>? OnTerminalInput;          // input text
     public event Action<string>? OnTerminalStopRequest;    // requestId
     public event Action<string, bool>? OnDesktopStartRequest;  // requestId, itInitiated
@@ -199,8 +199,9 @@ public class ServerConnection : IDisposable
             var json = response.GetValue<JsonElement>();
             var requestId = json.GetProperty("requestId").GetString() ?? "";
             bool itInitiated = json.TryGetProperty("itInitiated", out var itProp) && itProp.ValueKind == JsonValueKind.True;
-            Logger.Info($"Terminal start request (requestId: {requestId})");
-            OnTerminalStartRequest?.Invoke(requestId, itInitiated);
+            bool elevated = json.TryGetProperty("elevated", out var elevProp) && elevProp.ValueKind == JsonValueKind.True;
+            Logger.Info($"Terminal start request (requestId: {requestId}, elevated: {elevated})");
+            OnTerminalStartRequest?.Invoke(requestId, itInitiated, elevated);
         });
 
         _socket.On("terminal_input", response =>

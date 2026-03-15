@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.IO.Pipes;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Windows.Forms;
@@ -34,6 +38,8 @@ public class TrayApplication : ApplicationContext
     private readonly Scripts.ScriptExecutionService _scriptExecution = new();
     private RemoteTerminalService? _remoteTerminal;
     private RemoteDesktopService? _remoteDesktop;
+    private ServicePipeClient? _servicePipe;
+    private bool _elevatedTerminalActive;
     private readonly SystemToolsEngine _systemTools = new();
     private readonly InstallerExecutionService _installerExecution = new();
     private UpdateService? _updateService;
@@ -327,6 +333,10 @@ public class TrayApplication : ApplicationContext
             // Connect to server
             _serverConnection.LastSeenChat = _localDb.GetSetting("last_seen_chat") ?? "";
             await _serverConnection.ConnectAsync();
+
+            // Connect to Windows Service pipe (best-effort; service may not be running)
+            _servicePipe = new ServicePipeClient(OnServicePipeMessage);
+            _ = _servicePipe.StartAsync();
 
             // Start scheduled diagnostic monitoring
             _scheduledChecks.Start();
@@ -776,9 +786,19 @@ public class TrayApplication : ApplicationContext
         }, null);
     }
 
-    private void OnServerTerminalStartRequest(string requestId, bool itInitiated)
+    private void OnServerTerminalStartRequest(string requestId, bool itInitiated, bool elevated)
     {
-        Logger.Info($"Terminal start request: {requestId}");
+        Logger.Info($"Terminal start request: {requestId}, elevated: {elevated}");
+
+        if (elevated && itInitiated && !_privacyMode)
+        {
+            Logger.Info($"IT-initiated elevated terminal start (requestId: {requestId})");
+            _elevatedTerminalActive = true;
+            _servicePipe?.Send(ServicePipeMessageType.ElevatedTerminalStart,
+                JsonSerializer.Serialize(new { requestId }));
+            _ = _serverConnection.SendTerminalStarted(requestId);
+            return;
+        }
 
         if (itInitiated && !_privacyMode)
         {
@@ -818,6 +838,12 @@ public class TrayApplication : ApplicationContext
 
     private void OnServerTerminalInput(string input)
     {
+        if (_elevatedTerminalActive)
+        {
+            _servicePipe?.Send(ServicePipeMessageType.ElevatedTerminalInput,
+                JsonSerializer.Serialize(new { input }));
+            return;
+        }
         if (_remoteTerminal?.IsSessionActive == true)
         {
             _remoteTerminal.SendInput(input);
@@ -827,10 +853,55 @@ public class TrayApplication : ApplicationContext
     private void OnServerTerminalStopRequest(string requestId)
     {
         Logger.Info($"Terminal stop request: {requestId}");
+        if (_elevatedTerminalActive)
+        {
+            _servicePipe?.Send(ServicePipeMessageType.ElevatedTerminalStop, null);
+            _elevatedTerminalActive = false;
+            return;
+        }
         _remoteTerminal?.StopSession();
         _remoteTerminal?.Dispose();
         _remoteTerminal = null;
         _uiContext.Post(_ => TryAutoApplyPendingUpdate(), null);
+    }
+
+    private void OnServicePipeMessage(ServicePipeMessageType type, string? payload)
+    {
+        switch (type)
+        {
+            case ServicePipeMessageType.ElevatedTerminalOutput:
+            {
+                if (payload != null)
+                {
+                    try
+                    {
+                        var p = JsonSerializer.Deserialize<Dictionary<string, string>>(payload);
+                        var text = p?.GetValueOrDefault("text") ?? "";
+                        _ = _serverConnection.SendTerminalOutput(text);
+                    }
+                    catch { }
+                }
+                break;
+            }
+            case ServicePipeMessageType.ElevatedTerminalEnded:
+            {
+                _elevatedTerminalActive = false;
+                int exitCode = 0;
+                if (payload != null)
+                {
+                    try
+                    {
+                        var p = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(payload);
+                        if (p != null && p.TryGetValue("exitCode", out var ec))
+                            exitCode = ec.GetInt32();
+                    }
+                    catch { }
+                }
+                _ = _serverConnection.SendTerminalStopped("elevated", exitCode, exitCode == 0 ? "process_exited" : "process_exited");
+                _uiContext.Post(_ => TryAutoApplyPendingUpdate(), null);
+                break;
+            }
+        }
     }
 
     private void OnServerDesktopStartRequest(string requestId, bool itInitiated)
@@ -1725,7 +1796,155 @@ public class TrayApplication : ApplicationContext
             _updateService?.Dispose();
             _serverConnection?.Dispose();
             _localDb?.Dispose();
+            _servicePipe?.Dispose();
         }
         base.Dispose(disposing);
+    }
+}
+
+// Pipe message type values must match PipeMessageType enum in PocketIT.Shared
+internal enum ServicePipeMessageType
+{
+    // Service → Tray
+    ChatMessage = 0,
+    DesktopStartRequest = 1,
+    DesktopMouseInput = 2,
+    DesktopKeyboardInput = 3,
+    DesktopStopRequest = 4,
+    DesktopQualityUpdate = 5,
+    DesktopSwitchMonitor = 6,
+    DesktopPasteText = 7,
+    DesktopCtrlAltDel = 8,
+    DesktopLaunchTool = 9,
+    DesktopFileUpload = 10,
+    DesktopToggle = 11,
+    ConsentRequired = 12,
+    AiStatusChanged = 13,
+    UpdateAvailable = 14,
+    ChatHistory = 15,
+    ServerUrlChanged = 16,
+    Connected = 17,
+    Disconnected = 18,
+
+    // Tray → Service
+    ChatSend = 19,
+    DesktopStarted = 20,
+    DesktopDenied = 21,
+    DesktopStopped = 22,
+    DesktopFrame = 23,
+    DesktopPerfData = 24,
+    DesktopMonitors = 25,
+    DesktopFileUploadAck = 26,
+    ConsentGranted = 27,
+    ConsentDenied = 28,
+    SettingsUpdate = 29,
+    ScreenshotResult = 30,
+
+    // Elevated terminal (Tray → Service)
+    ElevatedTerminalStart = 31,
+    ElevatedTerminalInput = 32,
+    ElevatedTerminalStop = 33,
+
+    // Elevated terminal (Service → Tray)
+    ElevatedTerminalOutput = 34,
+    ElevatedTerminalEnded = 35,
+}
+
+internal class ServicePipeClient : IDisposable
+{
+    private const string PipeName = "PocketIT-Agent";
+    private NamedPipeClientStream? _pipe;
+    private StreamWriter? _writer;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly Action<ServicePipeMessageType, string?> _onMessage;
+    private CancellationTokenSource? _cts;
+    private bool _disposed;
+
+    public ServicePipeClient(Action<ServicePipeMessageType, string?> onMessage)
+    {
+        _onMessage = onMessage;
+    }
+
+    public async Task StartAsync()
+    {
+        _cts = new CancellationTokenSource();
+        await ConnectLoopAsync(_cts.Token);
+    }
+
+    private async Task ConnectLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                _pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                await _pipe.ConnectAsync(5000, ct);
+                _writer = new StreamWriter(_pipe, Encoding.UTF8) { AutoFlush = false };
+                var reader = new StreamReader(_pipe, Encoding.UTF8);
+                Logger.Info("Connected to Windows Service pipe");
+
+                while (_pipe.IsConnected && !ct.IsCancellationRequested)
+                {
+                    var line = await reader.ReadLineAsync(ct);
+                    if (line == null) break;
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(line);
+                        var typeVal = doc.RootElement.GetProperty("Type").GetInt32();
+                        var payload = doc.RootElement.TryGetProperty("Payload", out var pp) && pp.ValueKind != JsonValueKind.Null
+                            ? pp.GetString() : null;
+                        _onMessage((ServicePipeMessageType)typeVal, payload);
+                    }
+                    catch (JsonException) { }
+                }
+
+                _writer = null;
+                _pipe.Dispose();
+                Logger.Info("Disconnected from Windows Service pipe, reconnecting...");
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Service pipe error: {ex.Message}. Retrying in 10s.");
+                await Task.Delay(10000, ct);
+            }
+        }
+    }
+
+    public void Send(ServicePipeMessageType type, string? payload)
+    {
+        _ = SendAsync(type, payload);
+    }
+
+    private async Task SendAsync(ServicePipeMessageType type, string? payload)
+    {
+        if (_writer == null) return;
+        await _writeLock.WaitAsync();
+        try
+        {
+            var msg = JsonSerializer.Serialize(new { Type = (int)type, Payload = payload });
+            await _writer.WriteLineAsync(msg);
+            await _writer.FlushAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Service pipe send failed: {ex.Message}");
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _cts?.Cancel();
+        _writer?.Dispose();
+        _pipe?.Dispose();
     }
 }

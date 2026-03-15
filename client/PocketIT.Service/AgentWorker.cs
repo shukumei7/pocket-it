@@ -5,6 +5,7 @@ using PocketIT.Core;
 using PocketIT.Pipe;
 using PocketIT.Service.Desktop;
 using PocketIT.Service.Pipe;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace PocketIT.Service;
@@ -18,6 +19,8 @@ public class AgentWorker : BackgroundService
     private DesktopSessionManager? _desktopSessionManager;
     private LocalDatabase? _localDb;
     private string? _deviceId;
+    private Process? _elevatedTerminal;
+    private readonly object _elevatedTermLock = new();
 
     public AgentWorker(ILogger<AgentWorker> logger, IConfiguration config)
     {
@@ -204,7 +207,129 @@ public class AgentWorker : BackgroundService
                             _localDb.SetSetting(key, value);
                 }
                 break;
+            case PipeMessageType.ElevatedTerminalStart:
+            {
+                var payload = msg.Payload != null
+                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(msg.Payload)
+                    : null;
+                var requestId = payload?.GetValueOrDefault("requestId") ?? "";
+                StartElevatedTerminal(requestId);
+                break;
+            }
+            case PipeMessageType.ElevatedTerminalInput:
+            {
+                var payload = msg.Payload != null
+                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(msg.Payload)
+                    : null;
+                var input = payload?.GetValueOrDefault("input") ?? "";
+                lock (_elevatedTermLock)
+                {
+                    if (_elevatedTerminal != null && !_elevatedTerminal.HasExited)
+                    {
+                        try
+                        {
+                            if (!input.EndsWith('\n')) input += "\n";
+                            _elevatedTerminal.StandardInput.Write(input);
+                            _elevatedTerminal.StandardInput.Flush();
+                        }
+                        catch { }
+                    }
+                }
+                break;
+            }
+            case PipeMessageType.ElevatedTerminalStop:
+                StopElevatedTerminal(-1);
+                break;
         }
+    }
+
+    private void StartElevatedTerminal(string requestId)
+    {
+        lock (_elevatedTermLock)
+        {
+            if (_elevatedTerminal != null && !_elevatedTerminal.HasExited)
+                _elevatedTerminal.Kill(entireProcessTree: true);
+            _elevatedTerminal = null;
+        }
+
+        var psPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell", "v1.0", "powershell.exe");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = psPath,
+            Arguments = "-NoLogo -NoProfile -NonInteractive",
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+
+        proc.OutputDataReceived += (s, e) =>
+        {
+            if (e.Data == null) return;
+            _pipeServer?.Send(new PipeMessage
+            {
+                Type = PipeMessageType.ElevatedTerminalOutput,
+                Payload = JsonSerializer.Serialize(new { text = e.Data + "\r\n" })
+            });
+        };
+        proc.ErrorDataReceived += (s, e) =>
+        {
+            if (e.Data == null) return;
+            _pipeServer?.Send(new PipeMessage
+            {
+                Type = PipeMessageType.ElevatedTerminalOutput,
+                Payload = JsonSerializer.Serialize(new { text = e.Data + "\r\n" })
+            });
+        };
+        proc.Exited += (s, e) =>
+        {
+            int exitCode = -1;
+            try { exitCode = proc.ExitCode; } catch { }
+            StopElevatedTerminal(exitCode);
+        };
+
+        proc.Start();
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        lock (_elevatedTermLock)
+            _elevatedTerminal = proc;
+
+        _logger.LogInformation("Elevated terminal started as SYSTEM (requestId: {RequestId})", requestId);
+    }
+
+    private void StopElevatedTerminal(int exitCode)
+    {
+        Process? proc;
+        lock (_elevatedTermLock)
+        {
+            proc = _elevatedTerminal;
+            _elevatedTerminal = null;
+        }
+
+        if (proc != null)
+        {
+            try
+            {
+                if (!proc.HasExited) proc.Kill(entireProcessTree: true);
+            }
+            catch { }
+            proc.Dispose();
+        }
+
+        _pipeServer?.Send(new PipeMessage
+        {
+            Type = PipeMessageType.ElevatedTerminalEnded,
+            Payload = JsonSerializer.Serialize(new { exitCode })
+        });
+
+        _logger.LogInformation("Elevated terminal ended (exitCode: {ExitCode})", exitCode);
     }
 
     private record DesktopFramePayload(string Data, int Width, int Height);

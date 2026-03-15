@@ -807,6 +807,39 @@ function setup(io, app) {
       }
     });
 
+    // Elevated terminal (spawns PowerShell as SYSTEM via Windows Service)
+    socket.on('start_terminal_elevated', (data) => {
+      const { deviceId } = data;
+
+      if (!checkDeviceScope(deviceId)) {
+        socket.emit('error_message', { message: 'Device not in your scope' });
+        return;
+      }
+
+      console.log(`[IT] Elevated terminal start request for ${deviceId}`);
+
+      try {
+        const db = app.locals.db;
+        db.prepare(
+          "INSERT INTO audit_log (actor, action, target, details, created_at) VALUES (?, ?, ?, ?, datetime('now'))"
+        ).run(itActor, 'terminal_elevated_requested', deviceId, JSON.stringify({}));
+      } catch (err) {
+        console.error('[IT] Audit log error:', err.message);
+      }
+
+      const connectedDevices = app.locals.connectedDevices;
+      if (connectedDevices) {
+        const deviceSocket = connectedDevices.get(deviceId);
+        if (deviceSocket) {
+          const requestId = `term-elev-${Date.now()}`;
+          deviceSocket.emit('terminal_start_request', { requestId, itInitiated: true, elevated: true });
+          socket.emit('terminal_requested', { deviceId, requestId });
+        } else {
+          socket.emit('error_message', { message: 'Device is not connected' });
+        }
+      }
+    });
+
     // v0.8.0: Remote desktop
     socket.on('start_desktop', (data) => {
       const { deviceId } = data;

@@ -766,6 +766,7 @@
                     statusEl.className = '';
                 }, 3000);
                 document.getElementById('btn-start-terminal').disabled = false;
+                document.getElementById('btn-start-terminal-elevated').disabled = false;
                 document.getElementById('btn-stop-terminal').disabled = true;
                 terminalDeviceId = null;
             });
@@ -2099,8 +2100,21 @@
             statusEl.textContent = 'Waiting for user approval...';
             statusEl.className = 'waiting';
             document.getElementById('btn-start-terminal').disabled = true;
+            document.getElementById('btn-start-terminal-elevated').disabled = true;
             document.getElementById('btn-stop-terminal').disabled = false;
             socket.emit('start_terminal', { deviceId: terminalDeviceId });
+        }
+
+        function startElevatedTerminal() {
+            if (!currentDeviceId || !socket) return;
+            terminalDeviceId = currentDeviceId;
+            const statusEl = document.getElementById('terminal-status');
+            statusEl.textContent = 'Connecting (SYSTEM)...';
+            statusEl.className = 'waiting';
+            document.getElementById('btn-start-terminal').disabled = true;
+            document.getElementById('btn-start-terminal-elevated').disabled = true;
+            document.getElementById('btn-stop-terminal').disabled = false;
+            socket.emit('start_terminal_elevated', { deviceId: terminalDeviceId });
         }
 
         function stopTerminal() {
@@ -2122,6 +2136,7 @@
             statusEl.className = '';
             document.getElementById('btn-stop-terminal').disabled = true;
             document.getElementById('btn-start-terminal').disabled = false;
+            document.getElementById('btn-start-terminal-elevated').disabled = false;
             terminalDeviceId = null;
         }
 
@@ -5622,6 +5637,7 @@
 
             // Remote terminal controls
             document.getElementById('btn-start-terminal').addEventListener('click', startTerminal);
+            document.getElementById('btn-start-terminal-elevated').addEventListener('click', startElevatedTerminal);
             document.getElementById('btn-stop-terminal').addEventListener('click', stopTerminal);
 
             // Activity history

@@ -36,6 +36,15 @@ public enum PipeMessageType
     ConsentDenied,
     SettingsUpdate,
     ScreenshotResult,
+
+    // Elevated terminal (Tray → Service)
+    ElevatedTerminalStart,  // payload: { "requestId": "..." }
+    ElevatedTerminalInput,  // payload: { "input": "..." }
+    ElevatedTerminalStop,   // payload: null
+
+    // Elevated terminal (Service → Tray)
+    ElevatedTerminalOutput, // payload: { "text": "..." }
+    ElevatedTerminalEnded,  // payload: { "exitCode": 0 }
 }
 
 public class PipeMessage

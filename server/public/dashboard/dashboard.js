@@ -5091,20 +5091,20 @@
                 if (!payload.scriptContent && !payload.scriptId) { alert('Script content is required'); return; }
             } else {
                 const fileInput = document.getElementById('deploy-installer-file');
-                if (!fileInput.files.length) { alert('Select an installer file'); return; }
                 const file = fileInput.files[0];
-                if (file.size > 52_428_800) { alert('File exceeds 50MB limit'); return; }
+                if (file && file.size > 52_428_800) { alert('File exceeds 50MB limit'); return; }
 
-                // Read as base64
-                const reader = new FileReader();
-                const base64 = await new Promise((resolve, reject) => {
-                    reader.onload = () => resolve(reader.result.split(',')[1]);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
-
-                payload.installerFilename = file.name;
-                payload.installerData = base64;
+                if (file) {
+                    // Read as base64
+                    const reader = new FileReader();
+                    const base64 = await new Promise((resolve, reject) => {
+                        reader.onload = () => resolve(reader.result.split(',')[1]);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                    payload.installerFilename = file.name;
+                    payload.installerData = base64;
+                }
                 payload.silentArgs = document.getElementById('deploy-silent-args').value.trim();
             }
 

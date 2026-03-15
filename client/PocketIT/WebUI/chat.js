@@ -292,6 +292,48 @@
         return card;
     }
 
+    function createScreenshotPrompt(reason, requestId) {
+        const card = document.createElement('div');
+        card.className = 'action-card';
+
+        card.innerHTML = `
+            <div class="action-header">
+                <strong>&#128247; Screenshot Request</strong>
+            </div>
+            <div class="action-body" style="margin: 8px 0;">
+                <div style="font-size: 13px; color: #8f98a0;">${escapeHtml(reason || 'IT staff is requesting a screenshot of your screen.')}</div>
+            </div>
+        `;
+
+        const btnRow = document.createElement('div');
+        btnRow.className = 'action-buttons';
+
+        const approveBtn = document.createElement('button');
+        approveBtn.className = 'btn-approve';
+        approveBtn.textContent = 'Allow';
+        approveBtn.onclick = () => {
+            sendBridgeMessage('approve_screenshot', { requestId });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #66bb6a; font-size: 12px;">Allowed</span>';
+        };
+
+        const denyBtn = document.createElement('button');
+        denyBtn.className = 'btn-deny';
+        denyBtn.textContent = 'Deny';
+        denyBtn.onclick = () => {
+            sendBridgeMessage('deny_screenshot', { requestId });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #ef5350; font-size: 12px;">Denied</span>';
+        };
+
+        btnRow.appendChild(approveBtn);
+        btnRow.appendChild(denyBtn);
+        card.appendChild(btnRow);
+        return card;
+    }
+
     function createScriptPrompt(scriptName, scriptContent, requiresElevation, timeoutSeconds, requestId, aiInitiated) {
         const card = document.createElement('div');
         card.className = 'action-card';
@@ -600,6 +642,11 @@
                 case 'file_access_request':
                     const fileCard = createFileAccessPrompt(data.operation, data.path, data.requestId);
                     appendToChat(fileCard);
+                    break;
+
+                case 'screenshot_request':
+                    const screenshotCard = createScreenshotPrompt(data.reason, data.requestId);
+                    appendToChat(screenshotCard);
                     break;
 
                 case 'script_request':

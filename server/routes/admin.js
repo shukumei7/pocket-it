@@ -741,7 +741,7 @@ router.put('/user/preferences', requireIT, (req, res) => {
     return res.status(400).json({ error: 'Preferences object required' });
   }
 
-  const allowedKeys = ['theme', 'defaultPage', 'itemsPerPage', 'dateFormat'];
+  const allowedKeys = ['theme', 'defaultPage', 'itemsPerPage', 'dateFormat', 'timezone'];
   const upsert = db.prepare(
     "INSERT OR REPLACE INTO user_preferences (user_id, key, value, updated_at) VALUES (?, ?, ?, datetime('now'))"
   );

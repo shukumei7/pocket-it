@@ -904,48 +904,77 @@ public class TrayApplication : ApplicationContext
         }
     }
 
-    private void OnServerDesktopStartRequest(string requestId, bool itInitiated)
+    private void OnServerDesktopStartRequest(string requestId, bool itInitiated, bool forceOverride)
     {
-        Logger.Info($"Desktop start request: {requestId}");
+        Logger.Info($"Desktop start request: {requestId}, itInitiated: {itInitiated}, forceOverride: {forceOverride}");
 
-        if (itInitiated && !_privacyMode)
+        // Force Remote (admin-only) — bypasses privacy mode, start immediately
+        if (forceOverride)
         {
-            Logger.Info($"IT-initiated desktop session (requestId: {requestId})");
-            _remoteDesktop?.Dispose();
-            _remoteDesktop = new RemoteDesktopService();
-
-            _remoteDesktop.OnFrame += (base64, width, height) =>
-            {
-                _ = _serverConnection.SendDesktopFrame(base64, width, height);
-            };
-
-            _remoteDesktop.OnPerfData += (cpu, mem, disk) =>
-            {
-                _ = _serverConnection.SendDesktopPerfData(cpu, mem, disk);
-            };
-
-            _remoteDesktop.OnSessionEnded += () =>
-            {
-                _ = _serverConnection.SendDesktopStopped(requestId, "session_ended");
-                _remoteDesktop?.Dispose();
-                _remoteDesktop = null;
-                _uiContext.Post(_ => { _remoteDesktopActive = false; UpdateTrayIcon(); TryAutoApplyPendingUpdate(); }, null);
-            };
-
-            _remoteDesktop.StartSession();
-            _ = _serverConnection.SendDesktopStarted(requestId);
-            // Send initial monitor list
-            _ = _serverConnection.SendDesktopMonitors(_remoteDesktop.GetMonitors());
-            _uiContext.Post(_ => { _remoteDesktopActive = true; UpdateTrayIcon(); }, null);
-            // Notify chat UI about remote desktop session
-            var itUsername = _serverConnection.LastDesktopItUsername ?? "IT Support";
-            var rdpMsg = JsonSerializer.Serialize(new { type = "desktop_session_notify", active = true, username = itUsername });
-            _uiContext.Post(_ => _chatWindow?.SendToWebView(rdpMsg), null);
+            Logger.Info($"Force remote bypass (requestId: {requestId})");
+            StartDesktopSession(requestId);
             return;
         }
 
-        // Non-IT-initiated: would need user approval (future)
+        // Normal Request Remote: allowed if IT-initiated and not in privacy mode
+        if (itInitiated && !_privacyMode)
+        {
+            StartDesktopSession(requestId);
+            return;
+        }
+
+        // Privacy mode is ON — show consent dialog so user can choose to allow
+        if (itInitiated && _privacyMode)
+        {
+            Logger.Info($"Privacy mode active — requesting consent for desktop (requestId: {requestId})");
+            var msg = JsonSerializer.Serialize(new
+            {
+                type = "desktop_consent_request",
+                requestId,
+                description = "IT Support is requesting remote access to your screen. Allow?"
+            });
+            _uiContext.Post(_ =>
+            {
+                _chatWindow?.SendToWebView(msg);
+                NotifyConsentRequired("remote screen access");
+            }, null);
+            return;
+        }
+
+        // Non-IT-initiated: deny
         _ = _serverConnection.SendDesktopDenied(requestId);
+    }
+
+    private void StartDesktopSession(string requestId)
+    {
+        _remoteDesktop?.Dispose();
+        _remoteDesktop = new RemoteDesktopService();
+
+        _remoteDesktop.OnFrame += (base64, width, height) =>
+        {
+            _ = _serverConnection.SendDesktopFrame(base64, width, height);
+        };
+
+        _remoteDesktop.OnPerfData += (cpu, mem, disk) =>
+        {
+            _ = _serverConnection.SendDesktopPerfData(cpu, mem, disk);
+        };
+
+        _remoteDesktop.OnSessionEnded += () =>
+        {
+            _ = _serverConnection.SendDesktopStopped(requestId, "session_ended");
+            _remoteDesktop?.Dispose();
+            _remoteDesktop = null;
+            _uiContext.Post(_ => { _remoteDesktopActive = false; UpdateTrayIcon(); TryAutoApplyPendingUpdate(); }, null);
+        };
+
+        _remoteDesktop.StartSession();
+        _ = _serverConnection.SendDesktopStarted(requestId);
+        _ = _serverConnection.SendDesktopMonitors(_remoteDesktop.GetMonitors());
+        _uiContext.Post(_ => { _remoteDesktopActive = true; UpdateTrayIcon(); }, null);
+        var itUsername = _serverConnection.LastDesktopItUsername ?? "IT Support";
+        var rdpMsg = JsonSerializer.Serialize(new { type = "desktop_session_notify", active = true, username = itUsername });
+        _uiContext.Post(_ => _chatWindow?.SendToWebView(rdpMsg), null);
     }
 
     private void OnServerDesktopMouseInput(double x, double y, string button, string action)
@@ -1598,6 +1627,22 @@ public class TrayApplication : ApplicationContext
                 {
                     Logger.Info("User ended terminal session");
                     _remoteTerminal?.StopSession();
+                    break;
+                }
+
+                case "desktop_consent_granted":
+                {
+                    var requestId2 = doc.RootElement.TryGetProperty("requestId", out var ridProp2) ? ridProp2.GetString() ?? "" : "";
+                    Logger.Info($"User granted desktop consent (requestId: {requestId2})");
+                    StartDesktopSession(requestId2);
+                    break;
+                }
+
+                case "desktop_consent_denied":
+                {
+                    var requestId2 = doc.RootElement.TryGetProperty("requestId", out var ridProp2) ? ridProp2.GetString() ?? "" : "";
+                    Logger.Info($"User denied desktop consent (requestId: {requestId2})");
+                    _ = _serverConnection.SendDesktopDenied(requestId2);
                     break;
                 }
 

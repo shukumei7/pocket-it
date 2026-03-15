@@ -35,7 +35,7 @@ public class ServerConnection : IDisposable
     public event Action<string, bool, bool>? OnTerminalStartRequest;  // requestId, itInitiated, elevated
     public event Action<string>? OnTerminalInput;          // input text
     public event Action<string>? OnTerminalStopRequest;    // requestId
-    public event Action<string, bool>? OnDesktopStartRequest;  // requestId, itInitiated
+    public event Action<string, bool, bool>? OnDesktopStartRequest;  // requestId, itInitiated, forceOverride
     public event Action<bool, string?>? OnAIStatusChanged;     // enabled, reason
     public event Action<double, double, string, string>? OnDesktopMouseInput; // x, y, button, action
     public event Action<ushort, string>? OnDesktopKeyboardInput; // vkCode, action
@@ -224,10 +224,11 @@ public class ServerConnection : IDisposable
             var json = response.GetValue<JsonElement>();
             var requestId = json.GetProperty("requestId").GetString() ?? "";
             bool itInitiated = json.TryGetProperty("itInitiated", out var itProp) && itProp.ValueKind == JsonValueKind.True;
+            bool forceOverride = json.TryGetProperty("forceOverride", out var foProp) && foProp.ValueKind == JsonValueKind.True;
             LastDesktopItUsername = json.TryGetProperty("it_username", out var usernameProp) && usernameProp.ValueKind == JsonValueKind.String
                 ? usernameProp.GetString() : null;
             Logger.Info($"Desktop start request (requestId: {requestId})");
-            OnDesktopStartRequest?.Invoke(requestId, itInitiated);
+            OnDesktopStartRequest?.Invoke(requestId, itInitiated, forceOverride);
         });
 
         _socket.On("desktop_mouse_input", response =>

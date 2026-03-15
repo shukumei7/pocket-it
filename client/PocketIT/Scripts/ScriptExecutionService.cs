@@ -155,10 +155,11 @@ public class ScriptExecutionService
             Environment.GetFolderPath(Environment.SpecialFolder.System),
             "WindowsPowerShell", "v1.0", "powershell.exe");
 
+        var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
         var psi = new ProcessStartInfo
         {
             FileName = psPath,
-            Arguments = $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& {{ {EscapeScript(script)} }}\"",
+            Arguments = $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,

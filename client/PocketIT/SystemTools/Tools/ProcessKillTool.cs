@@ -60,6 +60,10 @@ public class ProcessKillTool : ISystemTool
         {
             return Task.FromResult(new SystemToolResult { Success = false, Error = "Process not found" });
         }
+        catch (UnauthorizedAccessException)
+        {
+            return Task.FromResult(new SystemToolResult { Success = false, Error = "Access denied — process requires elevated privileges to terminate." });
+        }
         catch (Exception ex)
         {
             return Task.FromResult(new SystemToolResult { Success = false, Error = ex.Message });

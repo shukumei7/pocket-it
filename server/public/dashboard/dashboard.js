@@ -1951,7 +1951,8 @@
                 if (d.total_disk_gb) infoHtml.push(`<div class="stat-card" data-page="reports"><div class="value">${d.total_disk_gb} GB</div><div class="label">Disk</div></div>`);
                 if (d.health_score !== null && d.health_score !== undefined) {
                     const color = d.health_score >= 75 ? '#66bb6a' : d.health_score >= 40 ? '#ffa726' : '#ef5350';
-                    infoHtml.push(`<div class="stat-card" data-page="reports"><div class="value" style="color:${color};">${d.health_score}%</div><div class="label">Health Score</div></div>`);
+                    const healthTooltip = 'Health score 0\u2013100: average of 8 diagnostic checks (CPU, memory, disk, network, processes, event log, Windows Update, services). OK=100, Warning=50, Error=0.';
+                    infoHtml.push(`<div class="stat-card" data-page="reports"><div class="value" style="color:${color};" title="${healthTooltip}">${d.health_score}%</div><div class="label">Health Score <span style="cursor:help;" title="${healthTooltip}">\u2139</span></div></div>`);
                 }
                 if (d.os_edition) infoHtml.push(`<div class="stat-card"><div class="value" style="font-size:14px;">${escapeHtml(d.os_edition)}</div><div class="label">OS Edition</div></div>`);
                 if (d.gpu_model) infoHtml.push(`<div class="stat-card"><div class="value" style="font-size:14px;">${escapeHtml(d.gpu_model)}</div><div class="label">GPU</div></div>`);
@@ -2754,16 +2755,17 @@
             const toolbar = document.getElementById('file-action-toolbar');
             if (!toolbar) return;
             const count = selectedFiles.size;
-            if (count > 0) {
+            const hasClipboard = fileClipboard.operation && fileClipboard.paths.length > 0 && currentBrowsePath;
+            if (count > 0 || hasClipboard) {
                 toolbar.style.display = 'flex';
-                document.getElementById('file-selection-count').textContent = count + ' item' + (count !== 1 ? 's' : '') + ' selected';
+                document.getElementById('file-selection-count').textContent = count > 0 ? count + ' item' + (count !== 1 ? 's' : '') + ' selected' : '';
             } else {
                 toolbar.style.display = 'none';
             }
             // Enable paste only when clipboard has items and we're in a folder (not drives view)
             const pasteBtn = document.getElementById('file-paste-btn');
             if (pasteBtn) {
-                pasteBtn.disabled = !(fileClipboard.operation && fileClipboard.paths.length > 0 && currentBrowsePath);
+                pasteBtn.disabled = !hasClipboard;
             }
         }
 

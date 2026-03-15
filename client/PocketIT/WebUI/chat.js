@@ -334,6 +334,48 @@
         return card;
     }
 
+    function createDesktopConsentPrompt(description, requestId) {
+        const card = document.createElement('div');
+        card.className = 'action-card';
+
+        card.innerHTML = `
+            <div class="action-header">
+                <strong>&#128444; Remote Access Request</strong>
+            </div>
+            <div class="action-body" style="margin: 8px 0;">
+                <div style="font-size: 13px; color: #8f98a0;">${escapeHtml(description || 'IT Support is requesting remote access to your screen. Allow?')}</div>
+            </div>
+        `;
+
+        const btnRow = document.createElement('div');
+        btnRow.className = 'action-buttons';
+
+        const approveBtn = document.createElement('button');
+        approveBtn.className = 'btn-approve';
+        approveBtn.textContent = 'Allow';
+        approveBtn.onclick = () => {
+            sendBridgeMessage('desktop_consent_granted', { requestId });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #66bb6a; font-size: 12px;">Allowed</span>';
+        };
+
+        const denyBtn = document.createElement('button');
+        denyBtn.className = 'btn-deny';
+        denyBtn.textContent = 'Deny';
+        denyBtn.onclick = () => {
+            sendBridgeMessage('desktop_consent_denied', { requestId });
+            approveBtn.disabled = true;
+            denyBtn.disabled = true;
+            btnRow.innerHTML = '<span style="color: #ef5350; font-size: 12px;">Denied</span>';
+        };
+
+        btnRow.appendChild(approveBtn);
+        btnRow.appendChild(denyBtn);
+        card.appendChild(btnRow);
+        return card;
+    }
+
     function createScriptPrompt(scriptName, scriptContent, requiresElevation, timeoutSeconds, requestId, aiInitiated) {
         const card = document.createElement('div');
         card.className = 'action-card';
@@ -657,6 +699,11 @@
                 case 'terminal_start_request':
                     const terminalCard = createTerminalPrompt(data.requestId);
                     appendToChat(terminalCard);
+                    break;
+
+                case 'desktop_consent_request':
+                    const desktopCard = createDesktopConsentPrompt(data.description, data.requestId);
+                    appendToChat(desktopCard);
                     break;
 
                 case 'terminal_session_active':

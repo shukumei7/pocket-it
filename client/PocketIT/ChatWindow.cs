@@ -14,8 +14,9 @@ public class ChatWindow : Form
 {
     private readonly WebView2 _webView;
     private readonly string _initialPage;
-    private readonly Queue<string> _pendingMessages = new();
+    private readonly List<string> _pendingMessages = new();
     private bool _webViewReady;
+    private readonly object _sendLock = new object();
 
     public string CurrentPage { get; private set; }
 
@@ -71,12 +72,15 @@ public class ChatWindow : Form
         // Flush queued messages once navigation completes
         _webView.CoreWebView2.NavigationCompleted += (_, _) =>
         {
-            _webViewReady = true;
-            while (_pendingMessages.Count > 0)
+            List<string> toFlush;
+            lock (_sendLock)
             {
-                var msg = _pendingMessages.Dequeue();
-                _webView.CoreWebView2.PostWebMessageAsString(msg);
+                _webViewReady = true;
+                toFlush = new List<string>(_pendingMessages);
+                _pendingMessages.Clear();
             }
+            foreach (var msg in toFlush)
+                PostMessage(msg);
         };
     }
 
@@ -101,14 +105,34 @@ public class ChatWindow : Form
     // Send message from C# to JS
     public void SendToWebView(string jsonMessage)
     {
-        if (_webViewReady && _webView.CoreWebView2 != null)
+        if (IsDisposed) return;
+
+        lock (_sendLock)
         {
-            BeginInvoke(() => _webView.CoreWebView2.PostWebMessageAsString(jsonMessage));
+            if (!_webViewReady)
+            {
+                _pendingMessages.Add(jsonMessage);
+                return;
+            }
         }
-        else
+        PostMessage(jsonMessage);
+    }
+
+    private void PostMessage(string json)
+    {
+        try
         {
-            _pendingMessages.Enqueue(jsonMessage);
+            BeginInvoke(() =>
+            {
+                try
+                {
+                    _webView.CoreWebView2?.PostWebMessageAsString(json);
+                }
+                catch (ObjectDisposedException) { }
+            });
         }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
     }
 
     public void NavigateTo(string page)

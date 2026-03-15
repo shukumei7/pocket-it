@@ -483,7 +483,12 @@ public class TrayApplication : ApplicationContext
             : json;
         _uiContext.Post(_ =>
         {
-            _chatWindow?.SendToWebView(wrapped);
+            try
+            {
+                _chatWindow?.SendToWebView(wrapped);
+            }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
 
             // Show balloon notification if chat window is not visible or not foreground
             // Note: ContainsFocus doesn't work with WebView2 (focus is inside browser control)

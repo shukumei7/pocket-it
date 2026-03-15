@@ -144,17 +144,34 @@ public class AgentWorker : BackgroundService
                 Payload = JsonSerializer.Serialize(new { action = "screenshot", reason })
             });
 
-        // Handle non-UI events directly in service
+        // Note: when the tray app is running, its socket connection overwrites this one in
+        // connectedDevices — so diagnostic/remediation events are handled by the tray in
+        // interactive sessions. These handlers fire only on headless (no-tray) deployments.
         _serverConnection.OnDiagnosticRequest += async (checkType, requestId, itInitiated) =>
         {
-            // TODO Phase 2: run DiagnosticsEngine here
-            _logger.LogInformation("Diagnostic request: {CheckType}", checkType);
+            _logger.LogInformation("Diagnostic request (headless): {CheckType}", checkType);
+            // Headless: run engine directly (no user consent needed)
+            var engine = new PocketIT.Diagnostics.DiagnosticsEngine();
+            if (checkType == "all")
+            {
+                var results = await engine.RunAllAsync();
+                foreach (var r in results)
+                    await (_serverConnection?.SendDiagnosticResult(r) ?? Task.CompletedTask);
+            }
+            else
+            {
+                var result = await engine.RunCheckAsync(checkType);
+                await (_serverConnection?.SendDiagnosticResult(result) ?? Task.CompletedTask);
+            }
         };
 
         _serverConnection.OnRemediationRequest += async (actionId, requestId, parameter, autoApprove) =>
         {
-            // TODO Phase 2: run RemediationEngine here
-            _logger.LogInformation("Remediation request: {ActionId}", actionId);
+            _logger.LogInformation("Remediation request (headless): {ActionId}", actionId);
+            if (!autoApprove) return; // No UI for consent in headless mode
+            var engine = new PocketIT.Remediation.RemediationEngine();
+            var result = await engine.ExecuteAsync(actionId, parameter);
+            await (_serverConnection?.SendRemediationResult(requestId, result.Success, result.Message) ?? Task.CompletedTask);
         };
 
         _serverConnection.OnSettingsRequest += requestId =>

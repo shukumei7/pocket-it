@@ -11,6 +11,15 @@ public class PrivacyScreenForm : Form
     private static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint dwAffinity);
     private const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011; // Windows 10 2004+
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
+
+    private System.Windows.Forms.Timer? _topmostTimer;
+
     public PrivacyScreenForm()
     {
         FormBorderStyle = FormBorderStyle.None;
@@ -53,6 +62,24 @@ public class PrivacyScreenForm : Form
         // Local display shows the black overlay normally (local user can't see the screen),
         // but screen capture APIs see through it to the real desktop (IT operator can work).
         SetWindowDisplayAffinity(Handle, WDA_EXCLUDEFROMCAPTURE);
+
+        // Re-assert HWND_TOPMOST every 500ms — fullscreen apps and remote desktop viewers
+        // can briefly pop over a WinForms TopMost window; periodic re-assertion prevents it.
+        _topmostTimer = new System.Windows.Forms.Timer { Interval = 500 };
+        _topmostTimer.Tick += (s, ev) =>
+        {
+            if (IsHandleCreated && !IsDisposed)
+                SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        };
+        _topmostTimer.Start();
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        _topmostTimer?.Stop();
+        _topmostTimer?.Dispose();
+        _topmostTimer = null;
+        base.OnFormClosing(e);
     }
 
     // Override to prevent closing via window messages

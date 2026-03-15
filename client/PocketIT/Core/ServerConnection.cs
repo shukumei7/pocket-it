@@ -17,6 +17,7 @@ public class ServerConnection : IDisposable
     private string _deviceSecret;
     private readonly System.Timers.Timer _heartbeatTimer;
     private readonly ConcurrentQueue<object> _offlineQueue = new();
+    private readonly Dictionary<string, (List<string> chunks, string filename, string? silentArgs, int timeoutSeconds, int totalChunks)> _chunkBuffers = new();
     private bool _isConnected;
     public bool IsConnected => _isConnected;
     public string LastSeenChat { get; set; } = "";
@@ -386,6 +387,50 @@ public class ServerConnection : IDisposable
             int timeoutSeconds = json.TryGetProperty("timeoutSeconds", out var toProp) ? toProp.GetInt32() : 300;
             Logger.Info($"Installer request: {filename} (requestId: {requestId})");
             OnInstallerRequest?.Invoke(requestId, filename, fileData, silentArgs, timeoutSeconds);
+        });
+
+        _socket.On("installer_chunk", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+            var filename = json.GetProperty("filename").GetString() ?? "";
+            var chunk = json.GetProperty("chunk").GetString() ?? "";
+            int chunkIndex = json.GetProperty("chunkIndex").GetInt32();
+            int totalChunks = json.GetProperty("totalChunks").GetInt32();
+            var silentArgs = json.TryGetProperty("silentArgs", out var saProp) ? saProp.GetString() : null;
+            int timeoutSeconds = json.TryGetProperty("timeoutSeconds", out var toProp) ? toProp.GetInt32() : 300;
+
+            lock (_chunkBuffers)
+            {
+                if (!_chunkBuffers.ContainsKey(requestId))
+                {
+                    var list = new List<string>(new string[totalChunks]);
+                    _chunkBuffers[requestId] = (list, filename, silentArgs, timeoutSeconds, totalChunks);
+                }
+                _chunkBuffers[requestId].chunks[chunkIndex] = chunk;
+            }
+            Logger.Info($"Installer chunk {chunkIndex + 1}/{totalChunks}: {filename} (requestId: {requestId})");
+        });
+
+        _socket.On("installer_chunks_complete", response =>
+        {
+            var json = response.GetValue<JsonElement>();
+            var requestId = json.GetProperty("requestId").GetString() ?? "";
+
+            (List<string> chunks, string filename, string? silentArgs, int timeoutSeconds, int totalChunks) entry;
+            lock (_chunkBuffers)
+            {
+                if (!_chunkBuffers.TryGetValue(requestId, out entry))
+                {
+                    Logger.Warn($"installer_chunks_complete received but no buffer found for requestId: {requestId}");
+                    return;
+                }
+                _chunkBuffers.Remove(requestId);
+            }
+
+            var fileData = string.Concat(entry.chunks);
+            Logger.Info($"Installer chunks assembled: {entry.filename} ({entry.totalChunks} chunks, requestId: {requestId})");
+            OnInstallerRequest?.Invoke(requestId, entry.filename, fileData, entry.silentArgs, entry.timeoutSeconds);
         });
 
         _socket.On("screenshot_request", response =>

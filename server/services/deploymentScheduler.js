@@ -102,14 +102,35 @@ function dispatchDeployment(db, io, deploymentId) {
         itInitiated: true
       });
     } else if (deployment.type === 'installer') {
-      // Send installer with file data
-      deviceSocket.emit('installer_request', {
-        requestId,
-        filename: deployment.installer_filename,
-        fileData: deployment.installer_data ? deployment.installer_data.toString('base64') : '',
-        silentArgs: deployment.silent_args || '',
-        timeoutSeconds: deployment.timeout_seconds || 300
-      });
+      const CHUNK_SIZE = 262144; // 256KB of base64 chars
+      const base64Data = deployment.installer_data ? deployment.installer_data.toString('base64') : '';
+
+      if (base64Data.length <= CHUNK_SIZE) {
+        // Small file — send as single emit (backwards compatible)
+        deviceSocket.emit('installer_request', {
+          requestId,
+          filename: deployment.installer_filename,
+          fileData: base64Data,
+          silentArgs: deployment.silent_args || '',
+          timeoutSeconds: deployment.timeout_seconds || 300
+        });
+      } else {
+        // Large file — send in chunks
+        const totalChunks = Math.ceil(base64Data.length / CHUNK_SIZE);
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = base64Data.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+          deviceSocket.emit('installer_chunk', {
+            requestId,
+            filename: deployment.installer_filename,
+            chunk,
+            chunkIndex: i,
+            totalChunks,
+            silentArgs: deployment.silent_args || '',
+            timeoutSeconds: deployment.timeout_seconds || 300
+          });
+        }
+        deviceSocket.emit('installer_chunks_complete', { requestId });
+      }
     }
 
     // Update result status to running
@@ -207,13 +228,35 @@ function dispatchPendingForDevice(db, io, deviceId, deviceSocket) {
         itInitiated: true
       });
     } else if (result.type === 'installer') {
-      deviceSocket.emit('installer_request', {
-        requestId,
-        filename: result.installer_filename,
-        fileData: result.installer_data ? result.installer_data.toString('base64') : '',
-        silentArgs: result.silent_args || '',
-        timeoutSeconds: result.timeout_seconds || 300
-      });
+      const CHUNK_SIZE = 262144; // 256KB of base64 chars
+      const base64Data = result.installer_data ? result.installer_data.toString('base64') : '';
+
+      if (base64Data.length <= CHUNK_SIZE) {
+        // Small file — send as single emit (backwards compatible)
+        deviceSocket.emit('installer_request', {
+          requestId,
+          filename: result.installer_filename,
+          fileData: base64Data,
+          silentArgs: result.silent_args || '',
+          timeoutSeconds: result.timeout_seconds || 300
+        });
+      } else {
+        // Large file — send in chunks
+        const totalChunks = Math.ceil(base64Data.length / CHUNK_SIZE);
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = base64Data.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+          deviceSocket.emit('installer_chunk', {
+            requestId,
+            filename: result.installer_filename,
+            chunk,
+            chunkIndex: i,
+            totalChunks,
+            silentArgs: result.silent_args || '',
+            timeoutSeconds: result.timeout_seconds || 300
+          });
+        }
+        deviceSocket.emit('installer_chunks_complete', { requestId });
+      }
     }
 
     db.prepare(

@@ -180,16 +180,17 @@ public class UpdateService : IDisposable
 
             Logger.Info("Launching updater script...");
 
-            // Launch batch script
+            // Launch batch script — UseShellExecute=false so cmd.exe inherits the
+            // parent's already-elevated token directly (avoids UAC prompt suppression
+            // by CreateNoWindow that causes silent permission failure on Program Files).
             var process = new System.Diagnostics.Process
             {
                 StartInfo = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "cmd.exe",
                     Arguments = $"/c \"{batchPath}\"",
-                    UseShellExecute = true,
+                    UseShellExecute = false,
                     CreateNoWindow = true,
-                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
                 }
             };
             process.Start();

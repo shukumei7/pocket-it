@@ -85,6 +85,10 @@ const apiLimiter = rateLimit({
         return !decoded.purpose; // user tokens have no purpose field
       } catch { /* invalid/expired token — apply rate limit */ }
     }
+    // Skip for device-authenticated update downloads — devices send x-device-id/x-device-secret
+    // and may all download simultaneously after a fleet push
+    if (req.headers['x-device-id'] && req.headers['x-device-secret'] &&
+        req.path.startsWith('/api/updates/download')) return true;
     return false;
   },
   message: { error: 'Too many requests, please try again later' }
